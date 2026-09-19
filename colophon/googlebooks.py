@@ -130,11 +130,18 @@ class GoogleBooks:
         if not titles:
             return []
         payload = self._ask(
-            _query(titles, language, author), language=language, max_results=MAX_RESULTS
+            _query(titles, author), language=language, max_results=MAX_RESULTS
         )
         return [_candidate(volume) for volume in _volumes(payload)]
 
     def _ask(self, query, language=None, max_results=None):
+        """One request to Google, with only the parameters it needs.
+
+        `max_results` is left off by the ISBN lookup on purpose: an ISBN
+        identifies one volume, so the first match is the answer and Google's
+        default ten is already more than enough, while a title search wants the
+        full forty to choose between.
+        """
         params = {"q": query, "fields": FIELDS, "key": self._key}
         if max_results:
             params["maxResults"] = max_results
@@ -206,8 +213,12 @@ class GoogleBooks:
         return text.replace(self._key, REDACTED) if self._key else text
 
 
-def _query(titles, language, author):
-    """The `q` Google is asked, with the filters that make the reply usable."""
+def _query(titles, author):
+    """The `q` Google is asked, with the filters that make the reply usable.
+
+    The language is not part of it: Google takes that as the separate
+    `langRestrict` parameter, which `_ask` sends.
+    """
     found = " OR ".join(f'intitle:"{_clean(title)}"' for title in titles)
     if author:
         found += f' inauthor:"{_clean(author)}"'

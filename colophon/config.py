@@ -21,9 +21,8 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 # Where metadata is looked up, in the order the user wants them tried. The list
 # covers every field: it is a trust order, not a per-field preference, so a book
 # takes its values from the first source that matches it. Leaving a name out is
-# how a source is disabled.
+# how a source is disabled. The order is also the default order a user gets.
 KNOWN_SOURCES = ("hardcover", "google_books")
-DEFAULT_SOURCES = KNOWN_SOURCES
 
 _TRUE = ("true", "1", "yes", "on")
 _FALSE = ("false", "0", "no", "off")
@@ -53,7 +52,7 @@ class Config:
     google_books_key_file: Path = Path("/run/secrets/google_books_key")
     # Which sources to consult, in order. Both paths - the ISBN one and the
     # title one - walk this same list.
-    sources: tuple = DEFAULT_SOURCES
+    sources: tuple = KNOWN_SOURCES
 
 
 def load_config(env=None):

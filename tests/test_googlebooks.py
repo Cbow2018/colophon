@@ -28,22 +28,17 @@ UNRELATED = "9780000000000"
 class Replay:
     """Stands in for the network: hands back a recorded reply, remembers the URL.
 
-    Each source answers from its own fixtures, so the recording a source is
-    given must come from that source's own folder. `folder` says which one.
+    Each source answers from its own fixtures; this one reads Google's.
     """
 
-    def __init__(self, name="by-title-cragside.json", status=200, folder=RECORDED):
-        self.body = (folder / name).read_bytes()
+    def __init__(self, name="by-title-cragside.json", status=200):
+        self.body = (RECORDED / name).read_bytes()
         self.status = status
         self.sent = None
 
     def __call__(self, url, headers):
         self.sent = {"url": url, "headers": headers}
         return self.status, self.body
-
-
-def answering(name, status=200):
-    return lambda url, headers: (status, (RECORDED / name).read_bytes())
 
 
 class ReplayByQuery:
