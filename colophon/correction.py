@@ -11,7 +11,7 @@ always be undone.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from colophon import epub
@@ -441,18 +441,7 @@ class Corrector:
                 continue
             wanted[name] = value
 
-        # The series number is the one field that cannot be decided on its own:
-        # it is a position in a named series, so a number left behind by a series
-        # being replaced is not an old number, it is a claim about the wrong
-        # series. It goes, and the move is reported like any other.
-        if (
-            wanted.get("series") is not None
-            and wanted["series"] != book.series
-            and "series_number" not in wanted
-            and book.series_number
-        ):
-            wanted["drop_series_number"] = True
-        return Edits(**wanted)
+        return _series_consistent(Edits(**wanted), found, book)
 
     def _cover(self, path, found, book, would_add=False):
         """The cover to add to this book, or None when there is none to add.
@@ -497,6 +486,56 @@ class Corrector:
         to hand" are different answers with different outcomes.
         """
         return bool(self.add_cover and found.cover and not book.has_cover)
+
+
+def _series_consistent(edits, found, book):
+    """Keep the number and the series it is a position in from disagreeing.
+
+    A series number is a position in a named series, not a number on its own, so
+    the number always follows its series:
+
+    * If the book ends up in the source's series - because the series was
+      overwritten, because it was filled in where the file had none, or because
+      the file was already in it - the source's number is a position in the
+      series the book is in, and its own rule decides whether to write it.
+    * If the book ends up in some other series - because the series was skipped,
+      or because the source does not name one at all - the source's number is a
+      position in a series this book is not in. It is not written, and the
+      number the file came with is left alone, unless the series around it has
+      changed, in which case it is dropped: it would then be a claim about the
+      wrong series rather than an old number.
+
+    Both names are compared without regard to case, because a capitalisation
+    difference between a file and a record is the same series.
+
+    The question is what the book ends up saying, not which rules were set:
+    `overwrite` for the series and `skip` for the number, and `skip` for the
+    series and `overwrite` for the number, are the same question asked from
+    opposite ends, and both are answered from the resulting pair.
+    """
+    resulting = edits.series if edits.series is not None else book.series
+    if edits.series_number is not None:
+        # The source's number, on its way in. It belongs to the source's series,
+        # so it is written only if the book ends up in that series; otherwise it
+        # is a position in a series this book is not in, and neither it nor the
+        # file's own number is written.
+        if _same_series(resulting, found.series):
+            return edits
+        return replace(edits, series_number=None)
+
+    # The file's number, being left alone - which is right only while the series
+    # around it is too. A number whose series has just been replaced is a claim
+    # about the wrong series, so it goes.
+    if book.series_number and not _same_series(resulting, book.series):
+        return replace(edits, drop_series_number=True)
+    return edits
+
+
+def _same_series(one, other):
+    """Whether two series names are the same series, capitalisation aside."""
+    if not one or not other:
+        return False
+    return str(one).strip().casefold() == str(other).strip().casefold()
 
 
 def _build(name, config):

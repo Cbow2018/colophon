@@ -194,6 +194,11 @@ cython_debug/
 #   Learn more at https://abstra.io/docs
 .abstra/
 
+# Pull request descriptions. Written for the PR's body, not for main: a
+# pr-cbo-38.md kept on the branch is a file that has to be deleted again before
+# the merge.
+pr-*.md
+
 # Visual Studio Code
 #   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
 #   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore

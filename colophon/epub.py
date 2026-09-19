@@ -51,6 +51,17 @@ COVER_TYPES = (
 _XMLNS = re.compile(rb'xmlns(?::([A-Za-z_][\w.-]*))?="([^"]*)"')
 
 
+def is_cover(body):
+    """Whether these bytes start with an image Colophon can put in a book.
+
+    The one place that decides what a cover may be. It is asked twice - once by
+    `sources.image`, which will not hand over bytes the writer would refuse, and
+    once by `_image_type` below, which needs the media type as well - and the
+    two have to answer the same thing, so there is one table and two questions.
+    """
+    return _image_type(body)[0] is not None
+
+
 class EpubError(Exception):
     """The file is not an EPUB we can read, or not one we should change."""
 

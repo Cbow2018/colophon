@@ -457,6 +457,171 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertEqual(read(path).series_number, None)
         self.assertIn("series_number", {change.field for change in outcome.changed})
 
+    def test_a_series_number_is_kept_when_the_series_stays_the_same(self):
+        """The file's series is the source's series, so its number is the source's.
+
+        The file's own number is not stale - it is a position in the series the
+        book is in - and the rule it was given says not to write the source's,
+        so the file keeps what it had.
+        """
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <meta name="calibre:series" content="DCI Ryan Mysteries"/>
+    <meta name="calibre:series_index" content="3"/>
+""",
+            version="2.0",
+        )
+
+        self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(path)
+
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "3"))
+
+    def test_the_two_series_names_are_compared_without_regard_to_case(self):
+        """A capitalisation difference is the same series, and the number follows."""
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <meta name="calibre:series" content="dci ryan mysteries"/>
+    <meta name="calibre:series_index" content="3"/>
+""",
+            version="2.0",
+        )
+
+        self.corrector(rules=self.rules(series="skip", series_number="overwrite")).correct(path)
+
+        self.assertEqual(calibre_series(path), ("dci ryan mysteries", "6"))
+
+    def test_the_number_follows_a_series_that_was_written(self):
+        """Overwriting the series takes the source's number with it."""
+        path = self.book()
+
+        self.corrector(
+            rules=self.rules(series="overwrite", series_number="overwrite")
+        ).correct(path)
+
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_the_number_follows_a_series_that_was_filled_in(self):
+        """The file had no series, the source's was filled in, and the number joins it."""
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+""",
+            version="2.0",
+        )
+
+        self.corrector(rules=self.rules(series="fill", series_number="fill")).correct(path)
+
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_a_skipped_series_leaves_a_number_that_belongs_to_another_series_alone(self):
+        """The mirror of the case the ticket settled.
+
+        The file is in `An Old Series` #3 and its series is left alone, so the
+        source's number is a position in a series this book is not in. Writing
+        it, or dropping the file's own, would both be wrong: the file's pair is
+        left exactly as it was.
+        """
+        path = self.book()
+
+        outcome = self.corrector(
+            rules=self.rules(series="skip", series_number="overwrite")
+        ).correct(path)
+
+        self.assertEqual(calibre_series(path), ("An Old Series", "3"))
+        self.assertNotIn("series_number", {change.field for change in outcome.changed})
+
+    def test_a_number_is_not_written_under_a_series_the_source_does_not_name(self):
+        """A number with no series behind it is not a position in anything.
+
+        The source can offer a number and no series name - Google's records
+        carry no series data at all - and there is no series of the source's for
+        it to belong to, so neither it nor the file's own number is written.
+        """
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                series_number="6",
+                isbn=ISBN,
+            )
+        )
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <meta name="calibre:series" content="An Old Series"/>
+    <meta name="calibre:series_index" content="3"/>
+""",
+            version="2.0",
+        )
+
+        self.corrector(
+            source=source, rules=self.rules(series="overwrite", series_number="overwrite")
+        ).correct(path)
+
+        self.assertEqual(calibre_series(path), ("An Old Series", "3"))
+
+    def test_the_number_follows_the_series_in_all_four_combinations(self):
+        """Both rules, moving and not, from one table.
+
+        Four combinations of what the source says and what the file has, so the
+        rule is shown to be about the resulting pair rather than about which
+        setting was used to get there.
+        """
+        source_series = "DCI Ryan Mysteries"
+        cases = [
+            # file series, file number, what the rules say, what the book ends up with
+            ("An Old Series", "3", ("overwrite", "overwrite"), ("DCI Ryan Mysteries", "6")),
+            ("An Old Series", "3", ("overwrite", "skip"), ("DCI Ryan Mysteries", None)),
+            (
+                source_series,
+                "3",
+                ("skip", "overwrite"),
+                ("DCI Ryan Mysteries", "6"),
+            ),
+            (source_series, "3", ("skip", "skip"), ("DCI Ryan Mysteries", "3")),
+            ("An Old Series", None, ("overwrite", "fill"), ("DCI Ryan Mysteries", "6")),
+            (None, None, ("fill", "fill"), ("DCI Ryan Mysteries", "6")),
+        ]
+        for file_series, file_number, (series_rule, number_rule), expected in cases:
+            with self.subTest(
+                file=f"{file_series} #{file_number}",
+                rules=f"series={series_rule}, number={number_rule}",
+            ):
+                metadata = f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+"""
+                if file_series:
+                    metadata += (
+                        f'    <meta name="calibre:series" content="{file_series}"/>\n'
+                    )
+                if file_number:
+                    metadata += (
+                        f'    <meta name="calibre:series_index" content="{file_number}"/>\n'
+                    )
+                path = write_epub(
+                    self.folder / f"Case-{series_rule}-{number_rule}-{file_series}.epub",
+                    metadata,
+                    version="2.0",
+                )
+
+                self.corrector(
+                    rules=self.rules(series=series_rule, series_number=number_rule)
+                ).correct(path)
+
+                self.assertEqual(calibre_series(path), expected)
+
     def test_fill_leaves_a_series_the_book_declares_the_epub_3_way(self):
         """A book says what series it is in two ways, and `fill` reads both.
 
@@ -479,29 +644,6 @@ class FieldRuleTests(CorrectionTestCase):
 
         self.assertEqual(read(path).series, "Old Series")
         self.assertEqual(epub3_series(path), ("Old Series", "series", "9"))
-
-    def test_a_series_number_is_kept_when_the_series_does_not_change(self):
-        path = write_epub(
-            self.folder / "Cragside.epub",
-            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
-    <dc:creator>L.J. Ross</dc:creator>
-    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
-    <meta name="calibre:series" content="DCI Ryan Mysteries"/>
-    <meta name="calibre:series_index" content="3"/>
-""",
-            version="2.0",
-        )
-
-        self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(path)
-
-        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "3"))
-
-    def test_the_number_is_written_normally_when_its_own_rule_says_so(self):
-        path = self.book()
-
-        self.corrector(rules=self.rules(series="overwrite", series_number="overwrite")).correct(path)
-
-        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
 
     def test_a_cover_is_added_to_a_book_that_has_none(self):
         path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")

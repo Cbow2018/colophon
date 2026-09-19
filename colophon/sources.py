@@ -22,6 +22,8 @@ that is invisible until the moment a source actually fails.
 import urllib.error
 import urllib.request
 
+from colophon.epub import is_cover
+
 USER_AGENT = "Colophon (+https://github.com/Cbow2018/colophon)"
 IMAGE_TIMEOUT_SECONDS = 30
 
@@ -29,11 +31,6 @@ IMAGE_TIMEOUT_SECONDS = 30
 # below the point where holding it in memory matters, so it only ever catches a
 # reply that is not a cover at all - an error page, or a redirect to a film.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
-
-# What an image starts with. A server is free to describe a cover as something
-# else, or as nothing at all, so a reply that is not recognised is only refused
-# when the server said it was not an image either.
-IMAGE_SIGNATURES = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF87a", b"GIF89a", b"RIFF")
 
 
 class SourceError(Exception):
@@ -96,7 +93,7 @@ def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):
         raise SourceError(
             f"the cover is too large to be one ({len(body)} bytes); leaving the book alone"
         )
-    if not _looks_like_an_image(body) and not str(content_type or "").startswith("image/"):
+    if not is_cover(body) and not str(content_type or "").startswith("image/"):
         raise SourceError("the cover was not an image")
     return body
 
@@ -109,7 +106,3 @@ def _fetch(url, headers, timeout=IMAGE_TIMEOUT_SECONDS):
             return response.status, response.read(), response.headers.get("Content-Type")
     except urllib.error.HTTPError as error:
         return error.code, error.read(), error.headers.get("Content-Type")
-
-
-def _looks_like_an_image(body):
-    return any(body.startswith(signature) for signature in IMAGE_SIGNATURES)
