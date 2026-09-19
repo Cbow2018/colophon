@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 from colophon.backups import Backups
-from colophon.config import Config
-from colophon.correction import Corrector
+from colophon.config import KNOWN_SOURCES, Config
+from colophon.correction import SOURCE_SETUP, Corrector
 from colophon.epub import read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -267,6 +267,23 @@ class FromConfigTests(unittest.TestCase):
         corrector = Corrector.from_config(self.config(), Backups(self.folder / "backups"))
 
         self.assertEqual(corrector.sources, ())
+
+    def test_every_configured_source_has_a_label(self):
+        """The corrector can only hold sources `config.py` allows, and every one
+        of those has to be buildable and nameable.
+
+        `_build` and `_blamed` both look a source up in `SOURCE_SETUP` by the
+        name the config allows, so the two lists drifting apart would be a
+        `KeyError` in production rather than a wrong answer. This is the test
+        that makes adding a source to one list and not the other fail here
+        instead.
+        """
+        self.assertEqual(set(SOURCE_SETUP), set(KNOWN_SOURCES))
+        for name, entry in SOURCE_SETUP.items():
+            with self.subTest(source=name):
+                self.assertTrue(entry["label"], "a source needs something to be called")
+                self.assertIn(entry["file"], Config.__dataclass_fields__)
+                self.assertTrue(entry["secret_name"])
 
     def test_it_says_so_when_there_is_no_token_file(self):
         with self.assertLogs("colophon", level="INFO") as captured:

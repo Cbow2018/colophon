@@ -375,13 +375,17 @@ def _build(name, config):
 
 
 def _blamed(source):
-    """What to call a source in a one-line report, whatever it calls itself.
+    """What to call a source in a sentence, as opposed to in a log field.
 
     A source names itself the way a log field wants it - `hardcover` - and a
-    sentence wants it the way a person writes it. A stand-in that the tests use
-    need not be in the map at all: its own name already reads as a sentence.
+    sentence wants it the way a person writes it, which is the label in
+    `SOURCE_SETUP`. Every source the corrector can hold came from `from_config`,
+    which built it from a name `config.py` had already checked against
+    `KNOWN_SOURCES`, so a name that is not in the map is a bug in Colophon rather
+    than something a user can cause: it is worth an exception, not a fallback.
+    `test_every_configured_source_has_a_label` is what keeps that true.
     """
-    return SOURCE_SETUP.get(source.name, {}).get("label", source.name)
+    return SOURCE_SETUP[source.name]["label"]
 
 
 def _changes(fields, edits, source):
