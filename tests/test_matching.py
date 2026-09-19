@@ -137,6 +137,29 @@ class NormalisingTests(unittest.TestCase):
         self.assertEqual(match.author_score, 1.0)
         self.assertEqual(match.confidence, 1.0)
 
+    def test_initials_without_stops_still_agree(self):
+        """The file says `LJ Ross`; every spelling of the record's name agrees."""
+        for record in ("LJ Ross", "L.J. Ross", "L. J. Ross", "Ross, L. J.", "Ross, LJ"):
+            with self.subTest(record=record):
+                match = score_candidate(
+                    FileBook("Cragside", ("LJ Ross",), "en"),
+                    Candidate(title="Cragside", authors=(record,), language="en"),
+                )
+
+                self.assertEqual(match.author_score, 1.0)
+                self.assertEqual(match.confidence, 1.0)
+
+    def test_a_different_author_still_does_not_agree(self):
+        """The comma rule must not turn every name into every other name."""
+        for record in ("M.J. Porter", "Ross, Carly", "Carly Reagon"):
+            with self.subTest(record=record):
+                match = score_candidate(
+                    FileBook("Cragside", ("LJ Ross",), "en"),
+                    Candidate(title="Cragside", authors=(record,), language="en"),
+                )
+
+                self.assertEqual(match.author_score, 0.0)
+
     def test_normalise_keeps_the_words_apart(self):
         """Punctuation is a word break, not something to glue words with."""
         self.assertEqual(normalise("L. J. Ross"), "l j ross")
