@@ -1,0 +1,15 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"pick\": null, \"confidence\": 0.95, \"reason\": \"Title 'Belsay' does not match any candidate title; candidates are different books in the series.\"}"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ]
+}
