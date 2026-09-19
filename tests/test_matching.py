@@ -20,7 +20,7 @@ from colophon.matching import (
     nearest_candidate,
     normalise,
     score_candidate,
-    title_variants,
+    search_title,
 )
 
 AS_DOWNLOADED = "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)"
@@ -71,7 +71,6 @@ class CleaningTests(unittest.TestCase):
         cleaned = clean_title(AS_DOWNLOADED)
 
         self.assertEqual(cleaned.search, "Cragside")
-        self.assertEqual(cleaned.subtitle, "A DCI Ryan Mystery")
 
     def test_a_title_with_no_number_keeps_no_series_number(self):
         """Belsay is #23 on Hardcover; the file's title never says so."""
@@ -88,17 +87,13 @@ class CleaningTests(unittest.TestCase):
         self.assertIsNone(cleaned.series_number)
 
     def test_a_title_that_says_nothing_extra_is_left_alone(self):
-        cleaned = clean_title("Normal People")
-
-        self.assertEqual(cleaned.search, "Normal People")
-        self.assertIsNone(cleaned.subtitle)
+        self.assertEqual(clean_title("Normal People").search, "Normal People")
 
     def test_a_named_subtitle_is_not_split_off(self):
         """`The Lord of the Rings: The Fellowship of the Ring` names two books."""
         cleaned = clean_title("The Lord of the Rings: The Fellowship of the Ring")
 
         self.assertEqual(cleaned.search, "The Lord of the Rings: The Fellowship of the Ring")
-        self.assertIsNone(cleaned.subtitle)
 
     def test_a_whole_numbered_series_position_keeps_its_number(self):
         cleaned = clean_title("Berwick (The DCI Ryan Mysteries Book 24)")
@@ -113,12 +108,12 @@ class CleaningTests(unittest.TestCase):
     def test_an_empty_title_is_clean_and_empty_rather_than_an_error(self):
         for title in (None, "", "   "):
             with self.subTest(title=title):
-                self.assertEqual(title_variants(title), [])
                 self.assertEqual(clean_title(title).search, "")
+                self.assertIsNone(search_title(title), "a blank title asks nothing")
 
-    def test_the_titles_asked_about_are_the_cleaned_one(self):
-        self.assertEqual(title_variants(AS_DOWNLOADED), ["Cragside"])
-        self.assertEqual(title_variants("Belsay: A DCI Ryan Mystery"), ["Belsay"])
+    def test_the_title_asked_about_is_the_cleaned_one(self):
+        self.assertEqual(search_title(AS_DOWNLOADED), "Cragside")
+        self.assertEqual(search_title("Belsay: A DCI Ryan Mystery"), "Belsay")
 
 
 class NormalisingTests(unittest.TestCase):

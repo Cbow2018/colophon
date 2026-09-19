@@ -387,17 +387,19 @@ is in the "As built" section at the end.)*
 The slices were built in the order below; everything in this note that was a
 question above is answered in place, and the rest is here.
 
-1. **`colophon/matching.py`** — new. `clean_title()`, `title_variants()`,
+1. **`colophon/matching.py`** — new. `clean_title()`, `search_title()`,
    `normalise()`, `score_candidate()`, `best_candidate()` and
    `nearest_candidate()`, with the `FileBook`, `Candidate`, `CleanedTitle` and
    `Match` types. The cleaning and the comparison live here rather than in the
    client, so neither needs a network to test. `Match` carries the candidate it
-   measured, so a caller never has to hold the two side by side.
+   measured, so a caller never has to hold the two side by side, and derives
+   `agrees` from the two scores rather than storing it.
 2. **`colophon/hardcover.py`** — a second query, `TITLE_QUERY`, and
    `by_title(titles, language)`, which returns `Candidate`s with the work's
    first edition per `books.id`. Both lookups read a reply through one
-   `_candidate()`, so `_as_book()` and `Candidate` can no longer drift apart.
-   `by_isbn` behaves exactly as it did.
+   `_candidate()`, so the two can no longer drift apart, and both answer with
+   the same type: a candidate carries the source it came from, so `by_isbn`
+   needs no separate record type.
 3. **`colophon/correction.py`** — `Corrector.correct()` splits into `_by_isbn`
    and `_by_title`. `Outcome` gained `sought` (the title a book with no ISBN
    was recognised by, because the log line said `matched ISBN None` otherwise)

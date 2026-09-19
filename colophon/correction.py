@@ -17,12 +17,7 @@ from pathlib import Path
 from colophon import epub
 from colophon.epub import Edits, EpubError
 from colophon.hardcover import Hardcover, SourceError
-from colophon.matching import (
-    FileBook,
-    best_candidate,
-    nearest_candidate,
-    title_variants,
-)
+from colophon.matching import FileBook, best_candidate, nearest_candidate, search_title
 
 LOG = logging.getLogger("colophon")
 
@@ -170,12 +165,14 @@ class Corrector:
         written; a book whose title matches but whose author does not is not a
         match at all, so it is passed over.
         """
-        variants = title_variants(book.title)
-        if not variants:
+        title = search_title(book.title)
+        if not title:
             return Outcome(problem="no title in the file, so no source was asked")
 
         try:
-            candidates = self.source.by_title(variants, book.language)
+            # One title, in a list: the query filters with `_in`, which is the
+            # only title operator the server permits.
+            candidates = self.source.by_title([title], book.language)
         except SourceError as error:
             return Outcome(problem=f"Hardcover could not be asked: {error}")
 
@@ -186,9 +183,9 @@ class Corrector:
             # say which book it was and what was wrong with it.
             nearest = nearest_candidate(file_book, candidates)
             if nearest is None or not nearest.agrees:
-                return Outcome(sought=variants[0])
+                return Outcome(sought=title)
             return Outcome(
-                sought=nearest.candidate.title or variants[0],
+                sought=nearest.candidate.title or title,
                 confidence=nearest.confidence,
                 passed_over=nearest.why,
             )

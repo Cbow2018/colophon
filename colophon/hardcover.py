@@ -11,7 +11,6 @@ back out of it.
 import json
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 
 from colophon.matching import Candidate
@@ -101,29 +100,17 @@ class SourceError(Exception):
     """Hardcover could not answer: a bad key, an outage, or a reply we cannot read."""
 
 
-@dataclass(frozen=True)
-class SourceBook:
-    """A book as a source describes it. Every value below came from that source."""
-
-    source: str
-    title: str | None
-    authors: tuple
-    series: str | None
-    series_number: str | None
-    language: str | None
-    isbn: str | None
-
-
 class Hardcover:
     """Looks a book up by its exact ISBN, or by a cleaned title when it has none.
 
     `transport` is the seam the tests replay recorded replies through; left out,
     it posts to Hardcover over HTTPS.
 
-    `by_isbn` answers with one `SourceBook`, because an ISBN identifies an
-    edition and so a book. `by_title` answers with every work that carries the
-    title, as `Candidate`s, because a title does not identify anything on its
-    own: comparing those candidates against the file is the caller's job.
+    Both lookups answer with `Candidate`s, because both are records a source
+    offered of a book and the caller writes them the same way. `by_isbn` offers
+    at most one, since an ISBN identifies an edition and so a book; `by_title`
+    offers every work carrying the title, because a title identifies nothing on
+    its own and comparing them against the file is the caller's job.
     """
 
     def __init__(self, token, url=DEFAULT_URL, timeout=TIMEOUT_SECONDS, transport=None):
@@ -159,7 +146,7 @@ class Hardcover:
             raise SourceError("Hardcover's reply did not contain any editions")
         if not editions:
             return None
-        return _as_book(editions[0], isbn)
+        return _candidate(editions[0], isbn)
 
     def by_title(self, titles, language=None):
         """Every work whose title matches one of these, as candidates to score.
@@ -255,20 +242,6 @@ def _candidate(edition, isbn=None):
         # A code is what an EPUB wants to be given back; the English name is a fallback.
         language=_text(language.get("code2")) or _text(language.get("language")),
         isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")) or isbn,
-    )
-
-
-def _as_book(edition, isbn):
-    """The same, as the record an ISBN lookup answers with."""
-    found = _candidate(edition, isbn)
-    return SourceBook(
-        source=found.source,
-        title=found.title,
-        authors=found.authors,
-        series=found.series,
-        series_number=found.series_number,
-        language=found.language,
-        isbn=found.isbn,
     )
 
 

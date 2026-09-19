@@ -62,11 +62,13 @@ _WORDS = re.compile(r"\w+", re.UNICODE)
 
 @dataclass(frozen=True)
 class CleanedTitle:
-    """A file's title, as much as a source needs to be asked about it."""
+    """A file's title, as much as a source needs to be asked about it.
 
-    raw: str
+    `search` is what gets asked about. `series_number` is the position the
+    file's own title claimed, which the comparison uses as a third signal.
+    """
+
     search: str
-    subtitle: str | None = None
     series: str | None = None
     series_number: str | None = None
 
@@ -118,9 +120,20 @@ class Match:
     confidence: float
     title_score: float
     author_score: float
-    agrees: bool
     title_reason: str
     author_reason: str
+
+    @property
+    def agrees(self):
+        """Whether the comparison found anything to go on at all.
+
+        Derived from the two scores rather than stored, so a candidate that
+        agrees on one half alone can never be reported as one that agrees on
+        both - which is also why `score_candidate` holds such a candidate's
+        confidence under `NO_AGREEMENT_CEILING`.
+        """
+        return self.title_score > 0.0 and self.author_score > 0.0
+
     @property
     def why(self):
         """What was wrong with this candidate, for a log line about a near miss."""
@@ -128,43 +141,34 @@ class Match:
 
 
 def clean_title(title):
-    """Take the series bracket and the subtitle off a title, keeping both.
+    """Take the series bracket and the subtitle off a title.
 
-    The series name and number in the bracket are captured rather than thrown
-    away, and the subtitle is kept alongside the cleaned title, so a caller can
-    put the whole title back together. The cleaned title is what gets asked
-    about: `books.title` holds the clean work title, so a title with the
-    subtitle or the bracket still on it matches nothing at all.
+    The series number in the bracket is captured rather than thrown away,
+    because it is the one fact about the book the title carries that a source
+    keeps elsewhere. The cleaned title is what gets asked about: `books.title`
+    holds the clean work title, so a title with the subtitle or the bracket
+    still on it matches nothing at all.
     """
-    raw = _squeeze(str(title or ""))
-    if not raw:
-        return CleanedTitle(raw="", search="")
+    text = _squeeze(str(title or ""))
+    if not text:
+        return CleanedTitle(search="")
 
     series = None
     series_number = None
-    bracket = _SERIES_BRACKET.search(raw)
+    bracket = _SERIES_BRACKET.search(text)
     if bracket:
         series = _squeeze(bracket.group("series")) or None
         series_number = f"{float(bracket.group('number')):g}"
-        raw = _squeeze(raw[: bracket.start()] + " " + raw[bracket.end() :])
+        text = _squeeze(text[: bracket.start()] + " " + text[bracket.end() :])
 
-    head, subtitle = _split_subtitle(raw)
     return CleanedTitle(
-        raw=raw, search=head, subtitle=subtitle, series=series, series_number=series_number
+        search=_split_subtitle(text), series=series, series_number=series_number
     )
 
 
-def title_variants(title):
-    """The titles to ask a source about, as the list the query takes.
-
-    One, always: the cleaned title. The subtitle and the series bracket are the
-    two things a source does not spell the way the file does, and both are gone
-    by the time this runs. It is a list of one, rather than a string, because
-    the query filters with `_in` - the only title operator the server permits -
-    and taking a list is what that costs.
-    """
-    cleaned = clean_title(title)
-    return [cleaned.search] if cleaned.search else []
+def search_title(title):
+    """The title to ask a source about, or None when a file has no title at all."""
+    return clean_title(title).search or None
 
 
 def score_candidate(file_book, candidate):
@@ -178,12 +182,11 @@ def score_candidate(file_book, candidate):
     cleaned = clean_title(file_book.title)
     title_score, title_reason = _title_score(cleaned.search, candidate.title)
     author_score, author_reason = _author_score(file_book.authors, candidate.authors)
-    agrees = title_score > 0.0 and author_score > 0.0
     # Rounded before the series nudge, so a title and an author that both agree
     # perfectly are exactly 1.0 rather than 1.0000000000000002 of it.
     weighed = round(TITLE_WEIGHT * title_score + AUTHOR_WEIGHT * author_score, 3)
     confidence = weighed + _series_adjustment(cleaned.series_number, candidate.series_number)
-    if not agrees:
+    if not (title_score > 0.0 and author_score > 0.0):
         # One half alone is not a match, however good the other half was. Held
         # under the threshold so that `agrees` is never the only thing standing
         # between a wrong book and someone's library.
@@ -193,7 +196,6 @@ def score_candidate(file_book, candidate):
         confidence=round(min(confidence, 1.0), 4),
         title_score=title_score,
         author_score=author_score,
-        agrees=agrees,
         title_reason=title_reason,
         author_reason=author_reason,
     )
@@ -302,14 +304,19 @@ def _name(author):
 
 
 def _split_subtitle(raw):
-    """A title split at its subtitle, when the subtitle is decoration only."""
+    """A title with its subtitle taken off it, when the subtitle names nothing.
+
+    `Cragside: A DCI Ryan Mystery` is one book; `The Lord of the Rings: The
+    Fellowship of the Ring` is two, so only a subtitle that says what kind of
+    book this is comes off.
+    """
     parts = _SUBTITLE.split(raw, maxsplit=1)
     if len(parts) < 2:
-        return raw, None
+        return raw
     head, subtitle = _squeeze(parts[0]), _squeeze(parts[1])
     if not head or not _generic(subtitle):
-        return raw, None
-    return head, subtitle
+        return raw
+    return head
 
 
 def _generic(subtitle):

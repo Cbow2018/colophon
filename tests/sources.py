@@ -5,12 +5,12 @@ The title candidates below are what the recorded replies in
 corrector without going through the client's parsing of a reply.
 """
 
-from colophon.hardcover import SOURCE, SourceBook
+from colophon.hardcover import SOURCE
 from colophon.matching import Candidate
 from tests.samplebooks import ISBN
 
 # What Hardcover has for the ISBN in the sample book.
-MATCH = SourceBook(
+MATCH = Candidate(
     source=SOURCE,
     title="Cragside",
     authors=("L.J. Ross",),
