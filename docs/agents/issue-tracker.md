@@ -107,13 +107,12 @@ Review happens on GitHub, in `Cbow2018/colophon`.
 
 ## When a skill says "publish to the issue tracker"
 
-**Linear**, unless the work came from a public issue. `/to-spec`, `/to-tickets`
-and the rest of the build skills are planning against the internal plan: create
-a Linear issue with `save_issue` (`team="Athenaeus"`, `project="Colophon"`, a
-title and a markdown description).
+**Linear.** `/to-spec`, `/to-tickets` and the rest of the build skills are
+planning against the internal plan: create a Linear issue with `save_issue`
+(`team="Athenaeus"`, `project="Colophon"`, a title and a markdown description).
 
-A contributor-facing report that arrived through `/triage` belongs on GitHub:
-`gh issue create`.
+Public issues are already on GitHub; `/triage` labels and answers them there,
+and an accepted one gets a Linear ticket per the Handoff section.
 
 ## When a skill says "fetch the relevant ticket"
 
