@@ -49,7 +49,7 @@ KEPUB_CHAPTER = """<?xml version="1.0" encoding="UTF-8"?>
 # in the test rather than buried in a builder.
 SIMPLE = "    <dc:title>Cragside</dc:title>\n    <dc:creator>LJ Ross</dc:creator>"
 
-ISBN = "9781786813891"
+ISBN = "9781521748831"
 
 # A book as it arrives: the title still carries the series and the number, the
 # author is spelt the way the file has it, and there is an ISBN to look up.

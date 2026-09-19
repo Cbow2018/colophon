@@ -2,30 +2,30 @@
   "data": {
     "editions": [
       {
-        "isbn_13": "9781521748831",
-        "isbn_10": "1521748837",
-        "title": "Cragside",
+        "isbn_13": "9780007458424",
+        "isbn_10": "0007458428",
+        "title": "The Hobbit",
         "language": {
           "language": "English",
           "code2": "en",
           "code3": "eng"
         },
         "book": {
-          "title": "Cragside",
+          "title": "The Hobbit, or There and Back Again",
           "contributions": [
             {
               "contribution": "Author",
               "author": {
-                "name": "L.J. Ross"
+                "name": "J.R.R. Tolkien"
               }
             }
           ],
           "book_series": [
             {
               "featured": true,
-              "position": 6,
+              "position": 1,
               "series": {
-                "name": "DCI Ryan Mysteries"
+                "name": "Middle Earth"
               }
             }
           ]

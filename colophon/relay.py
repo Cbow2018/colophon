@@ -136,16 +136,14 @@ class Relay:
             note = f"{note}; the original was already kept as a backup"
 
         if self.config.dry_run:
-            announcement = (str(path), mark)
-            if announcement not in self._announced:
-                self._announced.add(announcement)
-                LOG.info(
-                    'dry run: would move "%s" -> %s (%s)%s',
-                    path.name,
-                    destination,
-                    note,
-                    _attached(correction),
-                )
+            self._announced.add((str(path), mark))
+            LOG.info(
+                'dry run: would move "%s" -> %s (%s)%s',
+                path.name,
+                destination,
+                note,
+                _attached(correction),
+            )
             return
 
         if not already_kept:

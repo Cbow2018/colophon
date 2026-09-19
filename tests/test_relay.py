@@ -391,9 +391,9 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         delivered = self.output / "Cragside.epub"
         book = read(delivered)
         self.assertEqual(book.title, "Cragside")
-        self.assertEqual(book.authors, ("LJ Ross",))
-        self.assertEqual(calibre_series(delivered), ("DCI Ryan", "6"))
-        self.assertEqual(epub3_series(delivered), ("DCI Ryan", "series", "6"))
+        self.assertEqual(book.authors, ("L.J. Ross",))
+        self.assertEqual(calibre_series(delivered), ("DCI Ryan Mysteries", "6"))
+        self.assertEqual(epub3_series(delivered), ("DCI Ryan Mysteries", "series", "6"))
 
     def test_the_original_is_backed_up_before_it_is_changed(self):
         original = self.drop_a_book().read_bytes()
@@ -412,7 +412,7 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
 
         line = "\n".join(captured.output)
         self.assertIn("moved", line)
-        self.assertIn("hardcover matched ISBN 9781786813891", line)
+        self.assertIn("hardcover matched ISBN 9781521748831", line)
         self.assertIn("confidence 1.00", line)
         self.assertIn('title="Cragside"<-hardcover', line)
         self.assertIn('series_number="6"<-hardcover', line)

@@ -27,12 +27,12 @@ from tests.tempdir import TemporaryDirectory
 # A book that already says everything the source says, in both series formats,
 # so there is genuinely nothing left to change.
 ALREADY_MATCHES = f"""    <dc:title>Cragside</dc:title>
-    <dc:creator>LJ Ross</dc:creator>
+    <dc:creator>L.J. Ross</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:language>en</dc:language>
-    <meta name="calibre:series" content="DCI Ryan"/>
+    <meta name="calibre:series" content="DCI Ryan Mysteries"/>
     <meta name="calibre:series_index" content="6"/>
-    <meta property="belongs-to-collection" id="colophon-series">DCI Ryan</meta>
+    <meta property="belongs-to-collection" id="colophon-series">DCI Ryan Mysteries</meta>
     <meta property="collection-type" refines="#colophon-series">series</meta>
     <meta property="group-position" refines="#colophon-series">6</meta>
 """
@@ -73,15 +73,15 @@ class MatchingTests(CorrectionTestCase):
         self.assertTrue(outcome.matched)
         book = read(path)
         self.assertEqual(book.title, "Cragside")
-        self.assertEqual(book.authors, ("LJ Ross",))
+        self.assertEqual(book.authors, ("L.J. Ross",))
 
     def test_it_writes_the_series_in_both_formats(self):
         path = self.book()
 
         self.corrector().correct(path)
 
-        self.assertEqual(calibre_series(path), ("DCI Ryan", "6"))
-        self.assertEqual(epub3_series(path), ("DCI Ryan", "series", "6"))
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+        self.assertEqual(epub3_series(path), ("DCI Ryan Mysteries", "series", "6"))
 
     def test_the_isbn_from_the_file_is_the_one_it_asks_about(self):
         self.corrector().correct(self.book())
@@ -106,6 +106,15 @@ class MatchingTests(CorrectionTestCase):
         self.assertTrue(outcome.matched)
         self.assertEqual(read(path).title, "Cragside")
         self.assertIn('class="koboSpan"', entries_of(path)["OEBPS/chapter.xhtml"].decode())
+
+    def test_a_bare_kepub_is_corrected_too(self):
+        """Kobo's own extension, without an .epub on the end."""
+        path = self.book(name="Cragside.kepub", content=KEPUB_CHAPTER)
+
+        outcome = self.corrector().correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Cragside")
     def test_the_outcome_lists_the_fields_and_where_each_value_came_from(self):
         path = self.book()
 
@@ -115,8 +124,8 @@ class MatchingTests(CorrectionTestCase):
             [(change.field, change.value, change.source) for change in outcome.changed],
             [
                 ("title", "Cragside", "hardcover"),
-                ("authors", "LJ Ross", "hardcover"),
-                ("series", "DCI Ryan", "hardcover"),
+                ("authors", "L.J. Ross", "hardcover"),
+                ("series", "DCI Ryan Mysteries", "hardcover"),
                 ("series_number", "6", "hardcover"),
             ],
         )
@@ -182,8 +191,8 @@ class AGutenbergBookTests(CorrectionTestCase):
 
         self.assertTrue(outcome.matched)
         self.assertEqual(read(path).title, "Cragside")
-        self.assertEqual(calibre_series(path), ("DCI Ryan", "6"))
-        self.assertEqual(epub3_series(path), ("DCI Ryan", "series", "6"))
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+        self.assertEqual(epub3_series(path), ("DCI Ryan Mysteries", "series", "6"))
         self.assertEqual(self.kept(), [path.name])
         self.assertEqual((self.folder / "backups" / path.name).read_bytes(), original)
 
@@ -193,8 +202,8 @@ class AGutenbergBookTests(CorrectionTestCase):
         outcome = self.corrector().correct(path)
 
         self.assertTrue(outcome.matched)
-        self.assertEqual(calibre_series(path), ("DCI Ryan", "6"))
-        self.assertEqual(epub3_series(path), ("DCI Ryan", "series", "6"))
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+        self.assertEqual(epub3_series(path), ("DCI Ryan Mysteries", "series", "6"))
 
     def test_the_gutenberg_licence_is_still_in_the_book_after_it_is_corrected(self):
         path = self.a_real_book()
@@ -329,11 +338,11 @@ class FragmentsTests(CorrectionTestCase):
 
         fragment = outcome.fragment()
 
-        self.assertIn("hardcover matched ISBN 9781786813891", fragment)
+        self.assertIn("hardcover matched ISBN 9781521748831", fragment)
         self.assertIn("confidence 1.00", fragment)
         self.assertIn('title="Cragside"<-hardcover', fragment)
-        self.assertIn('authors="LJ Ross"<-hardcover', fragment)
-        self.assertIn('series="DCI Ryan"<-hardcover', fragment)
+        self.assertIn('authors="L.J. Ross"<-hardcover', fragment)
+        self.assertIn('series="DCI Ryan Mysteries"<-hardcover', fragment)
         self.assertIn('series_number="6"<-hardcover', fragment)
 
     def test_a_corrected_book_says_so_rather_than_saying_it_would(self):

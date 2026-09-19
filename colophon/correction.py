@@ -23,8 +23,9 @@ CONFIDENCE = 1.0
 MATCHED_BY = "exact ISBN"
 
 # The formats whose metadata Colophon understands. Everything else - PDFs,
-# comics, MOBI - passes straight through, untouched and unread.
-BOOK_SUFFIX = ".epub"
+# comics, MOBI - passes straight through, untouched and unread. Kobo writes
+# its own extension as well as the .kepub.epub one.
+BOOK_SUFFIXES = (".epub", ".kepub")
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ class Corrector:
 
     def correct(self, path):
         path = Path(path)
-        if path.suffix.lower() != BOOK_SUFFIX:
+        if path.suffix.lower() not in BOOK_SUFFIXES:
             return Outcome(silent=True)
 
         try:

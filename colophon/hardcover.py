@@ -37,9 +37,9 @@ query BookByIsbn($isbn: String!) {
         contribution
         author { name }
       }
-      book_series {
+      book_series(order_by: [{featured: desc}, {position: asc}]) {
+        featured
         position
-        details
         series { name }
       }
     }
@@ -93,7 +93,7 @@ class Hardcover:
             return None
         except OSError as error:
             raise SourceError(f"could not read the Hardcover token file: {error}") from error
-        return cls(token, **kwargs) if token else None
+        return cls(_without_bearer(token), **kwargs) if token else None
 
     def by_isbn(self, isbn):
         """The book carrying this ISBN, or None when Hardcover has no such edition."""
@@ -191,12 +191,27 @@ def _authors(book):
 
 
 def _series(book):
-    """The series the book belongs to, and the position it sits at in it."""
-    for membership in book.get("book_series") or []:
-        name = _text((membership.get("series") or {}).get("name"))
-        if name:
-            return name, _as_position(membership.get("position"))
-    return None, None
+    """The series Hardcover marks as featured, and the book's place in it.
+
+    A book can sit in several series at once - a saga, a universe, a trilogy of
+    that saga - and Hardcover marks the one it counts as the book's own. The
+    query asks for that one first, and this picks it out again, so a source
+    that ever ignored the ordering cannot quietly pick the wrong series.
+    """
+    memberships = [
+        membership
+        for membership in book.get("book_series") or []
+        if _text((membership.get("series") or {}).get("name"))
+    ]
+    if not memberships:
+        return None, None
+
+    featured = [membership for membership in memberships if membership.get("featured")]
+    chosen = (featured or memberships)[0]
+    return (
+        _text((chosen.get("series") or {}).get("name")),
+        _as_position(chosen.get("position")),
+    )
 
 
 def _as_position(value):
@@ -212,6 +227,14 @@ def _as_position(value):
 def _text(value):
     text = "" if value is None else str(value).strip()
     return text or None
+
+
+def _without_bearer(token):
+    """A token copied whole from Hardcover's settings page carries its own prefix."""
+    prefix = "bearer "
+    if token[: len(prefix)].lower() == prefix:
+        return token[len(prefix) :].strip()
+    return token
 
 
 def _dig(payload, *keys):

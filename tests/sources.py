@@ -7,8 +7,8 @@ from tests.samplebooks import ISBN
 MATCH = SourceBook(
     source="hardcover",
     title="Cragside",
-    authors=("LJ Ross",),
-    series="DCI Ryan",
+    authors=("L.J. Ross",),
+    series="DCI Ryan Mysteries",
     series_number="6",
     language="en",
     isbn=ISBN,
