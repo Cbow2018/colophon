@@ -33,6 +33,77 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(
             config.hardcover_token_file, Path("/run/secrets/hardcover_token")
         )
+        self.assertEqual(
+            config.google_books_key_file, Path("/run/secrets/google_books_key")
+        )
+
+    def test_the_sources_are_tried_in_the_order_the_user_sets(self):
+        """Hardcover first, then Google Books, unless the user says otherwise."""
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(config.sources, ("hardcover", "google_books"))
+
+    def test_a_source_left_out_of_the_list_is_disabled(self):
+        path = self.write_config('sources = ["google_books"]\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(config.sources, ("google_books",))
+
+    def test_the_user_can_reorder_the_list(self):
+        path = self.write_config('sources = ["google_books", "hardcover"]\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(config.sources, ("google_books", "hardcover"))
+
+    def test_the_environment_can_set_the_list_too(self):
+        config = load_config(env={"COLOPHON_SOURCES": "google_books"})
+
+        self.assertEqual(config.sources, ("google_books",))
+
+    def test_a_source_nobody_has_heard_of_is_rejected(self):
+        path = self.write_config('sources = ["open_library"]\n')
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("open_library", str(caught.exception))
+        self.assertIn("google_books", str(caught.exception), "it lists what it does know")
+
+    def test_a_source_named_twice_is_rejected(self):
+        path = self.write_config('sources = ["hardcover", "hardcover"]\n')
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("hardcover", str(caught.exception))
+
+    def test_an_empty_list_is_rejected(self):
+        """No sources at all is a misconfiguration, not a quiet pass-through."""
+        path = self.write_config("sources = []\n")
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("at least one source", str(caught.exception))
+
+    def test_a_source_name_is_read_regardless_of_case(self):
+        path = self.write_config('sources = ["Hardcover"]\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(config.sources, ("hardcover",))
+
+    def test_the_google_books_key_comes_from_a_secret_file_path(self):
+        config = load_config(
+            env={
+                "COLOPHON_CONFIG": str(self.tmp / "missing.toml"),
+                "COLOPHON_GOOGLE_BOOKS_KEY_FILE": "/run/secrets/books_key",
+            }
+        )
+
+        self.assertEqual(config.google_books_key_file, Path("/run/secrets/books_key"))
 
     def test_the_hardcover_token_comes_from_a_secret_file_path(self):
         config = load_config(

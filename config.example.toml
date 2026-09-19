@@ -2,8 +2,8 @@
 #
 # Every setting here can also be given as an environment variable: the name in
 # capitals with COLOPHON_ in front, e.g. COLOPHON_DRY_RUN=false. The
-# environment wins over this file. Secrets never go in either (later versions
-# read API keys from Docker secrets).
+# environment wins over this file. Secrets never go in either: API keys are read
+# from files, and the settings below are paths to those files, not the keys.
 
 # Watched for new books. Anything dropped here is moved to output_dir.
 ingest_dir = "/ingest"
@@ -20,10 +20,30 @@ backup_dir = "/backups"
 # next scan. This covers duplicates filed here by the relay too.
 backup_retention_days = 30
 
+# Which sources to look a book up in, in this order. The first source that has
+# the book is the one its values are taken from, so put the one you trust most
+# first. Leave a name out to disable that source; a list with one name is fine.
+#
+# "hardcover" needs hardcover_token_file below.
+# "google_books" needs google_books_key_file below - Google gives a keyless
+# caller no lookups at all, so without a key that source is skipped entirely.
+#
+# Two things worth knowing when you order this list:
+#   * Google Books has no series data. A book matched from it gets its title and
+#     authors corrected and no series written, whatever the file had.
+#   * If a source you have listed cannot be reached, Colophon stops there for
+#     that book rather than asking a lower-priority source. A book is never
+#     quietly corrected from a source you ranked below a working one.
+sources = ["hardcover", "google_books"]
+
 # Where the Docker secret holding your Hardcover API token is mounted. This is
 # a path, never the token itself. If the file is not there, Colophon says so at
 # startup and passes books through with their metadata as it is.
 hardcover_token_file = "/run/secrets/hardcover_token"
+
+# The same for your Google Books API key. Also a path, never the key itself.
+# Create one in the Google Cloud console with the Books API enabled.
+google_books_key_file = "/run/secrets/google_books_key"
 
 # On by default, so a fresh install cannot surprise you: Colophon logs what it
 # would do and moves nothing. Set this to false once the log looks right.

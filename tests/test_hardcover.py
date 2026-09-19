@@ -9,7 +9,8 @@ import json
 import unittest
 from pathlib import Path
 
-from colophon.hardcover import Hardcover, SourceError
+from colophon.hardcover import Hardcover
+from colophon.sources import SourceError
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "hardcover"

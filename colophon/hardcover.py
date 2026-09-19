@@ -14,6 +14,14 @@ import urllib.request
 from pathlib import Path
 
 from colophon.matching import Candidate
+from colophon.sources import SourceError
+from colophon.sources import text as _text
+
+# `SourceError` is imported from `colophon.sources` for this module's own use and
+# deliberately not re-exported: a caller wanting the failure type imports it from
+# where it is defined, so there is only ever one of it to catch. See the note in
+# `colophon/sources.py` about what two classes with one name cost.
+__all__ = ["SOURCE", "Hardcover"]
 
 SOURCE = "hardcover"
 DEFAULT_URL = "https://api.hardcover.app/v1/graphql"
@@ -99,10 +107,6 @@ _TITLE_QUERY_BY_LENGTH = {
 _TITLE_QUERY_ANY_LANGUAGE = _TITLE_QUERY % ("", "")
 
 
-class SourceError(Exception):
-    """Hardcover could not answer: a bad key, an outage, or a reply we cannot read."""
-
-
 class Hardcover:
     """Looks a book up by its exact ISBN, or by a cleaned title when it has none.
 
@@ -115,6 +119,9 @@ class Hardcover:
     offers every work carrying the title, because a title identifies nothing on
     its own and comparing them against the file is the caller's job.
     """
+
+    # What this source calls itself, as its candidates do.
+    name = SOURCE
 
     def __init__(self, token, url=DEFAULT_URL, timeout=TIMEOUT_SECONDS, transport=None):
         self._token = token
@@ -151,7 +158,7 @@ class Hardcover:
             return None
         return _candidate(editions[0], isbn)
 
-    def by_title(self, titles, language=None):
+    def by_title(self, titles, language=None, author=None):
         """Every work whose title matches one of these, as candidates to score.
 
         A title the API does not spell exactly gets no candidates at all, so
@@ -159,6 +166,12 @@ class Hardcover:
         this asks about them all in one request. The language the file is
         written in is the language asked for, so nothing translated is ever
         offered; a file that names no language is asked about without one.
+
+        `author` is accepted for the sake of the sources interface and is not
+        used: Hardcover's `_eq` on an author's name needs the full name spelt
+        the way Hardcover writes it, which a file rarely is, so filtering on the
+        server would throw away the records worth comparing. The authors are
+        compared here instead, in `matching`.
         """
         titles = [str(title).strip() for title in titles if str(title).strip()]
         if not titles:
@@ -323,11 +336,6 @@ def _as_position(value):
         return f"{float(value):g}"
     except (TypeError, ValueError):
         return _text(value)
-
-
-def _text(value):
-    text = "" if value is None else str(value).strip()
-    return text or None
 
 
 def _without_bearer(token):

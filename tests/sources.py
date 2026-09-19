@@ -74,9 +74,16 @@ class FakeSource:
     `by_title` answers with the candidates it was given, or with a source
     problem when the test wants one; a test that wants the source to be asked
     about a title and nothing else passes `found=None` for the ISBN path.
+
+    `name` is what the source calls itself, as a real source's candidates do:
+    the priority list is made of sources that must be distinguishable in a log
+    line, so a stand-in has to be distinguishable too.
     """
 
-    def __init__(self, found=MATCH, error=None, candidates=(), title_error=None):
+    def __init__(
+        self, found=MATCH, error=None, candidates=(), title_error=None, name=SOURCE
+    ):
+        self.name = name
         self.found = found
         self.error = error
         self.candidates = list(candidates)
@@ -84,6 +91,7 @@ class FakeSource:
         self.asked = []
         self.asked_titles = []
         self.asked_languages = []
+        self.asked_authors = []
 
     def by_isbn(self, isbn):
         self.asked.append(isbn)
@@ -91,9 +99,10 @@ class FakeSource:
             raise self.error
         return self.found
 
-    def by_title(self, titles, language=None):
+    def by_title(self, titles, language=None, author=None):
         self.asked_titles.append(list(titles))
         self.asked_languages.append(language)
+        self.asked_authors.append(author)
         if self.title_error is not None:
             raise self.title_error
         return list(self.candidates)

@@ -1,0 +1,104 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 1,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "hjQrEQAAQBAJ",
+      "etag": "w9PS5s1yoJM",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/hjQrEQAAQBAJ",
+      "volumeInfo": {
+        "title": "The Infirmary",
+        "subtitle": "The chilling new gothic thriller from the author of The Toll House, perfect for Halloween 2025",
+        "authors": [
+          "Carly Reagon"
+        ],
+        "publisher": "Hachette UK",
+        "publishedDate": "2025-10-09",
+        "description": "***The haunting, unbearably tense ghost story from the author of The Toll House*** Looking for more Carly Reagon? Her electrifying new ghostly thriller, The Midnight Lodge, is available to pre-order now _________ Obsession is a sickness For which there is no cure. Suffolk, 1847. Charles Keller needs to escape London, so he leaps when he is offered a position as surgeon at a country infirmary for the poor. But St Cross is not as he expected, and he soon finds himself reflecting on a promise he once made. A promise to do no harm. Some promises are made to be broken. Suffolk, 2023. Liam has brought his family to an old country house for their family holiday, a former infirmary called St Cross. He can't tell them why they are really here, but he hopes that, after this, he can start again. No more lies, no more secrets. But what Liam doesn't know is that the house is keeping secrets of its own. And some secrets are so dark, they should never be brought to light.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9781408733363"
+          },
+          {
+            "type": "ISBN_10",
+            "identifier": "1408733366"
+          }
+        ],
+        "readingModes": {
+          "text": true,
+          "image": false
+        },
+        "pageCount": 319,
+        "printType": "BOOK",
+        "categories": [
+          "Fiction"
+        ],
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": true,
+        "contentVersion": "1.2.2.0.preview.2",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=hjQrEQAAQBAJ&printsec=frontcover&img=1&zoom=5&edge=curl&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=hjQrEQAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=hjQrEQAAQBAJ&printsec=frontcover&dq=intitle:%22The+Infirmary%22+inauthor:%22Carly+Reagon%22&hl=&cd=1&source=gbs_api",
+        "infoLink": "https://play.google.com/store/books/details?id=hjQrEQAAQBAJ&source=gbs_api",
+        "canonicalVolumeLink": "https://play.google.com/store/books/details?id=hjQrEQAAQBAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "FOR_SALE",
+        "isEbook": true,
+        "listPrice": {
+          "amount": 5.99,
+          "currencyCode": "GBP"
+        },
+        "retailPrice": {
+          "amount": 5.99,
+          "currencyCode": "GBP"
+        },
+        "buyLink": "https://play.google.com/store/books/details?id=hjQrEQAAQBAJ&rdid=book-hjQrEQAAQBAJ&rdot=1&source=gbs_api",
+        "offers": [
+          {
+            "finskyOfferType": 1,
+            "listPrice": {
+              "amountInMicros": 5990000,
+              "currencyCode": "GBP"
+            },
+            "retailPrice": {
+              "amountInMicros": 5990000,
+              "currencyCode": "GBP"
+            },
+            "giftable": true
+          }
+        ]
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "PARTIAL",
+        "embeddable": true,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": true,
+          "acsTokenLink": "http://books.google.co.uk/books/download/The_Infirmary-sample-epub.acsm?id=hjQrEQAAQBAJ&format=epub&output=acs4_fulfillment_token&dl_type=sample&source=gbs_api"
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=hjQrEQAAQBAJ&hl=&source=gbs_api",
+        "accessViewStatus": "SAMPLE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "***The haunting, unbearably tense ghost story from the author of The Toll House*** Looking for more Carly Reagon?"
+      }
+    }
+  ]
+}
