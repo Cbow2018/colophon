@@ -1,6 +1,9 @@
 # Triage Labels
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.
+The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo. The vocabulary is shared by both trackers (`issue-tracker.md`), but it does not mean the same thing on each:
+
+- On **GitHub issues**, all five are triage labels, applied by `/triage` to the public tracker. `ready-for-agent` and `ready-for-human` mean a public report is ready to be worked on.
+- On **Linear**, only `ready-for-agent` and `ready-for-human` are used, and they mark a build ticket as ready for an agent or for a human to implement. The other three belong to triaging a public report, which is not what an internal ticket is.
 
 | Label in mattpocock/skills | Label in our tracker | Meaning                                  |
 | -------------------------- | -------------------- | ---------------------------------------- |
