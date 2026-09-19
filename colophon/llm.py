@@ -211,13 +211,19 @@ class Llm:
         """
         name = str(getattr(config, "llm_provider", "") or "").strip().lower()
         base_url = str(getattr(config, "llm_base_url", "") or "").strip()
+        model = str(getattr(config, "llm_model", "") or "").strip()
         preset = PROVIDERS.get(name)
-        if preset is None and not base_url:
-            raise LlmError(
-                f"llm_provider names {name!r}, which is neither a provider Colophon "
-                "has (" + ", ".join(PROVIDERS) + ") nor a custom endpoint: set "
-                "llm_base_url to say where it is"
-            )
+        if preset is None:
+            # A custom endpoint has to say where it is and what to ask for: the
+            # two things a preset exists to supply. Refused here rather than sent
+            # blank, because a blank model is a 400 that comes back every day.
+            missing = "llm_base_url" if not base_url else "llm_model" if not model else None
+            if missing:
+                raise LlmError(
+                    f"llm_provider names {name!r}, which is not one of Colophon's "
+                    "providers (" + ", ".join(PROVIDERS) + "): a custom endpoint has "
+                    f"to say where it is, so set {missing}"
+                )
         wants_key = preset.needs_key if preset is not None else False
         key = (
             _read_key(getattr(config, "llm_key_file", None))
@@ -228,7 +234,7 @@ class Llm:
             return None
         return cls(
             provider=name,
-            model=getattr(config, "llm_model", "") or (preset.model if preset else ""),
+            model=model or preset.model,
             base_url=base_url or preset.base_url,
             key=key,
             daily_limit=getattr(config, "llm_daily_limit", 200),

@@ -513,10 +513,12 @@ else moves the counter with the folder that protects it.
 
 **A custom endpoint is a real endpoint, not an unknown name.** `llm_provider`
 naming something outside the seven presets is accepted as long as `llm_base_url`
-says where it is; without one there is nowhere to send the request, and *that* is
-the error. Its key is **optional** rather than required or absent: a custom
-endpoint may be a local server that wants none, so the missing key file does not
-disable it — and it may want one, so a key file that is there is sent.
+and `llm_model` say where it is and what to ask for; without either there is
+nothing to send or nothing to ask for, and *that* is the error — a blank model
+name is a 400 that repeats every day. Its key is **optional** rather than
+required or absent: a custom endpoint may be a local server that wants none, so
+the missing key file does not disable it — and it may want one, so a key file
+that is there is sent.
 
 ### The request
 
@@ -606,10 +608,10 @@ ends without a match is the LLM consulted, over everything the walk kept.
 
 Cutting the walk short at a match is what "break out when a match is found" means
 in practice: no source after the matching one is asked, for the ISBN path or for
-any book the rules already answered. That also disposes of the problem stated
-below rather than leaving it to be discovered — a source that could not be reached
-*after* a match can no longer fail a book that used to succeed, because it is
-never reached.
+any book the rules already answered. That also disposes of a consequence the first
+draft of this note stated rather than solved — a source that could not be reached
+*after* a match could have failed a book that used to succeed. It is never
+reached now, so there is nothing to state.
 
 ### A 4xx that is not 401 or 429 repeats every day
 

@@ -343,6 +343,22 @@ class FromConfigTests(LlmTestCase):
         self.assertEqual(llm.base_url, "http://localhost:8080/v1")
         self.assertEqual(llm.model, "qwen2.5")
 
+    def test_a_custom_endpoint_with_no_key_file_sends_no_authorization_at_all(self):
+        """Optional means left out, not sent empty: Ollama's rule, for any endpoint."""
+        llm = Llm.from_config(
+            self.config(
+                llm_provider="llamacpp",
+                llm_base_url="http://localhost:8080/v1",
+                llm_model="qwen2.5",
+                llm_key_file=self.tmp / "missing",
+            )
+        )
+        llm._transport = Replay("belsay-picked.json")
+
+        llm.choose(FILE, [BELSAY_RECORD])
+
+        self.assertNotIn("Authorization", llm._transport.sent[0]["headers"])
+
     def test_a_custom_endpoint_with_no_key_file_is_still_an_endpoint(self):
         """It may be local and need no key; the key is optional, not required."""
         llm = Llm.from_config(
@@ -389,6 +405,19 @@ class FromConfigTests(LlmTestCase):
 
         self.assertEqual(llm.counter, elsewhere / ".colophon-llm.json")
         self.assertTrue((elsewhere / ".colophon-llm.json").exists())
+
+    def test_a_custom_endpoint_with_no_model_is_an_error_rather_than_a_blank(self):
+        """There is no model to ask for, and an empty name is a 400 every day."""
+        with self.assertRaises(LlmError) as caught:
+            Llm.from_config(
+                self.config(
+                    llm_provider="llamacpp",
+                    llm_base_url="http://localhost:8080/v1",
+                    llm_key_file=self.tmp / "missing",
+                )
+            )
+
+        self.assertIn("llm_model", str(caught.exception))
 
     def test_a_custom_name_with_no_base_url_is_a_plain_error_not_a_traceback(self):
         """There is nowhere to send it, so the setting is wrong rather than unknown."""
@@ -878,7 +907,7 @@ class TheCandidateCapTests(unittest.TestCase):
         ]
         candidates = distractors + [BELSAY_RECORD]
 
-        kept = top_candidates(file_book, candidates, "hardcover")
+        kept = top_candidates(file_book, candidates)
 
         self.assertEqual(len(kept), 5)
         self.assertEqual(kept[0], BELSAY_RECORD, "the best candidate goes first")
@@ -892,7 +921,7 @@ class TheCandidateCapTests(unittest.TestCase):
             for number in range(1, 6)
         ]
 
-        kept = top_candidates(file_book, distractors + [BELSAY_RECORD], "hardcover")
+        kept = top_candidates(file_book, distractors + [BELSAY_RECORD])
 
         self.assertEqual(kept, [BELSAY_RECORD, *distractors[:4]])
 
@@ -900,7 +929,7 @@ class TheCandidateCapTests(unittest.TestCase):
         file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
         candidates = [BELSAY_RECORD, BERWICK]
 
-        self.assertEqual(top_candidates(file_book, candidates, "hardcover"), candidates)
+        self.assertEqual(top_candidates(file_book, candidates), candidates)
 
 
 class TheWaitingDayTests(unittest.TestCase):
@@ -958,6 +987,29 @@ class TheWaitingDayTests(unittest.TestCase):
         forget_yesterdays_waits(waiting, "2026-09-20")
 
         self.assertEqual(waiting, {}, "both are the other day's now")
+
+    def test_the_walk_forgets_an_older_day_before_it_looks_a_book_up(self):
+        """The unit above proves the helper; this proves the pass runs it.
+
+        Without the call, a book left waiting once is skipped for the life of
+        the process - so the entry is seeded in the corrector's own list, as a
+        wait that happened on a day that has passed, and the book has to be
+        asked about again.
+        """
+        path = self.book()
+        source = FakeSource(found=None, candidates=[BELSAY_RECORD])
+        corrector = Corrector(
+            sources=[source],
+            backups=self.backups,
+            llm=self.llm(),
+            fetch=no_network,
+        )
+        corrector._waiting[path] = ("2020-01-01", "a day that has been and gone")
+
+        outcome = corrector.correct(path)
+
+        self.assertFalse(outcome.silent, "it is looked at again rather than skipped")
+        self.assertEqual(len(source.asked_titles), 1)
 
 
 class ThePerSourceCapTests(unittest.TestCase):

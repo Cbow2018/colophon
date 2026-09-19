@@ -491,7 +491,7 @@ class Corrector:
             # shown. The cap is per source, so a second source's best record is
             # never crowded out by the first source's long tail - which is the
             # whole reason there is a cap.
-            offered.extend(top_candidates(file_book, candidates, source.name))
+            offered.extend(top_candidates(file_book, candidates))
             # A near miss - one that agrees on both title and author but not
             # confidently enough - is remembered rather than written, so a book
             # no source can match still names the closest thing to it. A reply
@@ -569,9 +569,10 @@ class Corrector:
         The file is not written to at all - not even marked - because rewriting
         it in place would change its hash and so its duplicate detection, and the
         whole thing is redone tomorrow. The waiting list is what stops the next
-        scan asking the same question again today, and it holds the reason rather
-        than the day: the reason is what every later scan has to hand back to the
-        relay, so it can go on leaving the file alone without saying why twice.
+        scan asking the same question again today: it holds the reason, so the
+        relay can be told why again without the message being written twice, and
+        the day the book was left for, which is what lets the list clear itself
+        when tomorrow arrives.
 
         Every failure ends here, and the shape of the failure is the only thing
         that differs: an outage is worth waiting out, a rejected key is CBO-44's
@@ -870,10 +871,11 @@ def forget_yesterdays_waits(waiting, today):
         del waiting[path]
 
 
-def top_candidates(file_book, candidates, source):
-    """This source's candidates worth putting to the LLM, best first.
+def top_candidates(file_book, candidates):
+    """The candidates worth putting to the LLM, best first.
 
-    At most `CANDIDATES_PER_SOURCE` of them, because a source can return a long
+    One source's reply at a time, and at most `CANDIDATES_PER_SOURCE` of them,
+    because a source can return a long
     tail of lookalikes and every one of them costs tokens and buries the right
     record a little deeper. The cap is on the *best* few rather than the first
     few: the ones the source listed first are in whatever order its own search

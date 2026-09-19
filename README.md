@@ -264,7 +264,9 @@ like any other. The line says when the LLM was the one that decided:
 Any OpenAI-compatible endpoint works. The presets are `deepseek` (the default),
 `anthropic`, `gemini`, `openai`, `openrouter`, `groq` and `ollama`. Any other
 name is a **custom endpoint**: set `llm_base_url` and `llm_model` to say where it
-is and what to ask for, and Colophon uses it as it finds it.
+is and what to ask for, and Colophon uses it as it finds it. Both are required
+for one, since neither can be guessed - a blank model name is a rejected request
+every day rather than a working setup.
 
 **Without a key file a preset that needs one is simply not used**, and uncertain
 books take the unverified path as they always did - which is the default, since
