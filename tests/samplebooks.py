@@ -89,6 +89,13 @@ WITHOUT_AUTHOR = """    <dc:title>Cragside</dc:title>
     <dc:language>en</dc:language>
 """
 
+# The same book with the initials run together, which is how a file often spells
+# an author a source spaces out, and the other way round from AS_DOWNLOADED.
+INITIALS_WITHOUT_STOPS = """    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)</dc:title>
+    <dc:creator>LJ Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
 # A book that says nothing about its author or its language either.
 WITHOUT_AUTHOR_OR_LANGUAGE = """    <dc:title>Cragside</dc:title>
 """

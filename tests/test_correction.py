@@ -19,6 +19,7 @@ from tests.samplebooks import (
     CRAGSIDE,
     DRM,
     GUTENBERG_DIR,
+    INITIALS_WITHOUT_STOPS,
     ISBN,
     KEPUB_CHAPTER,
     SIMPLE,
@@ -357,6 +358,18 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.corrector(source=source).correct(path)
 
         self.assertEqual(source.asked_languages, ["en"])
+
+    def test_initials_run_together_in_the_file_still_match(self):
+        """The file says `LJ Ross`; the record says `L.J. Ross`."""
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", INITIALS_WITHOUT_STOPS, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).authors, ("L.J. Ross",))
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
 
     def test_a_book_with_no_language_is_searched_without_one(self):
         path = self.book("Cragside.epub", WITHOUT_AUTHOR_OR_LANGUAGE)

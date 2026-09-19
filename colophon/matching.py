@@ -293,14 +293,19 @@ def _author_score(file_authors, record_authors):
 
 
 def _name(author):
-    """A name as its words sorted, so neither the order nor the spacing matters.
+    """A name as its characters run together, whichever way round it is spelt.
 
-    `L. J. Ross` and `Ross, L. J.` both come out as `jlross`: the punctuation is
-    a word break either way, and sorting puts the surname and the initials in
-    the same place however the name was written round.
+    A `Surname, Given` name is turned round at the first comma, so it starts
+    the same way as the `Given Surname` a source usually writes. After that the
+    word characters are joined up as they came, which is what makes the stops
+    and the spacing stop mattering: `L.J. Ross`, `L. J. Ross`, `LJ Ross` and
+    `Ross, L. J.` all come out as `ljross`.
     """
-    words = _WORDS.findall(str(author or "").casefold())
-    return "".join(sorted(words))
+    text = str(author or "").casefold()
+    surname, comma, given = text.partition(",")
+    if comma:
+        text = f"{given} {surname}"
+    return "".join(_WORDS.findall(text))
 
 
 def _split_subtitle(raw):
