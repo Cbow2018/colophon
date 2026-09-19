@@ -1674,17 +1674,17 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 )
 
     def test_the_top_of_the_range_is_one_and_one_is_a_usable_setting(self):
-        """1.0 is allowed, and it is not "the ISBN path only".
+        """1.0 accepts an exact match and nothing else - and it is not "the ISBN path only".
 
-        A title and an author that both agree exactly score exactly 1.0 - the
-        weights add up to one and the series nudge is bounded - so a threshold of
-        1.0 is one a match can reach, which is why `(0, 1]` is the range rather
-        than `(0, 1)`. What it accepts is that exact agreement and nothing else:
-        the 0.94 a contained title earns is refused. The line a threshold of 1.0
-        draws is *certainty*, not *route* - an ISBN match always clears it and an
-        exact title-and-author match does too.
+        It is a setting rather than a wall because a title and an author that both
+        agree exactly score exactly 1.0, which is what makes `(0, 1]` the range
+        instead of `(0, 1)`. What it refuses is everything under that, which is
+        every near miss the comparison can produce: the highest of them is a
+        contained title with the author and the series both agreeing, at 0.99. So
+        the line 1.0 draws is *certainty*, not *route* - an ISBN match always
+        clears it, and so does an exact title-and-author match.
         """
-        # The top of the range is reachable, and reachable by title.
+        # Reachable, and reached by title.
         perfect = self.book("Perfect.epub", CRAGSIDE)
         perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
@@ -1695,39 +1695,38 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertIsNone(outcome.isbn, "and it is a title match, not an ISBN one")
         self.assertEqual(outcome.sought, "Cragside", "found by its title")
 
-        # One step below it is not.
-        contained = self.book("Contained.epub", CRAGSIDE)
-        contained_source = FakeSource(
-            found=None,
-            candidates=[
-                Candidate(
-                    source="hardcover",
-                    title="Cragside: A DCI Ryan Mystery",
-                    authors=("L.J. Ross",),
-                    series="DCI Ryan Mysteries",
-                    series_number="6",
-                    language="en",
+        # The best a near miss can do: contained title, author and series both
+        # agreeing. 0.99, and 1.0 refuses it.
+        best_near_miss = Candidate(
+            source="hardcover",
+            title="Cragside: A DCI Ryan Mystery",
+            authors=("L.J. Ross",),
+            series="DCI Ryan Mysteries",
+            series_number="6",
+            language="en",
+        )
+        for threshold, expected in ((1.0, False), (0.85, True)):
+            with self.subTest(confidence=threshold):
+                path = self.book(f"Contained-{threshold}.epub", CRAGSIDE)
+
+                outcome = self.corrector(
+                    source=FakeSource(found=None, candidates=[best_near_miss]),
+                    confidence=threshold,
+                ).correct(path)
+
+                self.assertEqual(
+                    outcome.matched,
+                    expected,
+                    f"0.99 {'clears' if expected else 'does not clear'} {threshold}",
                 )
-            ],
-        )
-
-        outcome = self.corrector(source=contained_source, confidence=1.0).correct(
-            contained
-        )
-
-        self.assertFalse(outcome.matched, "0.94 does not clear 1.0")
-        self.assertTrue(outcome.unverified)
-
-        # And the same candidate clears a threshold one step lower, so what
-        # refused it above was the number and not the candidate.
-        accepted = self.book("Accepted.epub", CRAGSIDE)
-
-        outcome = self.corrector(
-            source=FakeSource(found=None, candidates=contained_source.candidates),
-            confidence=0.9,
-        ).correct(accepted)
-
-        self.assertTrue(outcome.matched, "0.94 clears 0.9")
+                self.assertEqual(outcome.unverified, not expected)
+                self.assertEqual(
+                    read(path).title,
+                    "Cragside: A DCI Ryan Mystery"
+                    if expected
+                    else "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
+                    "marked means nothing of the record was written",
+                )
 
     def test_a_threshold_of_one_refuses_a_near_miss_too(self):
         """The 0.84 near miss is nowhere near the top of the range."""

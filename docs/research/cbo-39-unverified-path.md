@@ -166,11 +166,15 @@ Settled with the maintainer before any code was written:
    Valid range `(0, 1]`: 0 is not a threshold, and 1.0 *is* reachable - the
    question was checked rather than assumed, and a title and an author that both
    agree exactly score exactly 1.0 (`0.6 + 0.4`, series absent on one side or
-   agreeing). 1.0 is **not** "ISBN matches only", though that is what it first
-   looked like and what this note said: an exact title-and-author match clears it
-   too, which the log line for a title match at `confidence 1.00` shows. What 1.0
-   means is that nothing short of exact agreement is written, and anything above
-   it is refused because no candidate can score there.
+   agreeing). So 1.0 means **only an exact match is written**: every near miss
+   the comparison can produce is under it - a contained title (0.94 with the
+   series agreeing, 0.84 with it disagreeing), an author on their own (0.4), a
+   title on its own (0.6) - and each is marked unverified instead. It is **not**
+   "ISBN matches only", which is what an earlier cut of this note said and what
+   the log line for a title match at `confidence 1.00` disproves: an exact
+   title-and-author match is a title match, and it clears 1.0. Anything above
+   1.0 is refused rather than read as "match nothing": no candidate can score
+   there, so it is a typo rather than an intention.
 4. **A book with no description gets one,** containing the sentence alone. The
    ticket's point is finding the book in the library, and a tag is easy to miss.
 5. **Marking is idempotent:** the sentence is appended once, in whichever of the

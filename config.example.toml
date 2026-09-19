@@ -74,14 +74,18 @@ log_level = "INFO"
 # description - so you can find it in your library without reading logs. Drop a
 # marked book in again once a source has it and the mark comes off.
 #
-# 1.0 is a setting rather than a dead one, and it does not mean "ISBN only": a
-# title and an author that both agree exactly score exactly 1.0, so they still
-# clear it. What 1.0 does mean is that nothing short of that is written, which
-# leaves almost every book unverified - and a title and an author that agree
-# exactly is the common case for a book the sources do have, so it is a stranger
-# setting than it sounds. The line below is the default; uncomment and change it
-# to overrule that. It is written before the [fields] table on purpose: in TOML
-# everything after a table header belongs to that table.
+# 1.0 accepts only an exact match: a title and an author that both agree
+# exactly, which is the one thing that scores 1.0. Everything else is a near
+# miss and is marked unverified instead of written - a record whose title merely
+# contains the file's, one that kept a subtitle the file dropped, one whose
+# series position disagrees - however good it looks.
+#
+# It is not a way to say "use the ISBN and ignore titles": an exact
+# title-and-author match still clears 1.0, so that setting corrects books by
+# title as well, just only the exact ones. The line below is the default;
+# uncomment and change it to overrule that. It is written before the [fields]
+# table on purpose: in TOML everything after a table header belongs to that
+# table.
 #
 # Anything above 1.0 is refused rather than treated as "match nothing": no
 # candidate can score above 1.0, so it is a typo, not an intention.

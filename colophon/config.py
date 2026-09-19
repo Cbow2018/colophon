@@ -96,11 +96,12 @@ class Config:
     # one keeps it: that is what the setting means, so there is no rule to set.
     add_cover: bool = True
     # How sure a title-and-author match has to be before it is written. At 1.0
-    # only a match nothing can be doubted about is accepted, which is a title and
-    # an author that both agree exactly - those score exactly 1.0, so 1.0 is a
-    # setting that leaves almost every book unverified rather than a value nothing
-    # could reach. It does not turn the title path off: an exact match still
-    # clears it.
+    # only an exact match is accepted - a title and an author that both agree
+    # exactly, which is the one thing that scores 1.0 - and every near miss is
+    # left marked unverified instead: a record whose title only contains the
+    # file's, one that kept a subtitle, one whose series position disagrees. It
+    # is not a way to ignore titles: an exact match is still a title match, and
+    # still clears it.
     confidence: float = DEFAULT_CONFIDENCE
 
 
