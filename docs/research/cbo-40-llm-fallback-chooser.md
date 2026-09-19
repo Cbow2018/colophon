@@ -210,19 +210,51 @@ Groq, OpenRouter. The base URLs and model names for those are **provider
 documentation**, gathered on 2026-09-19, and two of them are traps worth writing
 down before anyone writes a join helper:
 
-| Provider | Base URL (documentation) | `json_object` | Key |
-| --- | --- | --- | --- |
-| DeepSeek | `https://api.deepseek.com` — no version segment | Yes (**probed**) | Yes |
-| Anthropic | `https://api.anthropic.com/v1/` | **No — docs list `response_format` as "Ignored"** | Yes |
-| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` — **not `/v1`** | **unconfirmed**; only `json_schema` is documented | Yes |
-| OpenAI | `https://api.openai.com/v1` | Yes | Yes |
-| OpenRouter | `https://openrouter.ai/api/v1` | Yes | Yes |
-| Groq | `https://api.groq.com/openai/v1` | Yes | Yes |
-| Ollama | `http://localhost:11434/v1/` | Yes | Client must send one; Ollama ignores it |
+| Provider | Base URL (documentation) | Model (documentation) | `json_object` | Key |
+| --- | --- | --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com` — no version segment | `deepseek-flash` (**probed**) | Yes | Yes |
+| Anthropic | `https://api.anthropic.com/v1/` | `claude-haiku-4-5` | **No — docs list `response_format` as "Ignored"** | Yes |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` — **not `/v1`** | `gemini-3.8-flash` — **risk: reasons first, and cannot be told not to** | **unconfirmed**; only `json_schema` is documented | Yes |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4.1-nano` | Yes | Yes |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4.1-nano` | Yes | Yes |
+| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` — **risk: reasons first** | Yes | Yes |
+| Ollama | `http://localhost:11434/v1/` | `llama3.1` | Yes | Client must send one; Ollama ignores it |
 
 **A naive `base + "/v1/"` template is wrong for two of the seven.** Gemini's
 compatible layer has no `/v1` at all, and Anthropic's already ends in one. This is
 the single most likely way to ship a preset that never works.
+
+**What was re-read, and what moved.** Four of these model names had rotted.
+Groq shut `llama-3.3-70b-versatile` down on 2026-08-16 and its deprecation page
+names `openai/gpt-oss-120b` in its place - so that preset was calling a model
+that no longer answers at all. Anthropic's 3.5 Haiku is not in its current lineup
+(Fable 5.1, Opus 5, Sonnet 5, Haiku 4.5); Gemini's compatibility examples ask for
+3.8 Flash rather than 2.0; and OpenAI moved to `gpt-4.1-nano`, the newest tier
+that does not reason before it answers, which OpenRouter mirrors under
+`openai/gpt-4.1-nano`. Ollama's `llama3.1` was checked and left alone: still in
+the library, still its most-pulled model.
+
+**The 256-token cap, and the two presets that reason first.** `MAX_TOKENS` is
+256, which is sized for the pick object and nothing else. Two of the models above
+think before they answer, and neither the request nor the client can switch that
+off: the OpenAI-compatible documentation says plainly that *"Reasoning cannot be
+turned off for Gemini 2.5 Pro or 3 models"*, and Gemini's own usage reports
+thinking as a separate figure (`total_thought_tokens`), which leaves open the
+question this note cannot answer - whether those tokens sit inside the output
+budget `max_tokens` sets. If they do, a 256-token reply is spent thinking, every
+call comes back `finish_reason: "length"`, Q3 makes that a `null`, and a Gemini
+book takes the unverified path for ever while spending the day's calls.
+
+**This is a recorded risk, not a finding: nobody probed it.** No Gemini key was
+available to probe with - `C:\Users\Callum\secrets\` held `deepseek.txt`,
+`google_books_key` and `hardcover_token` on 2026-09-19 and nothing else. One call
+to the real prompt with a real key settles it either way, and the same call
+should be made before anyone adopts an OpenAI model above 4.1 (the whole GPT-5.6
+and 6 families reason) or Groq's `gpt-oss-120b`: Groq does document
+`reasoning_effort: "none"` and `include_reasoning: false`, but this request sends
+neither. Raising `MAX_TOKENS` is the cheaper fix and is **not** made here - a
+bigger cap is paid for on every call, and 256 was chosen for one small object, so
+the decision belongs to whoever owns the ticket.
 
 Anthropic's row is what it is: the provider documents the OpenAI-compatible layer
 and says it is "not considered a long-term or production-ready solution", and it
