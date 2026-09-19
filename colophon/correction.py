@@ -32,19 +32,19 @@ LOG = logging.getLogger("colophon")
 # call the source in a sentence, what to call that key file, and how to build the
 # source from it. A name missing from here is a programming mistake rather than a
 # user one - `config.py` refuses a name it does not know long before this is
-# reached - which is why the label lives here too, rather than in a second map
+# reached - which is why the sentences live here too, rather than in a second map
 # keyed by the same names.
 SOURCE_SETUP = {
     "hardcover": {
         "file": "hardcover_token_file",
         "label": "Hardcover",
-        "secret_name": "Hardcover token",
+        "key_label": "Hardcover token",
         "make": Hardcover.from_secret_file,
     },
     "google_books": {
         "file": "google_books_key_file",
         "label": "Google Books",
-        "secret_name": "Google Books key",
+        "key_label": "Google Books key",
         "make": GoogleBooks.from_secret_file,
     },
 }
@@ -376,7 +376,7 @@ def _build(name, config):
         LOG.info(
             "no %s at %s, so %s is not asked and the rest of the list carries on "
             "without it",
-            entry["secret_name"],
+            entry["key_label"],
             where,
             name,
         )

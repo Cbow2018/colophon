@@ -283,7 +283,7 @@ class FromConfigTests(unittest.TestCase):
             with self.subTest(source=name):
                 self.assertTrue(entry["label"], "a source needs something to be called")
                 self.assertIn(entry["file"], Config.__dataclass_fields__)
-                self.assertTrue(entry["secret_name"])
+                self.assertTrue(entry["key_label"])
 
     def test_it_says_so_when_there_is_no_token_file(self):
         with self.assertLogs("colophon", level="INFO") as captured:
