@@ -22,7 +22,7 @@ from colophon.matching import (
     best_candidate,
     nearest_candidate,
     primary_language,
-    search_title,
+    search_titles,
 )
 
 LOG = logging.getLogger("colophon")
@@ -171,17 +171,18 @@ class Corrector:
         written; a book whose title matches but whose author does not is not a
         match at all, so it is passed over.
         """
-        title = search_title(book.title)
-        if not title:
+        titles = search_titles(book.title)
+        if not titles:
             return Outcome(problem="no title in the file, so no source was asked")
+        title = titles[0]
 
         # A `dc:language` may be regional (`en-GB`) or three-letter (`eng`); the
         # source indexes editions by the primary code, so that is what is asked.
         language = primary_language(book.language) or None
         try:
-            # One title, in a list: the query filters with `_in`, which is the
-            # only title operator the server permits.
-            candidates = self.source.by_title([title], language)
+            # Every form in one request: the query filters with `_in`, which is
+            # the only title operator the server permits.
+            candidates = self.source.by_title(list(titles), language)
         except SourceError as error:
             return Outcome(problem=f"Hardcover could not be asked: {error}")
 

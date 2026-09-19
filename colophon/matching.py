@@ -64,11 +64,15 @@ _WORDS = re.compile(r"\w+", re.UNICODE)
 class CleanedTitle:
     """A file's title, as much as a source needs to be asked about it.
 
-    `search` is what gets asked about. `series_number` is the position the
-    file's own title claimed, which the comparison uses as a third signal.
+    `search` is what gets asked about. `also` is the same title with the
+    subtitle left on, for the source that keeps the subtitle on its own record;
+    it is None when the subtitle was never taken off, because then the two are
+    one title. `series_number` is the position the file's own title claimed,
+    which the comparison uses as a third signal.
     """
 
     search: str
+    also: str | None = None
     series: str | None = None
     series_number: str | None = None
 
@@ -147,7 +151,8 @@ def clean_title(title):
     because it is the one fact about the book the title carries that a source
     keeps elsewhere. The cleaned title is what gets asked about: `books.title`
     holds the clean work title, so a title with the subtitle or the bracket
-    still on it matches nothing at all.
+    still on it matches nothing at all. What the subtitle was taken off *from*
+    is kept as `also`, because a source is free to have kept it.
     """
     text = _squeeze(str(title or ""))
     if not text:
@@ -161,14 +166,32 @@ def clean_title(title):
         series_number = f"{float(bracket.group('number')):g}"
         text = _squeeze(text[: bracket.start()] + " " + text[bracket.end() :])
 
+    without_subtitle = _split_subtitle(text)
     return CleanedTitle(
-        search=_split_subtitle(text), series=series, series_number=series_number
+        search=without_subtitle,
+        also=text if without_subtitle != text else None,
+        series=series,
+        series_number=series_number,
     )
 
 
+def search_titles(title):
+    """Every title to ask about, cleaned first, and None when there is no title.
+
+    Normally one. A subtitle that came off for searching gives a second form to
+    try in the same request, because the source may have kept it on its record.
+    Both are the source's to answer, so both go in one query rather than two.
+    """
+    cleaned = clean_title(title)
+    if not cleaned.search:
+        return None
+    return (cleaned.search, cleaned.also) if cleaned.also else (cleaned.search,)
+
+
 def search_title(title):
-    """The title to ask a source about, or None when a file has no title at all."""
-    return clean_title(title).search or None
+    """The one title a source is asked about first, or None if the file has none."""
+    titles = search_titles(title)
+    return titles[0] if titles else None
 
 
 def primary_language(language):

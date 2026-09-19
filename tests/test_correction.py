@@ -348,7 +348,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.corrector(source=source).correct(path)
 
-        self.assertEqual(source.asked_titles, [["Cragside"]])
+        # The cleaned title first, then the same title with the subtitle left on
+        # for a source that kept it, both in the one request.
+        self.assertEqual(source.asked_titles, [["Cragside", "Cragside: A DCI Ryan Mystery"]])
         self.assertEqual(source.asked_languages, ["en"])
         self.assertEqual(source.asked, [], "there was no ISBN to ask about")
 
@@ -451,13 +453,30 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertIn("hardcover matched Sapiens", outcome.fragment())
 
     def test_a_title_with_no_subtitle_is_asked_about_once(self):
-        path, source = self.a_book_the_source_has(
-            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        """Nothing was taken off, so there is no second form to ask about."""
+        path = self.book(
+            "Normal People.epub",
+            """    <dc:title>Normal People</dc:title>
+    <dc:creator>Sally Rooney</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Normal People",
+                    authors=("Sally Rooney",),
+                    language="en",
+                )
+            ],
         )
 
-        self.corrector(source=source).correct(path)
+        outcome = self.corrector(source=source).correct(path)
 
-        self.assertEqual(source.asked_titles, [["Cragside"]])
+        self.assertEqual(source.asked_titles, [["Normal People"]])
+        self.assertTrue(outcome.matched)
 
     def test_the_lookalike_is_not_accepted_for_any_of_them(self):
         for name, metadata in (
