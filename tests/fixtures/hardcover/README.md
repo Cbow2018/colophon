@@ -55,17 +55,21 @@ because it is the one that must be *rejected*.
 | `by-title-berwick.json` | `Berwick` | work 2379453, *Berwick*, L.J. Ross, #24 | recorded |
 | `by-title-belsay.json` | `Belsay` | work 1647114, *Belsay*, L.J. Ross, #23 | recorded |
 | `by-title-the-infirmary.json` | `The Infirmary` | work 1198266 (*The Infirmary*, L.J. Ross, #11) **and** work 2284109 (*The Infirmary*, Carly Reagon) | recorded |
+| `by-title-nothing-found.json` | `The Cragside Compendium of Nothing` | `{"data": {"editions": []}}` — the empty answer | recorded |
 
-`nothing-found.json` is CBO-39's, and it sits above with the ISBN recordings for a
-reason: it is the empty answer to *both* questions. Asked about an ISBN nobody has
-and about a title nobody has, Hardcover answers the same thirteen bytes -
-`{"data": {"editions": []}}` - because what is absent is an edition either way.
-CBO-39's unverified path begins when no source has the book, and this is what that
-looks like from Hardcover: an empty `editions` list rather than an error. It was
-first recorded for 9781786813891, the ISBN the design spec names for *Cragside*
-that Hardcover does not have; the live probe for CBO-39 asked about the title
-`The Cragside Compendium of Nothing` and got the same body, so the one recording
-serves both and was renamed out of the `by-isbn-` prefix it had outgrown.
+`nothing-found.json` and `by-title-nothing-found.json` are the empty answer to the
+two different questions, and are CBO-39's. The unverified path begins when no
+source has the book, and this is what that looks like from Hardcover: no
+`editions` at all rather than an error.
+
+CBO-39 also made the ISBN path fall back to the title, so an ISBN no source has is
+not the end of the search. That needs both answers recorded, which is why they are
+two files rather than one: the ISBN recording answers the first question, the
+title recording answers the second, and a test replaying both is showing what
+really happens when neither finds anything. The ISBN one was first recorded by
+CBO-35 - it is 9781786813891, the number CBO-33's design spec names for
+*Cragside* and Hardcover has no edition of - and was renamed out of the
+`by-isbn-` prefix when the title recording joined it.
 
 The title filter is `book: {title: {_in: […]}}`, an exact match, so Hardcover
 never returns a title it does not spell exactly - which is why a *near miss*

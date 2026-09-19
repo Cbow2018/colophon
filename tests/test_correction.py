@@ -2,10 +2,12 @@
 
 import inspect
 import json
+import re
 import shutil
 import textwrap
 import time
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest import mock
 
@@ -154,6 +156,74 @@ def same_book_with(blurb):
         "<dc:language>en</dc:language>",
         f"<dc:language>en</dc:language>\n    <dc:description>{held}</dc:description>",
     )
+
+
+def unmarked_entries(path):
+    """The book's entries with Colophon's unverified mark taken off it.
+
+    A marked book is not the book it arrived as, so a test that means "nothing
+    else about this file changed" has to say what "else" excludes - and it is
+    exactly the mark: the tag, the sentence, and nothing more.
+
+    The package document comes back as text with the mark cut out; every other
+    entry is returned byte for byte. Read out of the zip by hand rather than
+    through the code under test, so a failure here is a failure of the write and
+    not of a reader that agrees with it.
+    """
+    entries = entries_of(path)
+    opf = next(name for name in entries if name.endswith(".opf"))
+
+    # The mark, in each of the shapes it takes. The description goes entirely
+    # when the sentence was all of it, which is what the writer does for a book
+    # with no blurb of its own.
+    text = entries[opf].decode("utf-8")
+    text = re.sub(rf"\s*<dc:subject>{re.escape(UNVERIFIED_TAG)}</dc:subject>", "", text)
+    text = text.replace(f"\n\n{UNVERIFIED_SENTENCE}", "")
+    text = re.sub(
+        rf"\s*<dc:description>{re.escape(UNVERIFIED_SENTENCE)}</dc:description>", "", text
+    )
+    text = text.replace(f"<p>{UNVERIFIED_SENTENCE}</p>", "")
+
+    found = dict(entries)
+    found[opf] = text.encode("utf-8")
+    return found
+
+
+def same_book(one, other):
+    """Whether two sets of entries are the same book, the package document aside.
+
+    Every entry but the package document is compared byte for byte. The package
+    document is compared as a tree, because a book anything is written to has it
+    re-serialised - ElementTree's declaration, its element order, its self-closing
+    tags - and that happens for every correction. Failing a test about the mark on
+    a difference the writer makes to every book would be testing the wrong thing.
+    """
+    if set(one) != set(other):
+        return False
+    for name in one:
+        if not name.endswith(".opf") and one[name] != other[name]:
+            return False
+    return _as_tree(one) == _as_tree(other)
+
+
+def _as_tree(entries):
+    """The package document as a tree, insensitive to how it is spelt.
+
+    The prefixes are made uniform, and the whitespace *between* elements is
+    dropped: a document that had an element taken out of it is left with the
+    blank line that element sat on, and that is not a difference in what the book
+    says. Text inside an element is kept, because that is the metadata.
+    """
+    opf = next(name for name in entries if name.endswith(".opf"))
+    body = entries[opf]
+    colophon_epub._keep_namespace_prefixes(body)
+    root = ET.fromstring(body)
+    for element in root.iter():
+        if not (element.text or "").strip():
+            element.text = None
+        if not (element.tail or "").strip():
+            element.tail = None
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 class RefusingBackups:
@@ -1266,17 +1336,25 @@ class WhenThereIsNothingToChangeTests(CorrectionTestCase):
         self.assertEqual(self.kept(), [])
         self.assertEqual(path.read_bytes(), before)
 
-    def test_a_book_the_source_does_not_know_is_left_alone(self):
+    def test_a_book_the_source_does_not_know_is_marked_and_otherwise_left_alone(self):
+        """No ISBN, no title match: the book is marked, and nothing else moves.
+
+        The mark is a write, so the original is backed up - and the file is then
+        the one that arrived apart from the tag and the sentence.
+        """
         source = FakeSource(found=None)
-        path = self.book()
+        path = self.book("Cragside.epub", CRAGSIDE)
+        original_entries = entries_of(path)
 
         outcome = self.corrector(source=source).correct(path)
 
         self.assertFalse(outcome.matched)
-        self.assertEqual(self.kept(), [])
+        self.assertTrue(outcome.unverified)
         self.assertIn("no source", outcome.fragment())
-        self.assertIn(ISBN, outcome.fragment())
+        self.assertIn("Cragside", outcome.fragment())
         self.assertIn("hardcover", outcome.fragment(), "the source asked is named")
+        self.assertTrue(same_book(unmarked_entries(path), original_entries))
+        self.assertEqual(self.kept(), ["Cragside.epub"])
 
     def test_a_file_that_is_not_an_epub_is_not_even_read(self):
         path = self.folder / "Scan.pdf"
@@ -1536,8 +1614,8 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         Rejected, not accepted: none of the lookalike's values are written. But
         the book is no longer left completely alone, which is CBO-39: a book
         nothing matched confidently is marked unverified, and marking it means
-        backing the original up first. So what this test holds is that the
-        metadata is untouched, not that the file is.
+        backing the original up first. So what this test holds is that the file
+        is the one it arrived as apart from the mark, byte for byte.
         """
         for name, metadata in (
             ("Cragside.epub", CRAGSIDE),
@@ -1546,6 +1624,7 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         ):
             with self.subTest(book=name):
                 path = self.book(name, metadata)
+                original_entries = entries_of(path)
                 source = FakeSource(
                     found=None,
                     candidates=[THE_INFIRMARY_CANDIDATE, ANOTHER_INFIRMARY],
@@ -1555,22 +1634,25 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
                 self.assertFalse(outcome.matched)
                 self.assertTrue(outcome.unverified)
-                book = read(path)
-                self.assertIn(book.title, metadata, "the file's own title is what it says")
-                self.assertEqual(book.authors, ("L. J. Ross",), "no other book's author")
-                self.assertIsNone(book.series, "the lookalike's series is not written")
+                self.assertTrue(
+                    same_book(unmarked_entries(path), original_entries),
+                    "the mark is the only thing about this file that changed",
+                )
 
     def test_a_book_with_no_author_is_not_matched_on_its_title_alone(self):
         """A title match alone never reaches the threshold, so the book is marked."""
         path = self.book("Cragside.epub", WITHOUT_AUTHOR)
+        original_entries = entries_of(path)
         source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
         outcome = self.corrector(source=source).correct(path)
 
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified)
-        self.assertEqual(read(path).title, "Cragside", "still the file's own title")
-        self.assertIsNone(read(path).series, "nothing the record said was written")
+        self.assertTrue(
+            same_book(unmarked_entries(path), original_entries),
+            "and nothing of the record was written",
+        )
 
     def test_the_threshold_is_adjustable_and_below_it_a_near_miss_is_accepted(self):
         """At 0.80 the 0.84 candidate is good enough; at the default 0.85 it is not."""
@@ -1941,23 +2023,22 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(subjects(path), [])
 
-    def test_an_isbn_no_source_has_is_not_marked_unverified_either(self):
-        """The ISBN path's miss is not the title path's.
+    def test_an_isbn_no_source_has_is_marked_unverified_when_the_title_fails_too(self):
+        """Both ways of recognising the book came up empty, so it is marked.
 
-        A book that says which edition it is and is not found is not a book
-        whose metadata could not be verified: its ISBN is a fact, and it has
-        told Colophon which book it is. Whether that is worth its own marker is
-        CBO-43's question, not this ticket's.
+        The ISBN path is tried first, so a book that says which edition it is does
+        not have its title consulted first - but an ISBN no source has is not an
+        answer either, and once the title path has also found nothing there is
+        nothing left that could vouch for the file.
         """
         path = self.book("Cragside.epub", AS_DOWNLOADED)
-        before = path.read_bytes()
 
         outcome = self.corrector(source=FakeSource(found=None)).correct(path)
 
         self.assertFalse(outcome.matched)
-        self.assertFalse(outcome.unverified)
-        self.assertEqual(path.read_bytes(), before)
-        self.assertEqual(subjects(path), [])
+        self.assertTrue(outcome.unverified)
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)")
 
     def test_a_source_that_cannot_answer_leaves_the_book_alone(self):
         path = self.book("Cragside.epub", CRAGSIDE)
@@ -2240,16 +2321,54 @@ class TheSourcePriorityListTests(CorrectionTestCase):
 
         self.assertFalse(outcome.matched)
         self.assertIn("no source", outcome.fragment())
-        self.assertIn(ISBN, outcome.fragment())
+        self.assertIn(ISBN, outcome.fragment(), "the ISBN tried is named as well")
+        self.assertIn("Cragside", outcome.fragment())
 
-    def test_an_isbn_miss_does_not_fall_back_to_the_title_path(self):
-        """A book with an ISBN stays on the ISBN path, as it does today."""
+    def test_an_isbn_miss_falls_back_to_the_title_path(self):
+        """An ISBN no source has does not end the walk; the title path answers.
+
+        An ISBN can be one nobody lists - a self-published edition, or simply a
+        wrong one - and the book is still recognisable by its title and its
+        author. So the same list is searched again by title, and the second source
+        is the one that finds it.
+        """
+        path = self.book()
         first = FakeSource(found=None)
         second = self.a_second_source()
 
-        self.corrector_over(first, second).correct(self.book())
+        outcome = self.corrector_over(first, second).correct(path)
 
-        self.assertEqual(second.asked_titles, [], "no title search for a book with an ISBN")
+        self.assertEqual(
+            first.asked_titles,
+            [["Cragside", "Cragside: A DCI Ryan Mystery"]],
+            "the source that had no ISBN is asked about the title instead",
+        )
+        self.assertEqual(
+            second.asked_titles,
+            [["Cragside", "Cragside: A DCI Ryan Mystery"]],
+            "and so is the next one, in the order the user set",
+        )
+        self.assertTrue(outcome.matched)
+        self.assertEqual(outcome.source, "google_books")
+        self.assertEqual(
+            read(path).isbn,
+            ISBN,
+            "the file keeps the ISBN it came with, which is not the record's",
+        )
+
+    def test_an_isbn_whose_title_path_also_fails_is_marked_unverified(self):
+        """Both answers were "no", so nobody could vouch for the book."""
+        path = self.book()
+
+        outcome = self.corrector_over(
+            FakeSource(found=None), FakeSource(found=None, name="google_books")
+        ).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified)
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        self.assertIn("marked colophon:unverified", outcome.fragment())
+        self.assertIn(ISBN, outcome.fragment(), "and the line says which ISBN was tried")
 
     # --- the title path ----------------------------------------------------
 
@@ -2291,6 +2410,7 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         named rather than silently dropped.
         """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        original_entries = entries_of(path)
         nearly = Candidate(
             source="google_books",
             title="Cragside: A DCI Ryan Mystery",
@@ -2311,11 +2431,13 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertIn("confidence 0.84", outcome.fragment())
         # A near miss is still a miss: none of the candidate's values are written,
         # and the book is marked rather than corrected - which is what CBO-39 adds
-        # to this case. The fields it came with are the fields it keeps.
+        # to this case. Take the mark off and the file is the one that arrived,
+        # byte for byte, so the mark is the whole of what happened to it.
         self.assertIn("marked colophon:unverified", outcome.fragment())
-        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)")
-        self.assertIsNone(read(path).series_number, "the record's position is not written")
-        self.assertEqual(subjects(path), ["colophon:unverified"], "the only thing written")
+        self.assertTrue(
+            same_book(unmarked_entries(path), original_entries),
+            "take the mark off and the file is the one that arrived",
+        )
         self.assertEqual(self.kept(), ["Cragside.epub"], "backed up before it was marked")
 
     def test_a_source_that_offers_nothing_at_all_does_not_name_a_book(self):

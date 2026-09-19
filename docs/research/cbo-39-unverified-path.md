@@ -86,9 +86,13 @@ that needs it reads that one through a real `GoogleBooks` client.
 Hardcover had no recording of an empty title reply. The closest was
 `by-isbn-not-found.json`, which is the ISBN path - and asking live for a title
 nobody has produced the *same thirteen bytes*, because what is absent is an
-edition either way. The two questions turned out to have one answer, so the one
-recording is kept and renamed `nothing-found.json`, and both the ISBN test and
-CBO-39's relay test read it.
+edition either way. So one recording was not enough after all, but not because
+the answers differ: because the mark now needs **both** questions answered. An
+ISBN no source has sends the book to the title path, and a test that shows the
+book going unverified has to replay both replies rather than one. The ISBN
+recording is renamed `nothing-found.json` (it is 9781786813891, the number the
+design spec names and Hardcover does not have) and the title one is new, as
+`by-title-nothing-found.json`.
 
 ## 3. What the probe changed about the ticket's shape
 
@@ -139,12 +143,18 @@ in the "As built" section at the end of this note.
 
 Settled with the maintainer before any code was written:
 
-1. **Which outcomes are unverified:** only the confidence failure. A book with no
-   source configured, no title to ask about, an unreadable package, an unreadable
-   key or a source that could not answer keeps its own state and gets no tag -
-   "nobody could ask" is not "we asked and could not be sure". Two of those are
-   other tickets' (CBO-43's retry and `colophon:source-unavailable`, CBO-44's
-   hold-the-books on a rejected key).
+1. **Which outcomes are unverified:** the confidence failure, on whichever path
+   reached it. A book with no source configured, no title to ask about, an
+   unreadable package, an unreadable key or a source that could not answer keeps
+   its own state and gets no tag - "nobody could ask" is not "we asked and could
+   not be sure". Two of those are other tickets' (CBO-43's retry and
+   `colophon:source-unavailable`, CBO-44's hold-the-books on a rejected key).
+   An ISBN no source has **does** get the tag when the title path finds nothing
+   either: the identifier is not an answer, and once both ways of recognising the
+   book have failed there is nothing left that could vouch for it. That is what
+   makes the ISBN path fall back to the title path at all, which is a change the
+   ticket's own wording ("no match at or above the confidence threshold") turns
+   out to require.
 2. **The tag is a `dc:subject`,** appended after the book's own subjects and never
    duplicated. That is the element Calibre and Calibre-Web NextGen read as a
    book's tags. `belongs-to-collection` was considered and rejected: no reader

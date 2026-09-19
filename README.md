@@ -143,6 +143,12 @@ book: it passes through untouched rather than being corrected from a source you
 ranked below the one that is down. A book is never quietly taken from a
 lower-priority source because a higher-priority one was busy.
 
+An ISBN a source does not have is not the end of the search. The book is looked
+up again by its title and author, in the same priority order - an ISBN can be one
+nobody lists, and the title usually is not - and a match found that way keeps the
+ISBN the file came with, because the record that recognised it is a different
+edition.
+
 Each written value is attributed in the log line, so you can always see which
 source a value came from:
 
@@ -211,6 +217,9 @@ keeps the metadata it came with and is marked instead:
 - with `Metadata could not be verified by Colophon.` at the end of its
   description, on a paragraph of its own, so it is findable without reading logs.
   A book with no blurb of its own gets that sentence as its whole description.
+
+The same happens to a book whose ISBN **no source has**: the ISBN is asked about
+first, then the title, and only when both come up empty is the book marked.
 
 It then goes to the output folder like any other book, and is logged like one:
 

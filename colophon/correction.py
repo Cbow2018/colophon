@@ -87,6 +87,12 @@ class Outcome:
     """What became of one book, in enough detail for the relay's one log line."""
 
     isbn: str | None = None
+    # The ISBN the file carried, whether or not it is what recognised the book.
+    # Kept beside the one above because on the ISBN path the two can differ: no
+    # source may have that ISBN, and the title path may then recognise the book
+    # by its title - which is a match, but not an ISBN one, and the line must not
+    # say the ISBN found what a title search found.
+    carried_isbn: str | None = None
     # What the source was asked about, when that was not an ISBN: the cleaned
     # title a book without one was recognised by.
     sought: str | None = None
@@ -130,7 +136,7 @@ class Outcome:
                 return (
                     f"[no source{self._among()} has an edition called {self.sought} "
                     f"confidently enough: {self.passed_over}, "
-                    f"confidence {self.confidence:.2f}{self._marking()}]"
+                    f"confidence {self.confidence:.2f}{self._carried()}{self._marking()}]"
                 )
             return f"[{self._nothing_found()}{self._marking()}]"
 
@@ -165,6 +171,19 @@ class Outcome:
         """
         return f" among {', '.join(self.tried)}" if self.tried else ""
 
+    def _carried(self):
+        """The ISBN the book came with, when the line is about something else.
+
+        A book whose ISBN found nothing is looked up by its title as well, and the
+        line is then about the title. The ISBN it came with is still the first
+        thing anyone would check, so it is named beside it rather than dropped:
+        otherwise the log says a book called *Cragside* was not found, and says
+        nothing about the identifier that was wrong.
+        """
+        if self.carried_isbn and self.sought:
+            return f", or by ISBN {self.carried_isbn}"
+        return ""
+
     def _marking(self):
         """The note that a book nothing matched was marked, and by what.
 
@@ -188,7 +207,10 @@ class Outcome:
     def _nothing_found(self):
         """The line for a book not one source had, naming every source asked."""
         if self.sought:
-            return f"no source{self._among()} has an edition called {self.sought}"
+            return (
+                f"no source{self._among()} has an edition called {self.sought}"
+                f"{self._carried()}"
+            )
         return f"no source{self._among()} carries ISBN {self.isbn}"
 
 
@@ -269,12 +291,25 @@ class Corrector:
         return self._by_title(path, book)
 
     def _by_isbn(self, path, book):
-        """The ISBN path: the file says which edition it is, so ask about that.
+        """The ISBN path, which falls back to the title when the ISBN finds nothing.
 
         The walk stops at the first source that has the edition. An ISBN
         identifies one, so the first source to know it is as good as any other,
         and the ISBN itself is only ever written by its own rule - usually
         nothing, since the file already carries it.
+
+        No source having the ISBN is not the end of the road. The ISBN a file
+        carries can be one no source has - a self-published book, an edition
+        Hardcover never listed, or simply a wrong one - and the book is still
+        recognisable by its title and its author, which is exactly what the title
+        path is for. So the fallback is a title search over the same list, and its
+        answer is the answer: a match corrects the book, and nothing at or above
+        the threshold leaves it marked unverified like any other book no source
+        can vouch for.
+
+        The match the fallback finds keeps the ISBN the file came with: the record
+        that recognised the book is a different edition, and writing its ISBN over
+        the file's would be claiming an edition this book has not been shown to be.
         """
         tried = []
         for source in self.sources:
@@ -285,7 +320,12 @@ class Corrector:
                 return self._failed(source, error, f"ISBN {book.isbn}")
             if found is not None:
                 return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
-        return Outcome(isbn=book.isbn, tried=tuple(tried))
+
+        # The book is still recognisable without its ISBN, so the title path
+        # answers - whatever it answers. `replace` carries the ISBN the file came
+        # with onto that outcome, for the line to name, without claiming it was
+        # what recognised the book.
+        return replace(self._by_title(path, book), carried_isbn=book.isbn)
 
     def _by_title(self, path, book):
         """The title path, for a file that carries no ISBN.
