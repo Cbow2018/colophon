@@ -197,8 +197,11 @@ def correct(path, edits, write=True, cover=None, would_add_cover=False):
         return tuple(changed)
 
     document = _document(package)
-    if image is not None and image[1]:
-        _rewrite(path, opf_path, document, image[:2])
+    # A cover that was declared with no bytes behind it is a dry run: the
+    # document goes in and no entry is written for an image never fetched.
+    # `_set_cover` answers (None, None) for exactly that case.
+    if image is not None and image[0] is not None:
+        _rewrite(path, opf_path, document, image)
     else:
         _rewrite(path, opf_path, document)
     return tuple(changed)
@@ -395,17 +398,21 @@ def _set_isbn(metadata, isbn):
     book corrected twice does not end up claiming two ISBNs.
 
     The comparison is of the numbers, not of the strings: `urn:isbn:9781521748831`,
-    `978-1-5217-48831` and `9781521748831` are one ISBN, and writing the same one
-    again in another form would be a change reported for nothing.
+    `978-1-5217-4883-1` and `9781521748831` are one ISBN, and writing the same one
+    again in another form would be a change reported for nothing. `_as_isbn` is
+    what reads the digits out of either form, so the two cannot disagree about
+    what an ISBN is.
     """
-    wanted = _isbn_digits(isbn)
+    wanted = _as_isbn(str(isbn))
     if not wanted:
         return False
     for element in _elements(metadata, "identifier"):
         text = (element.text or "").strip()
         scheme = (element.get(f"{{{OPF}}}scheme") or "").lower()
         if "isbn" in scheme or text.lower().startswith("urn:isbn:"):
-            if _isbn_digits(text) == wanted:
+            # An identifier whose digits do not read as an ISBN at all is still
+            # one the file says is one, so it is the one to write over.
+            if _as_isbn(text, scheme) == wanted:
                 return False
             element.text = f"urn:isbn:{wanted}"
             element.attrib.pop(f"{{{OPF}}}scheme", None)
@@ -415,16 +422,6 @@ def _set_isbn(metadata, isbn):
     element.text = f"urn:isbn:{wanted}"
     _insert_dc(metadata, element)
     return True
-
-
-def _isbn_digits(value):
-    """An ISBN as its digits, so the ways of writing one compare equal."""
-    digits = str(value or "").strip().lower()
-    for prefix in ("urn:isbn:", "isbn:"):
-        if digits.startswith(prefix):
-            digits = digits[len(prefix) :]
-            break
-    return digits.replace("-", "").replace(" ", "").strip()
 
 
 def _set_authors(metadata, authors):
