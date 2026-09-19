@@ -198,9 +198,11 @@ class StuckFileTests(RelayTestCase):
         def refuse(self, *args, **kwargs):
             raise PermissionError(13, "Permission denied")
 
-        with mock.patch.object(Path, "unlink", refuse):
-            with self.assertLogs("colophon", level="INFO") as captured:
-                self.settle(times=times)
+        with (
+            mock.patch.object(Path, "unlink", refuse),
+            self.assertLogs("colophon", level="INFO") as captured,
+        ):
+            self.settle(times=times)
         return captured
 
     def test_it_is_not_copied_out_over_and_over(self):

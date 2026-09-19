@@ -100,9 +100,8 @@ class LoadConfigTests(unittest.TestCase):
             ("COLOPHON_STABLE_CHECKS", "lots"),
             ("COLOPHON_LOG_LEVEL", "chatty"),
         ]:
-            with self.subTest(name=name, value=value):
-                with self.assertRaises(ConfigError):
-                    load_config(env={name: value})
+            with self.subTest(name=name, value=value), self.assertRaises(ConfigError):
+                load_config(env={name: value})
 
     def test_unknown_setting_in_the_file_is_rejected(self):
         path = self.write_config('ingset_dir = "/typo"\n')

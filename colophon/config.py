@@ -5,9 +5,10 @@ here is a plain, non-secret one, so an environment override is safe.
 """
 
 import os
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+import tomllib
 
 DEFAULT_CONFIG_PATH = "/config/config.toml"
 
