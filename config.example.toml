@@ -64,6 +64,38 @@ skip_suffixes = [".part", ".tmp", ".!qb", ".crdownload"]
 # DEBUG, INFO, WARNING or ERROR.
 log_level = "INFO"
 
+# How sure a title-and-author match has to be before Colophon writes it, as a
+# number above 0 and at most 1. A candidate's confidence is how well its title
+# and its author agree with what the file says. 0.85 is the design's default.
+#
+# A book nothing matches that confidently is not corrected at all: it keeps the
+# metadata it came with and is marked instead - tagged `colophon:unverified`,
+# with "Metadata could not be verified by Colophon." at the end of its
+# description - so you can find it in your library without reading logs. Drop a
+# marked book in again once a source has it and the mark comes off.
+#
+# 1.0 accepts a title and an author that both agree exactly, and marks
+# everything else unverified instead of writing it - a record whose title merely
+# contains the file's, one that kept a subtitle the file dropped, one at a
+# different place in the series - however good it looks.
+#
+# One exact match is still marked, and it is worth knowing about: a file whose
+# title carries a series position, matched to a record carrying a different one,
+# scores 0.9 rather than 1.0. Either side saying nothing about the position
+# scores 1.0, as does agreement, so most files - which carry no position in the
+# title - are unaffected by this.
+#
+# It is not a way to say "use the ISBN and ignore titles". A title and an author
+# that agree exactly still clear 1.0, so books are still corrected by title under
+# this setting - just nothing less certain than that. The line below is the
+# default; uncomment and change it to overrule that. It is written before the
+# [fields] table on purpose: in TOML everything after a table header belongs to
+# that table.
+#
+# Anything above 1.0 is refused rather than treated as "match nothing": no
+# candidate can score above 1.0, so it is a typo, not an intention.
+# confidence = 0.85
+
 # Add a cover to a book that has none, from the source that matched it. A book
 # that arrived with a cover keeps it: this setting only ever adds one. Only the
 # source that matched is asked, so a book matched from a source with no cover

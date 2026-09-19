@@ -58,6 +58,21 @@ def collections(path):
     return found
 
 
+def subjects(path):
+    """Every dc:subject the book carries, in the order it carries them.
+
+    A tag is a `dc:subject`, which is what Calibre and Calibre-Web NextGen read
+    as a book's tags. Read here by hand for the same reason as `text_of`: a test
+    asserting on a written tag must not agree with the code merely by sharing
+    its reader.
+    """
+    return [
+        (element.text or "").strip()
+        for element in metadata_of(path).findall(f"{{{DC_NS}}}subject")
+        if (element.text or "").strip()
+    ]
+
+
 def entries_of(path):
     """Every entry in the zip, in order, by name."""
     with zipfile.ZipFile(path) as book:

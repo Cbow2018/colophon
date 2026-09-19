@@ -15,8 +15,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from colophon import epub
-from colophon.config import FIELD_DEFAULTS, KNOWN_FIELDS
-from colophon.epub import Edits, EpubError
+from colophon.config import DEFAULT_CONFIDENCE, FIELD_DEFAULTS, KNOWN_FIELDS
+from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.matching import (
@@ -53,15 +53,19 @@ SOURCE_SETUP = {
 # An exact ISBN match is as certain as metadata matching gets.
 CONFIDENCE = 1.0
 MATCHED_BY = "exact ISBN"
-# A title and author match is never certain, so it has to clear this.
-TITLE_CONFIDENCE = 0.85
 TITLE_MATCHED_BY = "title and author"
+
+# What a change is attributed to when Colophon itself made it rather than a
+# source: the unverified tag, and the note in the description beside it. It is
+# not a source name - no source can supply either - so it is spelled as the
+# program that did it.
+COLOPHON = "colophon"
 
 # Fields whose values are not what belongs in a log line, so the line names them
 # without it: the blurb is a thousand characters of prose that is in the book,
 # and a cover's value is bytes. The line's job is which fields moved and who
 # supplied them.
-_NAME_ONLY = ("description", "cover")
+_NAME_ONLY = ("description", "cover", "tag")
 
 # The formats whose metadata Colophon understands. Everything else - PDFs,
 # comics, MOBI - passes straight through, untouched and unread. Kobo writes
@@ -83,6 +87,12 @@ class Outcome:
     """What became of one book, in enough detail for the relay's one log line."""
 
     isbn: str | None = None
+    # The ISBN the file carried, whether or not it is what recognised the book.
+    # Kept beside the one above because on the ISBN path the two can differ: no
+    # source may have that ISBN, and the title path may then recognise the book
+    # by its title - which is a match, but not an ISBN one, and the line must not
+    # say the ISBN found what a title search found.
+    carried_isbn: str | None = None
     # What the source was asked about, when that was not an ISBN: the cleaned
     # title a book without one was recognised by.
     sought: str | None = None
@@ -102,6 +112,13 @@ class Outcome:
     # nothing matched, because that is the case where the reader of the log has
     # nothing else to go on about what was tried.
     tried: tuple = ()
+    # Whether the book was marked `colophon:unverified`. A book nothing matched
+    # confidently is not corrected - it keeps the metadata it came with - but it
+    # is marked, so it can be found in the library without reading a log.
+    unverified: bool = False
+    # Whether a correction was actually written. A dry run reports every change
+    # and applies none, so the two cannot be told apart from `changed`.
+    dry_run: bool = False
 
     def fragment(self):
         """The bracketed part of the log line, or nothing when there is nothing to say."""
@@ -119,9 +136,9 @@ class Outcome:
                 return (
                     f"[no source{self._among()} has an edition called {self.sought} "
                     f"confidently enough: {self.passed_over}, "
-                    f"confidence {self.confidence:.2f}]"
+                    f"confidence {self.confidence:.2f}{self._carried()}{self._marking()}]"
                 )
-            return f"[{self._nothing_found()}]"
+            return f"[{self._nothing_found()}{self._marking()}]"
 
         if self.isbn:
             head = (
@@ -138,13 +155,10 @@ class Outcome:
         if not self.changed:
             return f"[{head}; nothing to change]"
 
-        fields = ", ".join(
-            f"{change.field}<-{change.source}"
-            if change.field in _NAME_ONLY
-            else f'{change.field}="{change.value}"<-{change.source}'
-            for change in self.changed
+        return (
+            f"[{head}; {'changed' if self.applied else 'would change'} "
+            f"{_names_and_values(self.changed)}]"
         )
-        return f"[{head}; {'changed' if self.applied else 'would change'} {fields}]"
 
     def _among(self):
         """The sources that were tried, for the log lines that have no match.
@@ -157,10 +171,46 @@ class Outcome:
         """
         return f" among {', '.join(self.tried)}" if self.tried else ""
 
+    def _carried(self):
+        """The ISBN the book came with, when the line is about something else.
+
+        A book whose ISBN found nothing is looked up by its title as well, and the
+        line is then about the title. The ISBN it came with is still the first
+        thing anyone would check, so it is named beside it rather than dropped:
+        otherwise the log says a book called *Cragside* was not found, and says
+        nothing about the identifier that was wrong.
+        """
+        if self.carried_isbn and self.sought:
+            return f", or by ISBN {self.carried_isbn}"
+        return ""
+
+    def _marking(self):
+        """The note that a book nothing matched was marked, and by what.
+
+        Said out loud because the line is otherwise only about what was not
+        found, while the book itself has been changed - or would be, in a dry run,
+        which is why the mark is the one thing here that says which: there is no
+        `changed` list after the word "changed" for it to sit behind. The fields
+        are named the way a matched book's are, and for a book nothing matched
+        they are Colophon's own, which is worth showing as plainly as a source's
+        name is.
+        """
+        if not self.unverified:
+            return ""
+        # "would" is the dry run's word, and it is asked of the mode rather than
+        # of whether anything moved: a book that is already marked and still
+        # unmatched has nothing to write but is still, on a real pass, marked -
+        # and a line calling that a "would" would be wrong in the other direction.
+        marked = f"; {'would mark' if self.dry_run else 'marked'} {UNVERIFIED_TAG}"
+        return f"{marked}: {_names_and_values(self.changed)}" if self.changed else marked
+
     def _nothing_found(self):
         """The line for a book not one source had, naming every source asked."""
         if self.sought:
-            return f"no source{self._among()} has an edition called {self.sought}"
+            return (
+                f"no source{self._among()} has an edition called {self.sought}"
+                f"{self._carried()}"
+            )
         return f"no source{self._among()} carries ISBN {self.isbn}"
 
 
@@ -191,6 +241,7 @@ class Corrector:
         fields=None,
         add_cover=True,
         fetch=None,
+        confidence=DEFAULT_CONFIDENCE,
     ):
         self.sources = tuple(sources or ())
         self.backups = backups
@@ -200,6 +251,10 @@ class Corrector:
         # opinion about, so it is simply not written.
         self.fields = dict(fields or FIELD_DEFAULTS)
         self.add_cover = add_cover
+        # How sure a title-and-author match has to be before it counts as one.
+        # The design spec's 0.85, adjustable, and the only thing that decides
+        # whether a candidate is a match or a near miss.
+        self.confidence = confidence
         # How a cover is fetched, injected so no test reaches the network.
         self.fetch = fetch or fetcher_for()
 
@@ -217,6 +272,7 @@ class Corrector:
             dry_run=config.dry_run,
             fields=config.fields,
             add_cover=config.add_cover,
+            confidence=config.confidence,
         )
 
     def correct(self, path):
@@ -235,12 +291,31 @@ class Corrector:
         return self._by_title(path, book)
 
     def _by_isbn(self, path, book):
-        """The ISBN path: the file says which edition it is, so ask about that.
+        """The ISBN path, which falls back to the title when the ISBN finds nothing.
 
         The walk stops at the first source that has the edition. An ISBN
         identifies one, so the first source to know it is as good as any other,
         and the ISBN itself is only ever written by its own rule - usually
         nothing, since the file already carries it.
+
+        No source having the ISBN is not the end of the road. The ISBN a file
+        carries can be one no source has - a self-published book, an edition
+        Hardcover never listed, or simply a wrong one - and the book is still
+        recognisable by its title and its author, which is exactly what the title
+        path is for. So the fallback is a title search over the same list, and its
+        answer is the answer: a match corrects the book, and nothing at or above
+        the threshold leaves it marked unverified like any other book no source
+        can vouch for.
+
+        The match the fallback finds keeps the ISBN the file came with: the record
+        that recognised the book is a different edition, and writing its ISBN over
+        the file's would be claiming an edition this book has not been shown to be.
+
+        A file with no title has nothing to fall back to. The sources were asked
+        about it - by its ISBN, which is the one thing the file did say - and none
+        of them had it, so the book is marked like any other nobody could vouch
+        for. Returning the title path's "no title, so no source was asked" would
+        be a plain falsehood on this path: they were asked.
         """
         tried = []
         for source in self.sources:
@@ -251,7 +326,15 @@ class Corrector:
                 return self._failed(source, error, f"ISBN {book.isbn}")
             if found is not None:
                 return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
-        return Outcome(isbn=book.isbn, tried=tuple(tried))
+
+        if not search_titles(book.title):
+            return self._unverified(path, book, None, tried)
+
+        # The book is still recognisable without its ISBN, so the title path
+        # answers - whatever it answers. `replace` carries the ISBN the file came
+        # with onto that outcome, for the line to name, without claiming it was
+        # what recognised the book.
+        return replace(self._by_title(path, book), carried_isbn=book.isbn)
 
     def _by_title(self, path, book):
         """The title path, for a file that carries no ISBN.
@@ -293,24 +376,47 @@ class Corrector:
                 # A reply that agrees on neither title nor author is not an
                 # explanation of this book, and is not named as one.
                 continue
-            if match.confidence >= TITLE_CONFIDENCE:
+            if match.confidence >= self.confidence:
                 return self._write(path, match.candidate, match.confidence, book=book)
             # A near miss: remembered rather than written, so a book no source
             # can match still names the closest thing to it.
             if nearest is None or match.confidence > nearest.confidence:
                 nearest = match
 
-        if nearest is not None:
-            return Outcome(
-                sought=nearest.candidate.title or title,
-                confidence=nearest.confidence,
-                passed_over=nearest.why,
-                tried=tuple(tried),
-            )
-        # Neither source offered anything that agrees on title and author, or
-        # offered nothing at all. The book is named by the title the sources
-        # were asked about, which is the file's own cleaned title.
-        return Outcome(sought=title, tried=tuple(tried))
+        # Nothing cleared the threshold, so the book keeps the metadata it came
+        # with - and is marked, which is what tells a person browsing their
+        # library that nobody could vouch for it. The mark is written here rather
+        # than left to the relay, because the correction is the pass that knows
+        # what was asked: a book whose source could not be asked never reaches
+        # this line, and a book with no title at all reaches it by the ISBN path
+        # instead, where the sources were asked and did not have it.
+        return self._unverified(path, book, title, tried, nearest)
+
+    def _unverified(self, path, book, title, tried, nearest=None):
+        """Mark a book nothing matched confidently, and say what was looked for.
+
+        The book is written to for the one reason the design spec gives: nobody
+        could vouch for its metadata, and a user should be able to find it
+        without reading logs. So it is tagged and its description gains the note,
+        its own blurb staying where it was, and it is then delivered like any
+        other book. A book that was matched later - by being dropped in again -
+        has all of this taken off it, which is the other half of the same rule.
+
+        `title` is None for a book whose own title says nothing, which only the
+        ISBN path reaches. The book's ISBN is carried onto the outcome either
+        way: on that path it is what the sources were asked, so the line names it.
+        """
+        outcome = self._write(path, None, book=book, isbn=book.isbn or None)
+        return replace(
+            outcome,
+            # A near miss is named as it always was; the title the book was
+            # sought under is the fallback when nothing can be named at all, and
+            # also when the candidate a source offered has no title to name it by.
+            sought=(nearest.candidate.title or title) if nearest is not None else title,
+            confidence=nearest.confidence if nearest is not None else None,
+            passed_over=nearest.why if nearest is not None else None,
+            tried=tuple(tried),
+        )
 
     def _failed(self, source, error, sought):
         """A source that could not answer stops the walk, and is said out loud.
@@ -332,26 +438,41 @@ class Corrector:
             sought,
             error,
         )
-        return Outcome(problem=f"{blamed} could not be asked: {error}")
+        return Outcome(
+            problem=f"{blamed} could not be asked: {error}", dry_run=self.dry_run
+        )
 
-    def _write(self, path, found, confidence, isbn=None, book=None):
+    def _write(self, path, found, confidence=None, isbn=None, book=None):
         """Back the original up, then write what the source is sure of.
 
         `found` carries the source it came from, so nothing here has to be told
         where the values are from. `isbn` is set only when an ISBN is what
         recognised the book, because that is what the log line then reports.
 
+        `found` is None when no source matched: there is nothing to write from,
+        and the only thing this pass has to say is that the book is unverified.
+        The rules are not consulted at all in that case, because they are rules
+        about a source's values and there are none - and because a book nothing
+        could be said about is exactly the book that must be left as it is.
+
         `book` is the file as it was read, and it is never left out: each rule is
         judged against it, `fill` writes only a field the file is empty of, and
         whether the book already has a cover is a fact about the file.
         """
-        edits = self._edits(found, book)
+        unverified = found is None
+        # What the log line credits the fields that are not Colophon's own: the
+        # source that matched the book. A book nothing matched has no source, and
+        # the only thing written to it is the mark, which is Colophon's.
+        credited = COLOPHON if unverified else found.source
+        edits = self._edits(found, book, unverified=unverified)
         matched = {
             "isbn": isbn,
-            "sought": None if isbn else found.title,
-            "matched": True,
+            "sought": None if isbn or unverified else found.title,
+            "matched": not unverified,
             "confidence": confidence,
-            "source": found.source,
+            "source": None if unverified else found.source,
+            "unverified": unverified,
+            "dry_run": self.dry_run,
         }
 
         # Ask the file what would move before touching it: a book that already
@@ -377,7 +498,12 @@ class Corrector:
             LOG.warning(
                 "%s offered a cover for %s that the file would not take, so the "
                 "book is corrected without it: %s",
-                _label(found.source),
+                # `found` is None on the unverified path, and no source offered a
+                # cover there: whatever the file refused, Colophon is what wrote
+                # it - and a log line is not worth an AttributeError on the one
+                # path that must never raise, because the relay would lose the
+                # whole scan rather than this book.
+                _label(found.source) if found is not None else COLOPHON,
                 path.name,
                 error,
             )
@@ -386,14 +512,14 @@ class Corrector:
         if not planned:
             return Outcome(**matched)
         if self.dry_run:
-            return Outcome(**matched, changed=_changes(planned, edits, found.source))
+            return Outcome(**matched, changed=_changes(planned, edits, credited))
 
         try:
             kept = self.backups.keep(path)
         except OSError as error:
             return Outcome(
                 **matched,
-                changed=_changes(planned, edits, found.source),
+                changed=_changes(planned, edits, credited),
                 problem=f"could not back the original up: {error}",
             )
 
@@ -407,12 +533,12 @@ class Corrector:
             written = ()
         return Outcome(
             **matched,
-            changed=_changes(written, edits, found.source),
+            changed=_changes(written, edits, credited),
             applied=True,
             kept=str(kept),
         )
 
-    def _edits(self, found, book):
+    def _edits(self, found, book, unverified=False):
         """The fields this source's record is allowed to write, and no others.
 
         Each field is decided on its own, which is what the config is for: a book
@@ -424,7 +550,27 @@ class Corrector:
         A field the source said nothing about is written by no rule at all: `fill`
         on a field a source is silent about is not a blank, and a source with no
         publisher has not offered an empty one.
+
+        `unverified` is the state rather than a value, so it is not a rule: it is
+        carried through to the file, which is where the tag and the description
+        note are actually written and taken off. Marking a book is the only thing
+        a pass with no source writes, so the rules are not consulted for it.
         """
+        if unverified:
+            # The file's own blurb, because the note goes after it: marking is
+            # not a field rule and must not depend on one, so the description is
+            # carried as it is and `epub` puts the note on the end of it.
+            return Edits(unverified=True, description=book.description)
+
+        # A book that was marked has the note taken off its description before
+        # anything is decided: the note is not part of the blurb, and a rule must
+        # not be told the book has a blurb when the note is all it has. Stripping
+        # it is also half of taking the mark off - `unmarked` of a description
+        # that was only the note is None - so `fill` then writes the source's
+        # blurb, and `overwrite` writes one over the marked text as it would over
+        # any other. The other half, the tag, is `unverified` below.
+        marked = book.description if book.unverified else None
+
         wanted = {}
         for name in KNOWN_FIELDS:
             rule = self.fields.get(name, "skip")
@@ -434,12 +580,27 @@ class Corrector:
             if rule == "skip" or not value:
                 continue
             current = getattr(book, name, None)
+            if name == "description" and marked:
+                current = unmarked(marked)
             if name == "authors":
                 current = tuple(current or ())
             if rule == "fill" and current:
                 continue
             wanted[name] = value
 
+        if marked and "description" not in wanted:
+            # No rule is writing a description, so the one the book has is left
+            # in place - with the note off it, which is what this is for; and
+            # taken off altogether when that was all it had.
+            wanted["description"] = unmarked(marked)
+            wanted["notes_taken_off"] = True
+            if wanted["description"] is None:
+                wanted["drop_description"] = True
+
+        # What this correction is, rather than a value a rule decided: the file
+        # and the log line both need to tell a matched book from a marked one
+        # without being told twice.
+        wanted["unverified"] = False
         return _series_consistent(Edits(**wanted), found, book)
 
     def _cover(self, path, found, book, would_add=False):
@@ -483,8 +644,12 @@ class Corrector:
         separately from fetching because a dry run has to answer it without
         fetching anything, and because "no cover to add" and "the bytes are not
         to hand" are different answers with different outcomes.
+
+        `found` is None for a book nothing matched. A book nothing could be said
+        about keeps the cover it came with, because there is no source to take
+        one from - and taking one off it would be the opposite of leaving it be.
         """
-        return bool(self.add_cover and found.cover and not book.has_cover)
+        return bool(found is not None and self.add_cover and found.cover and not book.has_cover)
 
 
 def _series_consistent(edits, found, book):
@@ -579,16 +744,62 @@ def _label(name):
     return SOURCE_SETUP[name]["label"]
 
 
+def _names_and_values(changes):
+    """The fields that moved, as the log line writes them, and where from.
+
+    A field whose value is long or is bytes is named without it: the line's job
+    is which fields moved and who supplied them, and a blurb or a cover written
+    into it would bury everything else. Everything else is shown as its value.
+    """
+    return ", ".join(
+        f"{change.field}<-{change.source}"
+        if change.field in _NAME_ONLY
+        else f'{change.field}="{change.value}"<-{change.source}'
+        for change in changes
+    )
+
+
 def _changes(fields, edits, source):
-    return tuple(Change(field, _value(edits, field), source) for field in fields)
+    """The fields that moved, and who moved them.
+
+    Most values come from the source that matched the book. Three do not: the
+    tag, the note, and the file's own blurb with the note taken off it when a
+    marked book is matched. None of those is anything a source offered, so
+    crediting them to `hardcover` would name a source that never saw them - and
+    the description is read from the edits, not from `source`, to tell the two
+    apart: `Edits.description` is set only when a rule wrote one.
+    """
+    return tuple(
+        Change(field, _value(field, edits), _credited(field, edits, source))
+        for field in fields
+    )
 
 
-def _value(edits, field):
+def _credited(field, edits, source):
+    """Who to credit for one field that moved.
+
+    Colophon's own are the tag, and a description it took the note off. The tag
+    is always Colophon's - no source supplies one - and the description is a
+    source's only when a rule wrote the text being written. `notes_taken_off` is
+    what says the description came from the file instead: the text alone cannot,
+    because a source repeating the file's own blurb is the same characters as the
+    file's own blurb.
+    """
+    ours = field == "tag" or (field == "description" and edits.notes_taken_off)
+    return COLOPHON if ours else source
+
+
+def _value(field, edits):
     """What a change's value is, for the log line and the outcome alike.
 
     A field the edits do not carry is one that was written by being taken off -
-    a stale series number - or a cover, which is bytes rather than a value.
+    a stale series number, a description whose blurb was only ever the note - or
+    a cover, which is bytes rather than a value. The tag is the same: it is a
+    constant rather than a value carried alongside, and a tag being taken off a
+    matched book has no value to report at all.
     """
+    if field == "tag":
+        return UNVERIFIED_TAG if edits.unverified else ""
     value = getattr(edits, field, None)
     if field == "authors":
         return ", ".join(value or ())

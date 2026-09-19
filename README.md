@@ -143,6 +143,12 @@ book: it passes through untouched rather than being corrected from a source you
 ranked below the one that is down. A book is never quietly taken from a
 lower-priority source because a higher-priority one was busy.
 
+An ISBN a source does not have is not the end of the search. The book is looked
+up again by its title and author, in the same priority order - an ISBN can be one
+nobody lists, and the title usually is not - and a match found that way keeps the
+ISBN the file came with, because the record that recognised it is a different
+edition.
+
 Each written value is attributed in the log line, so you can always see which
 source a value came from:
 
@@ -200,6 +206,43 @@ keeps it. The cover comes from the source that matched the book - never from a
 source you ranked below it, for the same reason no other value does - so a book
 matched from a source with no cover for it is left without one.
 
+## Books nobody could verify
+
+Not every book is in a source, and not every candidate is good enough to trust.
+A book whose best candidate scores under the confidence threshold - or for which
+no candidate agrees on both title and author at all - is **not corrected**. It
+keeps the metadata it came with and is marked instead:
+
+- tagged `colophon:unverified`, which your library shows as a tag;
+- with `Metadata could not be verified by Colophon.` at the end of its
+  description, on a paragraph of its own, so it is findable without reading logs.
+  A book with no blurb of its own gets that sentence as its whole description.
+
+The same happens to a book whose ISBN **no source has**: the ISBN is asked about
+first, then the title, and only when both come up empty is the book marked.
+
+It then goes to the output folder like any other book, and is logged like one:
+
+```
+[no source among hardcover has an edition called Cragside confidently enough: file's title is contained in the record's; an author agrees, confidence 0.84; marked colophon:unverified: description<-colophon, tag<-colophon]
+```
+
+The near-miss line names the closest thing to the book and what was wrong with
+it, so "we looked and found nothing" and "we nearly had it" read differently in
+the log. A book with nothing close at all says only what it was looked for as.
+
+The mark leaves the blurb alone and puts the sentence after it, so a book that
+came with a description keeps it. The last part of the line is which fields moved
+and who moved them - here Colophon, since no source had anything to do with them.
+
+**This is a final state, not a failure.** The sources answered; they simply do
+not have the book, so there is nothing to wait for and nothing to retry. When a
+source does have it later, drop the marked file into the ingest folder again: a
+turned-up match **takes the mark off**, removing the tag and the appended
+sentence and leaving the rest of the description as it was.
+
+The threshold is `confidence`, `0.85` by default; see the table below.
+
 ## Settings
 
 All settings live in `config.toml`; see `config.example.toml` for the full list
@@ -216,6 +259,7 @@ the same name in capitals, prefixed with `COLOPHON_`:
 | `hardcover_token_file` | `COLOPHON_HARDCOVER_TOKEN_FILE` | `/run/secrets/hardcover_token` |
 | `google_books_key_file` | `COLOPHON_GOOGLE_BOOKS_KEY_FILE` | `/run/secrets/google_books_key` |
 | `add_cover` | `COLOPHON_ADD_COVER` | `true` |
+| `confidence` | `COLOPHON_CONFIDENCE` | `0.85` |
 | `dry_run` | `COLOPHON_DRY_RUN` | `true` |
 | `poll_seconds` | `COLOPHON_POLL_SECONDS` | `5` |
 | `stable_checks` | `COLOPHON_STABLE_CHECKS` | `2` |

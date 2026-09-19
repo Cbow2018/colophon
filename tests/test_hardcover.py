@@ -65,7 +65,7 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(book.isbn, CRAGSIDE)
 
     def test_an_isbn_no_edition_carries_is_not_a_match(self):
-        source = self.source(Replay("by-isbn-not-found.json"))
+        source = self.source(Replay("nothing-found.json"))
 
         self.assertIsNone(source.by_isbn(NO_SUCH_BOOK))
 
@@ -298,7 +298,7 @@ class TitleLookupTests(unittest.TestCase):
         self.assertIsNone(replay.sent, "an empty question is not worth a request")
 
     def test_no_work_by_that_title_is_no_candidates(self):
-        replay = Replay("by-isbn-not-found.json")
+        replay = Replay("nothing-found.json")
 
         self.assertEqual(self.source(replay).by_title([CRAGSIDE_TITLE], "en"), [])
 

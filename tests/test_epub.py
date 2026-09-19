@@ -6,7 +6,14 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from colophon.epub import Edits, EpubError, correct, read
+from colophon.epub import (
+    UNVERIFIED_NOTE,
+    UNVERIFIED_TAG,
+    Edits,
+    EpubError,
+    correct,
+    read,
+)
 from tests.opf import (
     calibre_series,
     collections,
@@ -15,6 +22,7 @@ from tests.opf import (
     epub3_series,
     manifest_items,
     refining_metas,
+    subjects,
     text_of,
 )
 from tests.samplebooks import (
@@ -717,6 +725,123 @@ class OtherFieldTests(EpubTestCase):
 
         self.assertEqual(changed, ("isbn",))
         self.assertEqual(read(path).isbn, "9781521748831")
+
+
+class TheUnverifiedMarkTests(EpubTestCase):
+    """The mark itself: the tag and the note, on and off, at the file layer.
+
+    `Corrector` decides that a book is unverified; what that looks like inside a
+    book is decided here, so these are the tests for the tag, the two forms the
+    note takes and the idempotence of both - the rules the pipeline relies on but
+    does not own.
+    """
+
+    def a_book(self, metadata=SIMPLE):
+        return write_epub(self.folder / "Cragside.epub", metadata)
+
+    def test_marking_adds_the_tag_and_the_note(self):
+        path = self.a_book()
+
+        changed = correct(path, Edits(unverified=True))
+
+        self.assertEqual(changed, ("description", "tag"))
+        self.assertEqual(text_of(path, "description"), UNVERIFIED_NOTE)
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        self.assertTrue(read(path).unverified, "and the file says so on the way back")
+
+    def test_marking_keeps_the_blurb_and_puts_the_note_after_it(self):
+        path = self.a_book(WITH_THE_OTHER_FIELDS)
+
+        correct(path, Edits(unverified=True, description="A house full of secrets."))
+
+        self.assertEqual(
+            text_of(path, "description"),
+            f"A house full of secrets.\n\n{UNVERIFIED_NOTE}",
+        )
+
+    def test_marking_twice_is_a_no_op_the_second_time(self):
+        path = self.a_book()
+        correct(path, Edits(unverified=True))
+        marked = path.read_bytes()
+
+        changed = correct(path, Edits(unverified=True, description=UNVERIFIED_NOTE))
+
+        self.assertEqual(changed, (), "nothing left to write")
+        self.assertEqual(path.read_bytes(), marked)
+        self.assertEqual(subjects(path).count(UNVERIFIED_TAG), 1)
+
+    def test_unmarking_takes_both_halves_off(self):
+        """The pipeline hands the marked description back, and both halves go.
+
+        A corrector unmarking a book has nothing of its own to say about the
+        description - the source had no blurb - so what it passes on is the
+        description the file already carries, note and all, and the mark coming
+        off is what shortens it.
+        """
+        marked = f"A house full of secrets.\n\n{UNVERIFIED_NOTE}"
+        path = self.a_book(WITH_THE_OTHER_FIELDS)
+        correct(path, Edits(unverified=True, description="A house full of secrets."))
+
+        changed = correct(path, Edits(unverified=False, description=marked))
+
+        self.assertEqual(sorted(changed), ["description", "tag"])
+        self.assertNotIn(UNVERIFIED_TAG, subjects(path))
+        self.assertEqual(text_of(path, "description"), "A house full of secrets.")
+
+    def test_dropping_the_description_leaves_the_book_without_one(self):
+        """`description=None` means "leave it", so emptiness needs its own word.
+
+        A marked book whose blurb was only ever the note has to come out with no
+        description at all, which is not the same as a description left alone -
+        and it is why `drop_description` exists beside an honest `description`.
+        """
+        path = self.a_book()
+        correct(path, Edits(unverified=True))
+
+        changed = correct(path, Edits(unverified=False, drop_description=True))
+
+        self.assertEqual(sorted(changed), ["description", "tag"])
+        self.assertIsNone(read(path).description)
+        self.assertIsNone(text_of(path, "description"))
+
+    def test_a_book_with_a_description_of_its_own_keeps_it(self):
+        """Taking a note off is not a reason to lose a blurb that was there first."""
+        marked = f"A house full of secrets.\n\n{UNVERIFIED_NOTE}"
+        path = self.a_book(WITH_THE_OTHER_FIELDS)
+        correct(path, Edits(unverified=True, description="A house full of secrets."))
+
+        correct(path, Edits(unverified=False, description=marked))
+
+        self.assertEqual(text_of(path, "description"), "A house full of secrets.")
+
+    def test_unmarking_takes_every_copy_of_the_tag_off(self):
+        """A book another tool left two tags on comes out with none.
+
+        The mark is written once, but a book may have been through something that
+        duplicated it, and taking one off while another stays would leave the book
+        still marked while the log said the mark had gone.
+        """
+        path = self.a_book(
+            f"    <dc:title>Cragside</dc:title>\n"
+            f"    <dc:subject>{UNVERIFIED_TAG}</dc:subject>\n"
+            f"    <dc:subject>{UNVERIFIED_TAG}</dc:subject>"
+        )
+
+        correct(path, Edits(unverified=False, drop_description=True))
+
+        self.assertEqual(subjects(path), [], "both of them, not the first one found")
+
+    def test_the_tag_goes_beside_the_book_s_own_subjects(self):
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:subject>Detective and mystery stories</dc:subject>"
+        )
+
+        correct(path, Edits(unverified=True))
+
+        self.assertEqual(
+            subjects(path), ["Detective and mystery stories", UNVERIFIED_TAG]
+        )
 
 
 if __name__ == "__main__":

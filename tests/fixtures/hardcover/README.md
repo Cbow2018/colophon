@@ -35,7 +35,7 @@ at all. *Cragside* is there as 9781521748831.
 | --- | --- | --- | --- |
 | `by-isbn-found.json` | 9781521748831 | *Cragside*, L.J. Ross, DCI Ryan Mysteries #6, the series marked featured | recorded |
 | `by-isbn-no-series.json` | 9780571334650 | *Normal People*, Sally Rooney: a standalone book | recorded |
-| `by-isbn-not-found.json` | 9781786813891 | no editions at all | recorded |
+| `nothing-found.json` | 9781786813891 | `{"data": {"editions": []}}` — no editions at all | recorded |
 | `by-isbn-two-series.json` | 9780765311788 | *Mistborn: The Final Empire*, in three series at once | recorded, without the query's ordering |
 | `by-isbn-edition-title.json` | 9780007458424 | the edition is called *The Hobbit*; the work is not | recorded |
 | `hand-made-work-without-title.json` | 9780000000003 | a work with no title of its own | hand-made |
@@ -55,6 +55,26 @@ because it is the one that must be *rejected*.
 | `by-title-berwick.json` | `Berwick` | work 2379453, *Berwick*, L.J. Ross, #24 | recorded |
 | `by-title-belsay.json` | `Belsay` | work 1647114, *Belsay*, L.J. Ross, #23 | recorded |
 | `by-title-the-infirmary.json` | `The Infirmary` | work 1198266 (*The Infirmary*, L.J. Ross, #11) **and** work 2284109 (*The Infirmary*, Carly Reagon) | recorded |
+| `by-title-nothing-found.json` | `The Cragside Compendium of Nothing` | `{"data": {"editions": []}}` — the empty answer | recorded |
+
+`nothing-found.json` and `by-title-nothing-found.json` are the empty answer to the
+two different questions, and are CBO-39's. The unverified path begins when no
+source has the book, and this is what that looks like from Hardcover: no
+`editions` at all rather than an error.
+
+CBO-39 also made the ISBN path fall back to the title, so an ISBN no source has is
+not the end of the search. That needs both answers recorded, which is why they are
+two files rather than one: the ISBN recording answers the first question, the
+title recording answers the second, and a test replaying both is showing what
+really happens when neither finds anything. The ISBN one was first recorded by
+CBO-35 - it is 9781786813891, the number CBO-33's design spec names for
+*Cragside* and Hardcover has no edition of - and was renamed out of the
+`by-isbn-` prefix when the title recording joined it.
+
+The title filter is `book: {title: {_in: […]}}`, an exact match, so Hardcover
+never returns a title it does not spell exactly - which is why a *near miss*
+cannot be recorded from it at all, and why CBO-39's below-threshold test builds a
+`Candidate` instead of reading a reply.
 
 `by-title-the-infirmary.json` is the important one: two different books share the
 title, and only the author tells them apart. It is the reply that proves a title
@@ -85,7 +105,7 @@ row itself rather than trust the server to put it first.
 Two things worth knowing, both recorded above rather than described:
 
 - The ISBN the design spec uses for *Cragside*, 9781786813891, is not in
-  Hardcover at all. *Cragside* is there as 9781521748831. `by-isbn-not-found.json`
+  Hardcover at all. *Cragside* is there as 9781521748831. `nothing-found.json`
   is that first ISBN, since it is the case the project's own examples hit.
 - `book_series.featured` is `Boolean!` and `books.title` is nullable, both
   checked against the API's own schema.
