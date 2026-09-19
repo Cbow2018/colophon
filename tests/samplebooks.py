@@ -59,6 +59,40 @@ AS_DOWNLOADED = f"""    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mys
     <dc:language>en</dc:language>
 """
 
+# The same three DCI Ryan books as they arrive with no ISBN in them, which is
+# the case CBO-36 exists for: the title is matched after cleaning, and the
+# series number in the bracket is not what identifies the book. Belsay's title
+# carries no number at all, and its series number is only on Hardcover.
+CRAGSIDE = """    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
+BERWICK = """    <dc:title>Berwick: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 24)</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
+BELSAY = """    <dc:title>Belsay: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
+# The lookalike: the same author, a different book of hers.
+THE_INFIRMARY = """    <dc:title>The Infirmary: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 11)</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
+# A book that says nothing about who wrote it, so there is nothing to compare.
+WITHOUT_AUTHOR = """    <dc:title>Cragside</dc:title>
+    <dc:language>en</dc:language>
+"""
+
+# A book that says nothing about its author or its language either.
+WITHOUT_AUTHOR_OR_LANGUAGE = """    <dc:title>Cragside</dc:title>
+"""
+
 TWO_CREATORS = """    <dc:title>Cragside</dc:title>
     <dc:creator id="author_0">LJ Ross</dc:creator>
     <dc:creator id="author_1">Someone Else</dc:creator>

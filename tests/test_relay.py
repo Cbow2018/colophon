@@ -14,8 +14,8 @@ from colophon.epub import read
 from colophon.files import temp_name
 from colophon.relay import Relay, RelayError
 from tests.opf import calibre_series, epub3_series
-from tests.samplebooks import AS_DOWNLOADED, SIMPLE, write_epub
-from tests.sources import FakeSource
+from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, write_epub
+from tests.sources import CRAGSIDE_CANDIDATE, FakeSource
 from tests.tempdir import TemporaryDirectory
 
 
@@ -418,13 +418,19 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         self.assertIn('series_number="6"<-hardcover', line)
         self.assertEqual(len(captured.output), 1, "still one line per book")
 
-    def test_the_line_says_when_there_was_no_isbn_to_look_up(self):
-        write_epub(self.ingest / "Cragside.epub", SIMPLE, version="2.0")
+    def test_the_line_says_when_a_book_was_matched_on_its_title_instead(self):
+        """A book with no ISBN is looked up by its title, and the line says so."""
+        write_epub(self.ingest / "Cragside.epub", CRAGSIDE, version="2.0")
+        self.relay.correction.source = FakeSource(
+            found=None, candidates=[CRAGSIDE_CANDIDATE]
+        )
 
         with self.assertLogs("colophon", level="INFO") as captured:
             self.settle()
 
-        self.assertIn("no ISBN", "\n".join(captured.output))
+        line = "\n".join(captured.output)
+        self.assertIn("hardcover matched Cragside by title and author", line)
+        self.assertIn("confidence 1.00", line)
 
     def test_a_re_dropped_book_is_a_duplicate_of_the_one_already_corrected(self):
         original = self.drop_a_book().read_bytes()

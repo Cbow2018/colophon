@@ -1,0 +1,122 @@
+{
+  "data": {
+    "editions": [
+      {
+        "title": "The Infirmary",
+        "isbn_13": "9781799729945",
+        "isbn_10": "179972994X",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1198266,
+          "title": "The Infirmary",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 11,
+              "series": {
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "The Infirmary: A DCI Ryan Mystery",
+        "isbn_13": "9781912310111",
+        "isbn_10": "1912310112",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1198266,
+          "title": "The Infirmary",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 11,
+              "series": {
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "The Infirmary: A DCI Ryan Mystery",
+        "isbn_13": "9781792780844",
+        "isbn_10": "1792780842",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1198266,
+          "title": "The Infirmary",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 11,
+              "series": {
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "The Infirmary",
+        "isbn_13": "9781408733363",
+        "isbn_10": "1408733366",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 2284109,
+          "title": "The Infirmary",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "Carly Reagon"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      }
+    ]
+  }
+}

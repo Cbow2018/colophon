@@ -1,4 +1,5 @@
-"""The Hardcover source: one exact-ISBN lookup, and nothing clever.
+"""The Hardcover source: an exact ISBN lookup, and a title lookup for the books
+that carry no ISBN.
 
 Hardcover keeps ISBNs on *editions*, not on books, so a lookup starts there and
 walks to the work for the title, the authors and the series. The token comes
@@ -12,6 +13,8 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+
+from colophon.matching import Candidate
 
 SOURCE = "hardcover"
 DEFAULT_URL = "https://api.hardcover.app/v1/graphql"
@@ -48,6 +51,55 @@ query BookByIsbn($isbn: String!) {
 """
 
 
+# The same, for a book whose file carries no ISBN: ask about the cleaned title
+# of the work, every edition of it coming back. `_in` is permitted on
+# `books.title` where `_ilike` and the regex operators are refused, and `_eq`
+# is case-sensitive, so the title has to be spelt the way Hardcover spells it.
+# `_eq` on an author's name needs the full name as Hardcover writes it, which
+# is why authors are compared here rather than filtered for on the server.
+_TITLE_BY_LANGUAGE = """
+query BooksByTitle($titles: [String!]!, $language: String!) {
+  editions(
+    where: {
+      book: {title: {_in: $titles}}
+      language: {code2: {_eq: $language}}
+    }
+  ) {
+%s
+  }
+}
+"""
+
+# A file that does not say what language it is written in gets asked about
+# without the language filter: `code2` is not nullable, so `_eq: null` is
+# refused outright rather than matching everything.
+_TITLE_ANY_LANGUAGE = """
+query BooksByTitle($titles: [String!]!) {
+  editions(where: {book: {title: {_in: $titles}}}) {
+%s
+  }
+}
+"""
+
+_TITLE_SELECTION = """    title
+    language { language code2 code3 }
+    book {
+      id
+      title
+      contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
+        contribution
+        author { name }
+      }
+      book_series(order_by: [{featured: desc}, {position: asc}]) {
+        featured
+        position
+        series { name }
+      }
+    }"""
+
+TITLE_QUERY = _TITLE_BY_LANGUAGE % _TITLE_SELECTION
+
+
 class SourceError(Exception):
     """Hardcover could not answer: a bad key, an outage, or a reply we cannot read."""
 
@@ -66,10 +118,15 @@ class SourceBook:
 
 
 class Hardcover:
-    """Looks a book up by its exact ISBN.
+    """Looks a book up by its exact ISBN, or by a cleaned title when it has none.
 
     `transport` is the seam the tests replay recorded replies through; left out,
     it posts to Hardcover over HTTPS.
+
+    `by_isbn` answers with one `SourceBook`, because an ISBN identifies an
+    edition and so a book. `by_title` answers with every work that carries the
+    title, as `Candidate`s, because a title does not identify anything on its
+    own: comparing those candidates against the file is the caller's job.
     """
 
     def __init__(self, token, url=DEFAULT_URL, timeout=TIMEOUT_SECONDS, transport=None):
@@ -106,6 +163,32 @@ class Hardcover:
         if not editions:
             return None
         return _as_book(editions[0], isbn)
+
+    def by_title(self, titles, language=None):
+        """Every work whose title matches one of these, as candidates to score.
+
+        A title the API does not spell exactly gets no candidates at all, so
+        the caller may pass more than one cleaned form of the file's title and
+        this asks about them all in one request. The language the file is
+        written in is the language asked for, so nothing translated is ever
+        offered; a file that names no language is asked about without one.
+        """
+        titles = [str(title).strip() for title in titles if str(title).strip()]
+        if not titles:
+            return []
+        language = str(language).strip() if language else ""
+        if language:
+            query = TITLE_QUERY
+            variables = {"titles": titles, "language": language}
+        else:
+            query = _TITLE_ANY_LANGUAGE % _TITLE_SELECTION
+            variables = {"titles": titles}
+        payload = self._ask({"query": query, "variables": variables})
+        editions = _dig(payload, "data", "editions")
+        if editions is None:
+            # An answer without the field we asked for is not an answer.
+            raise SourceError("Hardcover's reply did not contain any editions")
+        return _candidates(editions)
 
     def _ask(self, question):
         request = json.dumps(question).encode("utf-8")
@@ -171,6 +254,42 @@ def _as_book(edition, isbn):
         language=_text(language.get("code2")) or _text(language.get("language")),
         isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")) or isbn,
     )
+
+
+def _candidates(editions):
+    """Turn a title reply into one candidate per work, in the order it came back.
+
+    The reply is a list of editions, and one work usually has several, so the
+    first edition of a work is kept and the rest are dropped: the title, the
+    authors and the series are all on the work, and a second edition would only
+    offer the same book twice. The ISBN comes from the edition that matched,
+    which is the only place Hardcover keeps one.
+    """
+    candidates = []
+    seen = set()
+    for position, edition in enumerate(editions):
+        book = edition.get("book") or {}
+        language = edition.get("language") or {}
+        series, series_number = _series(book)
+        # A work whose id the reply omitted cannot be recognised twice over, so
+        # it is left as its own candidate rather than mistaken for another.
+        identity = book.get("id")
+        if identity is None:
+            identity = f"unnamed-{position}"
+        if identity in seen:
+            continue
+        seen.add(identity)
+        candidates.append(
+            Candidate(
+                title=_text(book.get("title")) or _text(edition.get("title")),
+                authors=tuple(_authors(book)),
+                series=series,
+                series_number=series_number,
+                language=_text(language.get("code2")) or _text(language.get("language")),
+                isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")),
+            )
+        )
+    return candidates
 
 
 def _authors(book):
