@@ -3,7 +3,12 @@
 import unittest
 from pathlib import Path
 
-from colophon.config import ConfigError, load_config
+from colophon.config import (
+    FIELD_DEFAULTS,
+    KNOWN_SOURCES,
+    ConfigError,
+    load_config,
+)
 from tests.tempdir import TemporaryDirectory
 
 
@@ -191,6 +196,160 @@ class LoadConfigTests(unittest.TestCase):
         ]:
             with self.subTest(name=name, value=value), self.assertRaises(ConfigError):
                 load_config(env={name: value})
+
+    def test_every_field_has_a_rule_and_the_defaults_are_the_ones_documented(self):
+        """The design spec's own list, which is what a fresh install gets."""
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(
+            dict(config.fields),
+            {
+                "title": "overwrite",
+                "authors": "overwrite",
+                "series": "overwrite",
+                "series_number": "overwrite",
+                "description": "fill",
+                "publisher": "fill",
+                "date": "fill",
+                "isbn": "fill",
+                "language": "fill",
+            },
+        )
+
+    def test_a_cover_is_added_only_if_the_book_has_none_by_default(self):
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertTrue(config.add_cover)
+
+    def test_the_cover_setting_can_be_turned_off(self):
+        path = self.write_config("add_cover = false\n")
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertFalse(config.add_cover)
+
+    def test_the_environment_can_turn_the_cover_off_too(self):
+        config = load_config(env={"COLOPHON_ADD_COVER": "off"})
+
+        self.assertFalse(config.add_cover)
+
+    def test_the_fields_table_sets_one_rule_at_a_time(self):
+        path = self.write_config("[fields]\ntitle = \"skip\"\n")
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(dict(config.fields)["title"], "skip")
+        self.assertEqual(
+            dict(config.fields)["series"], "overwrite", "the rest keep their defaults"
+        )
+        self.assertEqual(len(config.fields), 9, "and nothing is lost")
+
+    def test_every_rule_can_be_set(self):
+        path = self.write_config(
+            """
+            [fields]
+            title = "skip"
+            authors = "fill"
+            series = "overwrite"
+            series_number = "skip"
+            description = "overwrite"
+            publisher = "fill"
+            date = "skip"
+            isbn = "overwrite"
+            language = "fill"
+            """
+        )
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(
+            dict(config.fields),
+            {
+                "title": "skip",
+                "authors": "fill",
+                "series": "overwrite",
+                "series_number": "skip",
+                "description": "overwrite",
+                "publisher": "fill",
+                "date": "skip",
+                "isbn": "overwrite",
+                "language": "fill",
+            },
+        )
+
+    def test_a_rule_nobody_has_heard_of_is_rejected(self):
+        path = self.write_config("[fields]\ntitle = \"replace\"\n")
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("replace", str(caught.exception))
+        self.assertIn("overwrite", str(caught.exception), "it lists the rules it knows")
+
+    def test_a_field_nobody_has_heard_of_is_rejected(self):
+        """A misspelt field would otherwise be a rule that silently never runs."""
+        path = self.write_config("[fields]\ndiscription = \"fill\"\n")
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("discription", str(caught.exception))
+        self.assertIn("description", str(caught.exception), "it lists the fields it knows")
+
+    def test_a_rule_is_read_regardless_of_case(self):
+        path = self.write_config("[fields]\ntitle = \"Skip\"\n")
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(dict(config.fields)["title"], "skip")
+
+    def test_the_example_config_is_one_that_loads_and_says_what_it_claims(self):
+        """People copy this file, so it has to be a valid one.
+
+        Every rule and the cover setting are shown commented out, so what the
+        file demonstrates is what the defaults already do rather than what it
+        sets. A setting written after a `[fields]` header belongs to that table
+        in TOML, which is a mistake this file has already made once: `add_cover`
+        written below the table is rejected as a field name nobody has.
+        """
+        example = Path(__file__).resolve().parent.parent / "config.example.toml"
+        written = example.read_text(encoding="utf-8")
+
+        config = load_config(env={"COLOPHON_CONFIG": str(example)})
+
+        self.assertEqual(
+            dict(config.fields),
+            dict(FIELD_DEFAULTS),
+            "a copied example changes nothing until the user edits it",
+        )
+        self.assertEqual(config.sources, KNOWN_SOURCES)
+        self.assertTrue(config.add_cover)
+        self.assertTrue(config.dry_run, "the example ships as a dry run")
+        for name in ("add_cover", "title", "language"):
+            with self.subTest(setting=name):
+                self.assertIn(f"# {name} = ", written, "shown, and commented out")
+
+    def test_the_rules_the_example_shows_are_the_ones_the_code_defaults_to(self):
+        """Uncommenting the example has to be a no-op, not a change.
+
+        The file is the only place a user reads what the defaults are, so a
+        default changed in the code and not in the file would be a lie told to
+        everyone who copies it.
+        """
+        example = Path(__file__).resolve().parent.parent / "config.example.toml"
+        names = {name for name, _ in FIELD_DEFAULTS}
+        shown = {}
+        for line in example.read_text(encoding="utf-8").splitlines():
+            stripped = line.removeprefix("# ").strip()
+            name, separator, rule = stripped.partition(" = ")
+            if separator and name in names:
+                shown[name] = rule.strip().strip('"')
+
+        self.assertEqual(
+            shown,
+            dict(FIELD_DEFAULTS),
+            "the example shows every field and every default",
+        )
 
     def test_unknown_setting_in_the_file_is_rejected(self):
         path = self.write_config('ingset_dir = "/typo"\n')

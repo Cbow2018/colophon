@@ -24,6 +24,34 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 # how a source is disabled. The order is also the default order a user gets.
 KNOWN_SOURCES = ("hardcover", "google_books")
 
+# The rules a metadata field can be given, in the order the design spec lists
+# them, and what each means: leave the file's value alone, write the source's
+# value only when the file has none, or write it whatever the file has.
+FIELD_RULES = ("skip", "fill", "overwrite")
+
+# Every field Colophon can write, and the rule it gets unless the user says
+# otherwise. The defaults are the design spec's own list, with one deliberate
+# reading of it: `fill` is judged against the file, so a book that already
+# carries a value keeps it even when `overwrite` would have changed it. A field
+# here that no source can supply is not an error - `fill` on a field the source
+# is silent about simply writes nothing.
+FIELD_DEFAULTS = (
+    ("title", "overwrite"),
+    ("authors", "overwrite"),
+    ("series", "overwrite"),
+    ("series_number", "overwrite"),
+    ("description", "fill"),
+    ("publisher", "fill"),
+    ("date", "fill"),
+    ("isbn", "fill"),
+    ("language", "fill"),
+)
+
+# Every field Colophon can write, in the order the log line names them. The
+# mapping in `Config.fields` is keyed by exactly these names, and a test holds
+# the two together so a field cannot exist in one list and not the other.
+KNOWN_FIELDS = tuple(name for name, _ in FIELD_DEFAULTS)
+
 _TRUE = ("true", "1", "yes", "on")
 _FALSE = ("false", "0", "no", "off")
 
@@ -53,6 +81,13 @@ class Config:
     # Which sources to consult, in order. Both paths - the ISBN one and the
     # title one - walk this same list.
     sources: tuple = KNOWN_SOURCES
+    # What to do with each metadata field, as (field, rule) pairs: `skip`,
+    # `fill` or `overwrite`. Every field is present, so a rule is never missing
+    # at the point it is applied.
+    fields: tuple = FIELD_DEFAULTS
+    # Whether to add a cover to a book that has none. A book that already has
+    # one keeps it: that is what the setting means, so there is no rule to set.
+    add_cover: bool = True
 
 
 def load_config(env=None):
@@ -87,6 +122,10 @@ def load_config(env=None):
         _setting(env, values, "google_books_key_file", str)
     )
     values["sources"] = _to_sources(_setting(env, values, "sources", list))
+    values["fields"] = _to_fields(values.pop("fields", {}))
+    values["add_cover"] = _to_bool(
+        _setting(env, values, "add_cover", bool), "add_cover"
+    )
 
     return Config(**values)
 
@@ -210,3 +249,32 @@ def _to_sources(value):
         repeated = next(name for name in sources if sources.count(name) > 1)
         raise ConfigError(f"sources names {repeated!r} more than once")
     return sources
+
+
+def _to_fields(given):
+    """Every field's rule: the user's where they set one, the default otherwise.
+
+    A misspelt field name is refused rather than ignored. It would otherwise be
+    a rule the user believes is running and that never runs at all, which is the
+    one failure of this setting that is invisible from the outside. A rule named
+    without regard to case is accepted, because this is a setting people write
+    by hand.
+    """
+    if not isinstance(given, dict):
+        raise ConfigError("fields should be a table, e.g. [fields] title = \"skip\"")
+
+    rules = dict(FIELD_DEFAULTS)
+    for field, rule in given.items():
+        if field not in rules:
+            raise ConfigError(
+                f"fields names {field!r}, which is not a field Colophon has; "
+                "expected one of " + ", ".join(KNOWN_FIELDS)
+            )
+        chosen = str(rule).strip().lower()
+        if chosen not in FIELD_RULES:
+            raise ConfigError(
+                f"{field} is set to {rule!r}, which is not a rule; expected one of "
+                + ", ".join(FIELD_RULES)
+            )
+        rules[field] = chosen
+    return tuple(rules.items())

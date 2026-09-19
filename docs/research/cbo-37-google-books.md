@@ -171,9 +171,16 @@ corrected and nothing else — in particular **no series is written**, which is
 the outcome the design spec already asks for ("series only applied from a
 trusted source"), arrived at here from the data rather than from policy.
 
-The pipeline needs no special case for this: `_edits(found)` already writes only
-the fields the source actually has. A candidate from Google carrying no series
-simply writes none.
+*That was true when this was recorded. CBO-38 widened the reply's `fields` mask
+and `epub.Edits`, so publisher, date and description are writable now too; the
+no-series conclusion is unchanged and is what CBO-38's defaults rely on.*
+
+The pipeline needs no special case for this: what a source's record is allowed to
+write is decided field by field, and a field the source has nothing for is
+written by no rule at all. A candidate from Google carrying no series simply
+writes none. (CBO-38 turned that into the configurable per-field rules, and its
+defaults follow the same principle: `fill` on a field a source is silent about
+is not a blank, and writes nothing.)
 
 ## What else the reply says, and the cheap wins
 

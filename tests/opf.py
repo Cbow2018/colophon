@@ -71,3 +71,42 @@ def refining_metas(path):
         for element in metadata_of(path).findall(f"{{{OPF_NS}}}meta")
         if element.get("refines")
     ]
+
+
+def text_of(path, name):
+    """What a dc element says, or None when the book does not have one.
+
+    The same read `colophon.epub` does, written here by hand so a test asserting
+    on a written value cannot agree with the code merely by sharing its reader.
+    """
+    metadata = metadata_of(path)
+    found = [
+        (element.text or "").strip()
+        for element in metadata.findall(f"{{{DC_NS}}}{name}")
+        if (element.text or "").strip()
+    ]
+    return found[0] if found else None
+
+
+def manifest_items(path):
+    """Every manifest item, by id, as {href, media-type, properties}."""
+    with zipfile.ZipFile(path) as book:
+        container = ET.fromstring(book.read("META-INF/container.xml"))
+        rootfile = container.find(f".//{{{CONTAINER_NS}}}rootfile")
+        package = ET.fromstring(book.read(rootfile.get("full-path")))
+    found = {}
+    for item in package.find(f"{{{OPF_NS}}}manifest").findall(f"{{{OPF_NS}}}item"):
+        found[item.get("id")] = {
+            "href": item.get("href"),
+            "media-type": item.get("media-type"),
+            "properties": item.get("properties"),
+        }
+    return found
+
+
+def cover_meta(path):
+    """What EPUB 2's legacy cover declaration says, or None when there is none."""
+    for element in metadata_of(path).findall(f"{{{OPF_NS}}}meta"):
+        if element.get("name") == "cover":
+            return element.get("content")
+    return None

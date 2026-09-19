@@ -120,6 +120,29 @@ EXISTING_SERIES_COLLECTION = """    <dc:title>Cragside</dc:title>
     <meta property="collection-type" refines="#series-1">series</meta>
     <meta property="group-position" refines="#series-1">1</meta>
 """
+# A book that arrived with everything the design spec's "fill if empty" rules
+# care about already on it, so a rule can be shown to leave each one alone.
+WITH_THE_OTHER_FIELDS = f"""    <dc:title>Cragside</dc:title>
+    <dc:creator>LJ Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+    <dc:description>A house full of secrets.</dc:description>
+    <dc:publisher>Ulverscroft</dc:publisher>
+    <dc:date>2019-01-01</dc:date>
+"""
+
+# The bare essentials of a PNG: the eight byte signature every one starts with.
+# Enough for a test to show the bytes were copied into the book unchanged, and
+# small enough to read in a diff.
+PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00"
+    b"\x1f\x15\xc4\x89"
+)
+
+# A JPEG, which is what both sources actually serve, so the media type is read
+# off the bytes rather than assumed from what the book already had.
+JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01" + b"\x00" * 8 + b"\xff\xd9"
 
 A_BOXED_SET = """    <dc:title>Cragside</dc:title>
     <meta property="belongs-to-collection" id="set-1">The Complete DCI Ryan</meta>

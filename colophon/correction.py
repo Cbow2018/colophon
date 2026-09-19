@@ -11,10 +11,11 @@ always be undone.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from colophon import epub
+from colophon.config import FIELD_DEFAULTS, KNOWN_FIELDS
 from colophon.epub import Edits, EpubError
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -24,7 +25,7 @@ from colophon.matching import (
     primary_language,
     search_titles,
 )
-from colophon.sources import SourceError
+from colophon.sources import SourceError, fetcher_for
 
 LOG = logging.getLogger("colophon")
 
@@ -55,6 +56,12 @@ MATCHED_BY = "exact ISBN"
 # A title and author match is never certain, so it has to clear this.
 TITLE_CONFIDENCE = 0.85
 TITLE_MATCHED_BY = "title and author"
+
+# Fields whose values are not what belongs in a log line, so the line names them
+# without it: the blurb is a thousand characters of prose that is in the book,
+# and a cover's value is bytes. The line's job is which fields moved and who
+# supplied them.
+_NAME_ONLY = ("description", "cover")
 
 # The formats whose metadata Colophon understands. Everything else - PDFs,
 # comics, MOBI - passes straight through, untouched and unread. Kobo writes
@@ -132,7 +139,10 @@ class Outcome:
             return f"[{head}; nothing to change]"
 
         fields = ", ".join(
-            f'{change.field}="{change.value}"<-{change.source}' for change in self.changed
+            f"{change.field}<-{change.source}"
+            if change.field in _NAME_ONLY
+            else f'{change.field}="{change.value}"<-{change.source}'
+            for change in self.changed
         )
         return f"[{head}; {'changed' if self.applied else 'would change'} {fields}]"
 
@@ -173,10 +183,25 @@ class Corrector:
     backup.
     """
 
-    def __init__(self, sources=None, backups=None, dry_run=False):
+    def __init__(
+        self,
+        sources=None,
+        backups=None,
+        dry_run=False,
+        fields=None,
+        add_cover=True,
+        fetch=None,
+    ):
         self.sources = tuple(sources or ())
         self.backups = backups
         self.dry_run = dry_run
+        # What to do with each field, as a mapping: `skip`, `fill` or
+        # `overwrite`. A field the mapping leaves out is one nothing has an
+        # opinion about, so it is simply not written.
+        self.fields = dict(fields or FIELD_DEFAULTS)
+        self.add_cover = add_cover
+        # How a cover is fetched, injected so no test reaches the network.
+        self.fetch = fetch or fetcher_for()
 
     @classmethod
     def from_config(cls, config, backups):
@@ -186,7 +211,13 @@ class Corrector:
             source = _build(name, config)
             if source is not None:
                 sources.append(source)
-        return cls(sources=sources, backups=backups, dry_run=config.dry_run)
+        return cls(
+            sources=sources,
+            backups=backups,
+            dry_run=config.dry_run,
+            fields=config.fields,
+            add_cover=config.add_cover,
+        )
 
     def correct(self, path):
         path = Path(path)
@@ -208,7 +239,8 @@ class Corrector:
 
         The walk stops at the first source that has the edition. An ISBN
         identifies one, so the first source to know it is as good as any other,
-        and the ISBN is not written into the file: it is already there.
+        and the ISBN itself is only ever written by its own rule - usually
+        nothing, since the file already carries it.
         """
         tried = []
         for source in self.sources:
@@ -218,7 +250,7 @@ class Corrector:
             except SourceError as error:
                 return self._failed(source, error, f"ISBN {book.isbn}")
             if found is not None:
-                return self._write(path, found, CONFIDENCE, book.isbn)
+                return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
         return Outcome(isbn=book.isbn, tried=tuple(tried))
 
     def _by_title(self, path, book):
@@ -262,7 +294,7 @@ class Corrector:
                 # explanation of this book, and is not named as one.
                 continue
             if match.confidence >= TITLE_CONFIDENCE:
-                return self._write(path, match.candidate, match.confidence)
+                return self._write(path, match.candidate, match.confidence, book=book)
             # A near miss: remembered rather than written, so a book no source
             # can match still names the closest thing to it.
             if nearest is None or match.confidence > nearest.confidence:
@@ -293,7 +325,7 @@ class Corrector:
         to read every book's line to notice it. What happens to the book next -
         the retry window, and the `colophon:source-unavailable` tag - is CBO-43's.
         """
-        blamed = _blamed(source)
+        blamed = _label(source.name)
         LOG.warning(
             "%s could not be asked about %s, so the book is left alone: %s",
             blamed,
@@ -302,14 +334,18 @@ class Corrector:
         )
         return Outcome(problem=f"{blamed} could not be asked: {error}")
 
-    def _write(self, path, found, confidence, isbn=None):
+    def _write(self, path, found, confidence, isbn=None, book=None):
         """Back the original up, then write what the source is sure of.
 
         `found` carries the source it came from, so nothing here has to be told
         where the values are from. `isbn` is set only when an ISBN is what
         recognised the book, because that is what the log line then reports.
+
+        `book` is the file as it was read, and it is never left out: each rule is
+        judged against it, `fill` writes only a field the file is empty of, and
+        whether the book already has a cover is a fact about the file.
         """
-        edits = _edits(found)
+        edits = self._edits(found, book)
         matched = {
             "isbn": isbn,
             "sought": None if isbn else found.title,
@@ -319,8 +355,34 @@ class Corrector:
         }
 
         # Ask the file what would move before touching it: a book that already
-        # matches is not backed up, and not rewritten either.
-        planned = epub.correct(path, edits, write=False)
+        # matches is not backed up, and not rewritten either. The cover is asked
+        # for only once something is going to be written, because fetching an
+        # image for a book about to be left alone is work done for nothing -
+        # and a dry run fetches nothing either, for the same reason it writes
+        # nothing. What it reports is that a cover would be added, not the image.
+        cover = self._cover(path, found, book, would_add=self.dry_run)
+        wanted = self._wants_cover(found, book)
+        try:
+            planned = epub.correct(
+                path,
+                edits,
+                write=False,
+                cover=cover,
+                would_add_cover=self.dry_run and wanted,
+            )
+        except EpubError as error:
+            # The cover is not an image the file will take. Nothing is written
+            # on this pass whatever happens - it only says what would move - so
+            # the book is left alone and the reason is said once, here.
+            LOG.warning(
+                "%s offered a cover for %s that the file would not take, so the "
+                "book is corrected without it: %s",
+                _label(found.source),
+                path.name,
+                error,
+            )
+            planned = ()
+            cover = None
         if not planned:
             return Outcome(**matched)
         if self.dry_run:
@@ -335,7 +397,14 @@ class Corrector:
                 problem=f"could not back the original up: {error}",
             )
 
-        written = epub.correct(path, edits)
+        try:
+            written = epub.correct(path, edits, cover=cover)
+        except EpubError:
+            # The same cover, refused on the pass that writes. The book is left
+            # exactly as it was - `epub.correct` decides everything before it
+            # writes anything - so this is the same outcome as a cover that
+            # could not be fetched, and the warning above was the saying.
+            written = ()
         return Outcome(
             **matched,
             changed=_changes(written, edits, found.source),
@@ -343,19 +412,132 @@ class Corrector:
             kept=str(kept),
         )
 
+    def _edits(self, found, book):
+        """The fields this source's record is allowed to write, and no others.
 
-def _edits(found):
-    """Only the fields the source actually has: a field it lacks is not a blank.
+        Each field is decided on its own, which is what the config is for: a book
+        can take its title from the source and keep its description, and another
+        the other way round. `fill` is judged against the file, so a field the
+        file already carries is left as it is; `overwrite` writes the source's
+        value whenever the source has one.
 
-    This is what keeps a Google Books match from writing a series: Google has no
-    series data for a novel, so its candidate carries none, and none is written.
+        A field the source said nothing about is written by no rule at all: `fill`
+        on a field a source is silent about is not a blank, and a source with no
+        publisher has not offered an empty one.
+        """
+        wanted = {}
+        for name in KNOWN_FIELDS:
+            rule = self.fields.get(name, "skip")
+            value = getattr(found, name, None)
+            if name == "authors":
+                value = tuple(value or ()) or None
+            if rule == "skip" or not value:
+                continue
+            current = getattr(book, name, None)
+            if name == "authors":
+                current = tuple(current or ())
+            if rule == "fill" and current:
+                continue
+            wanted[name] = value
+
+        return _series_consistent(Edits(**wanted), found, book)
+
+    def _cover(self, path, found, book, would_add=False):
+        """The cover to add to this book, or None when there is none to add.
+
+        Only the source that matched is asked for one: the priority list is a
+        trust order for every field alike, so a cover may not come from a source
+        the user ranked below the one that recognised the book. A source with no
+        cover for this book is the ordinary case rather than a failure.
+
+        Fetching can fail, and a cover is the least important thing about a book:
+        a blurb and a right title are worth having whether or not the image
+        arrives. So a failure here is a line in the log rather than a reason to
+        leave the metadata alone.
+
+        `would_add` is a dry run asking whether a cover is on its way without
+        wanting the bytes: none are fetched, and `None` is the answer that means
+        "not to hand" rather than "none to add".
+        """
+        if not self._wants_cover(found, book):
+            return None
+        if would_add:
+            return None
+        try:
+            return self.fetch(found.cover)
+        except SourceError as error:
+            LOG.warning(
+                "%s offered a cover for %s that could not be fetched, so the book "
+                "is corrected without it: %s",
+                _label(found.source),
+                path.name,
+                error,
+            )
+            return None
+
+    def _wants_cover(self, found, book):
+        """Whether a cover is to be added to this book, setting and all.
+
+        Three things decide it and nothing else does: the setting is on, the
+        source offered one, and the book has none of its own. It is asked
+        separately from fetching because a dry run has to answer it without
+        fetching anything, and because "no cover to add" and "the bytes are not
+        to hand" are different answers with different outcomes.
+        """
+        return bool(self.add_cover and found.cover and not book.has_cover)
+
+
+def _series_consistent(edits, found, book):
+    """Keep the number and the series it is a position in from disagreeing.
+
+    A series number is a position in a named series, not a number on its own, so
+    the number always follows its series:
+
+    * If the book ends up in the source's series - because the series was
+      overwritten, because it was filled in where the file had none, or because
+      the file was already in it - the source's number is a position in the
+      series the book is in, and its own rule decides whether to write it.
+    * If the book ends up in some other series - because the series was skipped,
+      or because the source does not name one at all - the source's number is a
+      position in a series this book is not in, so it is not written. The number
+      the file came with stays where it is, and is dropped only when a series
+      was actually written in place of the one around it: a series nobody wrote
+      is not a change, so a book with no series name and a number keeps both.
+
+    Both names are compared without regard to case, because a capitalisation
+    difference between a file and a record is the same series.
+
+    The question is what the book ends up saying, not which rules were set:
+    `overwrite` for the series and `skip` for the number, and `skip` for the
+    series and `overwrite` for the number, are the same question asked from
+    opposite ends, and both are answered from the resulting pair.
     """
-    return Edits(
-        title=found.title,
-        authors=found.authors or None,
-        series=found.series,
-        series_number=found.series_number,
-    )
+    resulting = edits.series if edits.series is not None else book.series
+    if edits.series_number is not None:
+        # The source's number, on its way in. It belongs to the source's series,
+        # so it is written only if the book ends up in that series.
+        if _same_series(resulting, found.series):
+            return edits
+        return replace(edits, series_number=None)
+
+    # The file's number, being left alone - which is right unless the series
+    # around it has actually changed, because then it is a claim about a series
+    # this book is no longer in. A series nobody wrote is not a change: a book
+    # with no series name and a number keeps both.
+    if (
+        book.series_number
+        and edits.series is not None
+        and not _same_series(edits.series, book.series)
+    ):
+        return replace(edits, drop_series_number=True)
+    return edits
+
+
+def _same_series(one, other):
+    """Whether two series names are the same series, capitalisation aside."""
+    if not one or not other:
+        return False
+    return str(one).strip().casefold() == str(other).strip().casefold()
 
 
 def _build(name, config):
@@ -383,7 +565,7 @@ def _build(name, config):
     return source
 
 
-def _blamed(source):
+def _label(name):
     """What to call a source in a sentence, as opposed to in a log field.
 
     A source names itself the way a log field wants it - `hardcover` - and a
@@ -394,7 +576,7 @@ def _blamed(source):
     than something a user can cause: it is worth an exception, not a fallback.
     `test_every_configured_source_has_a_label` is what keeps that true.
     """
-    return SOURCE_SETUP[source.name]["label"]
+    return SOURCE_SETUP[name]["label"]
 
 
 def _changes(fields, edits, source):
@@ -402,5 +584,12 @@ def _changes(fields, edits, source):
 
 
 def _value(edits, field):
-    value = getattr(edits, field)
-    return ", ".join(value) if field == "authors" else str(value)
+    """What a change's value is, for the log line and the outcome alike.
+
+    A field the edits do not carry is one that was written by being taken off -
+    a stale series number - or a cover, which is bytes rather than a value.
+    """
+    value = getattr(edits, field, None)
+    if field == "authors":
+        return ", ".join(value or ())
+    return "" if value is None else str(value)

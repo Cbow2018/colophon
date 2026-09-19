@@ -5,6 +5,30 @@ queries `colophon/hardcover.py` ships, so the suite never needs a key and never
 touches the network. Each one was checked before it was written: a reply
 carrying GraphQL errors was never saved as a fixture.
 
+## CBO-38's fields
+
+CBO-38 widened the two queries to ask for the blurb, the publisher, the release
+date and a cover. These two recordings are the widened queries asked live; the
+ISBN ones above were recorded before, so they do not carry the new fields.
+
+| File | Query | What it is | How |
+| --- | --- | --- | --- |
+| `by-isbn-cragside-edition.json` | the widened ISBN query, 9781521748831 | *Cragside* with `editions.publisher`, `editions.release_date`, `editions.image` and `books.description` | recorded |
+| `by-title-cragside-other-fields.json` | the widened title query, `Cragside` | the same, reached through the title path | recorded |
+
+Where each field lives is the schema's, not a choice, and these recordings are
+what shows it: `books` has a `description` and no publisher column at all, and
+`editions` has a `publisher` and no description column. A candidate is built
+from both halves, so it has to reach across.
+
+`editions.release_date` and `books.release_date` were both `2017-07-07` for this
+book, so which of the two a candidate should carry is not something this
+recording settles on its own; the edition's is used, and the work's only when
+the edition has none.
+
+The ISBN the design spec uses for *Cragside*, 9781786813891, is not in Hardcover
+at all. *Cragside* is there as 9781521748831.
+
 ## By ISBN — the query that walks from an edition to its work
 
 | File | ISBN | What it is | How |
