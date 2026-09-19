@@ -384,7 +384,9 @@ class Corrector:
             sought,
             error,
         )
-        return Outcome(problem=f"{blamed} could not be asked: {error}")
+        return Outcome(
+            problem=f"{blamed} could not be asked: {error}", dry_run=self.dry_run
+        )
 
     def _write(self, path, found, confidence=None, isbn=None, book=None):
         """Back the original up, then write what the source is sure of.
