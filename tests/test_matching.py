@@ -273,6 +273,34 @@ class ConfidenceTests(unittest.TestCase):
             )
         )
 
+    def test_a_regional_language_agrees_with_its_primary_one(self):
+        """`en-GB` in the file is `en` on the record, and the same book."""
+        for written, on_the_record in (
+            ("en-GB", "en"),
+            ("en-US", "en"),
+            ("EN-gb", "en"),
+            ("en", "en-GB"),
+        ):
+            with self.subTest(written=written, record=on_the_record):
+                match = confidence_of(
+                    AS_DOWNLOADED,
+                    language=written,
+                    candidate=Candidate(
+                        title="Cragside", authors=("L.J. Ross",), language=on_the_record
+                    ),
+                )
+
+                self.assertEqual(match.confidence, 1.0)
+
+    def test_a_regional_language_still_does_not_agree_with_another_language(self):
+        found = best_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en-GB"),
+            [Candidate(title="Cragside", authors=("L.J. Ross",), language="de-DE")],
+            TITLE_CONFIDENCE,
+        )
+
+        self.assertIsNone(found)
+
     def test_a_source_title_that_carries_the_subtitle_on_it_still_agrees(self):
         match = confidence_of(
             "Cragside",

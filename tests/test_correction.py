@@ -379,6 +379,27 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertEqual(source.asked_languages, [None])
 
+    def test_a_book_is_searched_by_the_primary_part_of_its_language(self):
+        """`en-GB` is asked about as `en`, or the editions are never found."""
+        for written, expected in (
+            ("en-GB", "en"),
+            ("en-US", "en"),
+            ("EN", "en"),
+            ("eng", "eng"),
+        ):
+            with self.subTest(language=written):
+                metadata = CRAGSIDE.replace(
+                    "<dc:language>en</dc:language>", f"<dc:language>{written}</dc:language>"
+                )
+                path, source = self.a_book_the_source_has(
+                    f"{written}.epub", metadata, CRAGSIDE_CANDIDATE
+                )
+
+                outcome = self.corrector(source=source).correct(path)
+
+                self.assertEqual(source.asked_languages, [expected])
+                self.assertTrue(outcome.matched)
+
     def test_the_lookalike_is_not_accepted_for_any_of_them(self):
         for name, metadata in (
             ("Cragside.epub", CRAGSIDE),
