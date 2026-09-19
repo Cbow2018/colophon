@@ -135,6 +135,7 @@ class WhichFilesAreTakenTests(RelayTestCase):
 
 
 class MovingTests(RelayTestCase):
+    @unittest.skipUnless(hasattr(os, "getuid"), "no file ownership on this platform")
     def test_the_file_is_copied_rather_than_renamed_so_it_gets_our_ownership(self):
         source = self.drop("Cragside.epub")
         source_inode = source.stat().st_ino

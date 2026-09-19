@@ -21,17 +21,21 @@ def main(env=None, stop=None):
         return 1
     LOG.setLevel(config.log_level)
 
+    # Windows, where this is only ever developed, has no user or group ids.
+    uid = os.getuid() if hasattr(os, "getuid") else None
+    gid = os.getgid() if hasattr(os, "getgid") else None
+
     LOG.info(
         "Colophon starting: uid=%s gid=%s, ingest %s -> output %s, backups %s, "
         "dry run %s",
-        os.getuid(),
-        os.getgid(),
+        uid,
+        gid,
         config.ingest_dir,
         config.output_dir,
         config.backup_dir,
         "on" if config.dry_run else "off",
     )
-    warn_if_root(os.getuid())
+    warn_if_root(uid)
 
     relay = Relay(config)
     try:
