@@ -580,7 +580,7 @@ class CorrectingInDryRunTests(RelayTestCase):
 
 
 class ABookNothingCanMatchTests(RelayTestCase):
-    """The unverified path end to end: marked, delivered, never retried.
+    """The unverified path end to end: marked and delivered, not held back.
 
     A book no source can vouch for still reaches the library, which is the whole
     point of the ticket - so it is the relay, not the correction, that has to be
