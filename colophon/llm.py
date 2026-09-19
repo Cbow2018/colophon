@@ -96,7 +96,10 @@ class Provider:
 
 
 # Seven presets, from the providers' own documentation on 2026-09-19. Only
-# DeepSeek was probed; the rest are what their docs say.
+# DeepSeek was probed; the rest are what their docs say. Two of the seven name
+# models that reason before they answer, which the 256-token cap below may not
+# leave room for - Gemini's cannot even be switched off - so that is written up
+# as a risk in `docs/research/cbo-40-llm-fallback-chooser.md` rather than here.
 PROVIDERS = {
     # No version segment, and its documented model names
     # (`deepseek-chat`, `deepseek-reasoner`) are aliases it rewrites silently:
@@ -111,16 +114,27 @@ PROVIDERS = {
         "https://api.anthropic.com/v1/", "claude-haiku-4-5", json_mode=False
     ),
     # The trap: the OpenAI-compatible layer has no `/v1` in it at all, and the
-    # model its own compatibility examples ask for is the current Flash.
+    # model its own compatibility examples ask for is the current Flash. A
+    # Gemini 3 model cannot turn its reasoning off, which is the risk below.
     "gemini": Provider(
         "https://generativelanguage.googleapis.com/v1beta/openai/",
         "gemini-3.8-flash",
     ),
-    "openai": Provider("https://api.openai.com/v1", "gpt-4o-mini"),
-    "openrouter": Provider("https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
-    "groq": Provider("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    # The newest tier that does not reason first: every model above 4.1 in the
+    # catalogue does, and this request sends no reasoning field to turn that
+    # off. Nano is the cheapest of the family and enough for picking a number.
+    "openai": Provider("https://api.openai.com/v1", "gpt-4.1-nano"),
+    # The same model as OpenRouter names it: a vendor prefix, then upstream's
+    # own id.
+    "openrouter": Provider("https://openrouter.ai/api/v1", "openai/gpt-4.1-nano"),
+    # The Llama this preset named was shut down on 2026-08-16, and this is the
+    # replacement Groq's own deprecation page names. It is a reasoning model,
+    # which is the other half of the risk below.
+    "groq": Provider("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),
     # Local, so no key at all. Ollama ignores an `Authorization` header, which
     # is why none is sent to it: a secret that buys nothing is a secret leaked.
+    # `llama3.1` is still the most-pulled model in its library and reasons
+    # about nothing, so it is the one preset that fits a 256-token answer.
     "ollama": Provider("http://localhost:11434/v1/", "llama3.1", needs_key=False),
 }
 

@@ -280,13 +280,25 @@ class ProviderTests(LlmTestCase):
     def test_the_presets_name_models_their_providers_still_serve(self):
         """Model names rot faster than anything else a preset carries.
 
-        Both were re-read against the providers' own documentation. Anthropic's
-        current lineup is Fable 5.1, Opus 5, Sonnet 5 and Haiku 4.5, and 3.5
-        Haiku is not on it; Gemini's OpenAI-compatibility page asks for Gemini
-        3.8 Flash, which is two generations on from the 2.0 the preset named.
+        All seven were re-read against the providers' own documentation.
+        Anthropic's lineup is Fable 5.1, Opus 5, Sonnet 5 and Haiku 4.5, so 3.5
+        Haiku is out; Gemini's compatibility examples ask for 3.8 Flash; the
+        Llama Groq hosted was shut down on 2026-08-16 and Groq's own deprecation
+        page names `openai/gpt-oss-120b` in its place; OpenAI's newest
+        non-reasoning tier is the GPT-4.1 family, which is the name OpenRouter
+        mirrors; and Ollama still lists `llama3.1` as its most-pulled model.
         """
-        self.assertEqual(PROVIDERS["anthropic"].model, "claude-haiku-4-5")
-        self.assertEqual(PROVIDERS["gemini"].model, "gemini-3.8-flash")
+        expected = {
+            "deepseek": "deepseek-flash",
+            "anthropic": "claude-haiku-4-5",
+            "gemini": "gemini-3.8-flash",
+            "openai": "gpt-4.1-nano",
+            "openrouter": "openai/gpt-4.1-nano",
+            "groq": "openai/gpt-oss-120b",
+            "ollama": "llama3.1",
+        }
+
+        self.assertEqual({name: PROVIDERS[name].model for name in expected}, expected)
 
 
 class FromConfigTests(LlmTestCase):
