@@ -24,6 +24,12 @@ NO_SUCH_BOOK = "9781786813891"
 A_HAND_MADE_BOOK = "9780000000003"
 A_WIDER_REPLY = "9780000000004"
 
+# The titles the CBO-36 fixture files were recorded against.
+CRAGSIDE_TITLE = "Cragside"
+BERWICK_TITLE = "Berwick"
+BELSAY_TITLE = "Belsay"
+THE_INFIRMARY_TITLE = "The Infirmary"
+
 
 class Replay:
     """Stands in for the network: hands back a recorded reply, remembers the request."""
@@ -148,6 +154,158 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(replay.sent["url"], "https://api.hardcover.app/v1/graphql")
         self.assertIn("Colophon", replay.sent["headers"]["User-Agent"])
         self.assertEqual(replay.sent["headers"]["Content-Type"], "application/json")
+
+
+class TitleLookupTests(unittest.TestCase):
+    """The title path, for a book whose file carries no ISBN.
+
+    The replies are real recordings too; see `fixtures/hardcover/README.md`.
+    """
+
+    def source(self, replay=None):
+        return Hardcover(TOKEN, transport=replay or Replay("by-title-cragside.json"))
+
+    def test_it_finds_the_book_by_a_cleaned_title(self):
+        candidates = self.source().by_title([CRAGSIDE_TITLE], "en")
+
+        self.assertEqual(len(candidates), 1)
+        cragside = candidates[0]
+        self.assertEqual(cragside.title, "Cragside")
+        self.assertEqual(cragside.authors, ("L.J. Ross",))
+        self.assertEqual(cragside.series, "DCI Ryan Mysteries")
+        self.assertEqual(cragside.series_number, "6")
+        self.assertEqual(cragside.language, "en")
+
+    def test_it_reads_berwick_and_belsay_too(self):
+        """Belsay's file carries no series number; Hardcover has #23."""
+        berwick = self.source(Replay("by-title-berwick.json")).by_title([BERWICK_TITLE], "en")
+        belsay = self.source(Replay("by-title-belsay.json")).by_title([BELSAY_TITLE], "en")
+
+        self.assertEqual(berwick[0].series_number, "24")
+        self.assertEqual(belsay[0].title, "Belsay")
+        self.assertEqual(belsay[0].series_number, "23")
+
+    def test_one_work_comes_back_once_however_many_editions_it_has(self):
+        """Cragside's reply with the same work twice, as the API really sends it."""
+        reply = {
+            "data": {
+                "editions": [
+                    {
+                        "title": "Cragside",
+                        "language": None,
+                        "book": {
+                            "id": 1198994,
+                            "title": "Cragside",
+                            "contributions": [
+                                {"contribution": "Author", "author": {"name": "L.J. Ross"}}
+                            ],
+                            "book_series": [],
+                        },
+                    },
+                    {
+                        "title": "Cragside: A DCI Ryan Mystery",
+                        "language": {"code2": "en"},
+                        "book": {
+                            "id": 1198994,
+                            "title": "Cragside",
+                            "contributions": [
+                                {"contribution": "Author", "author": {"name": "L.J. Ross"}}
+                            ],
+                            "book_series": [],
+                        },
+                    },
+                ]
+            }
+        }
+        source = Hardcover(TOKEN, transport=answering(200, json.dumps(reply).encode()))
+
+        candidates = source.by_title([CRAGSIDE_TITLE], "en")
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].title, "Cragside")
+
+    def test_a_work_with_no_id_of_its_own_is_not_mistaken_for_another(self):
+        """`books.title` is nullable and `id` may be missing from a reply."""
+        reply = {
+            "data": {
+                "editions": [
+                    {"title": "Cragside", "language": None, "book": {"title": "Cragside"}},
+                    {"title": "Cragside", "language": None, "book": {"title": "Cragside"}},
+                ]
+            }
+        }
+        source = Hardcover(TOKEN, transport=answering(200, json.dumps(reply).encode()))
+
+        self.assertEqual(len(source.by_title([CRAGSIDE_TITLE], "en")), 2)
+
+    def test_a_title_is_asked_about_with_in_because_eq_is_case_sensitive(self):
+        """`_ilike` is refused by the server, so `_in` on the exact title it is."""
+        replay = Replay()
+
+        self.source(replay).by_title([CRAGSIDE_TITLE], "en")
+
+        query = replay.sent["body"]["query"]
+        self.assertIn("title: {_in: $titles}", query)
+        self.assertNotIn("_ilike", query)
+        self.assertNotIn("_eq: $title", query)
+
+    def test_it_asks_only_about_the_language_the_file_is_written_in(self):
+        replay = Replay()
+
+        self.source(replay).by_title([CRAGSIDE_TITLE], "en")
+
+        variables = replay.sent["body"]["variables"]
+        self.assertEqual(variables["language"], "en")
+        self.assertIn("code2: {_eq: $language}", replay.sent["body"]["query"])
+
+    def test_a_three_letter_tag_is_asked_about_on_the_other_column(self):
+        """This filter is what keeps another language's editions out."""
+        replay = Replay()
+
+        self.source(replay).by_title([CRAGSIDE_TITLE], "eng")
+
+        variables = replay.sent["body"]["variables"]
+        self.assertEqual(variables["language"], "eng")
+        self.assertIn("code3: {_eq: $language}", replay.sent["body"]["query"])
+        self.assertNotIn("code2: {_eq: $language}", replay.sent["body"]["query"])
+
+    def test_a_file_that_names_no_language_is_asked_about_without_one(self):
+        """`code2` is not nullable, so asking for a null language is refused."""
+        replay = Replay()
+
+        self.source(replay).by_title([CRAGSIDE_TITLE], None)
+
+        variables = replay.sent["body"]["variables"]
+        self.assertNotIn("language", variables)
+        self.assertNotIn("_eq: $language", replay.sent["body"]["query"])
+
+    def test_it_asks_about_the_work_and_not_the_edition(self):
+        replay = Replay()
+
+        self.source(replay).by_title([CRAGSIDE_TITLE], "en")
+
+        query = replay.sent["body"]["query"].replace("\n", " ")
+        self.assertIn("book: {title: {_in: $titles}}", query)
+        self.assertIn("contributions", query)
+        self.assertIn("book_series", query)
+
+    def test_no_titles_means_nothing_is_asked(self):
+        replay = Replay()
+
+        self.assertEqual(self.source(replay).by_title([], "en"), [])
+        self.assertEqual(self.source(replay).by_title(["  "], "en"), [])
+        self.assertIsNone(replay.sent, "an empty question is not worth a request")
+
+    def test_no_work_by_that_title_is_no_candidates(self):
+        replay = Replay("by-isbn-not-found.json")
+
+        self.assertEqual(self.source(replay).by_title([CRAGSIDE_TITLE], "en"), [])
+
+    def test_a_reply_that_does_not_answer_the_question_is_a_source_problem(self):
+        source = Hardcover(TOKEN, transport=answering(200, b'{"data":{}}'))
+
+        with self.assertRaises(SourceError):
+            source.by_title([CRAGSIDE_TITLE], "en")
 
 
 class ErrorTests(unittest.TestCase):

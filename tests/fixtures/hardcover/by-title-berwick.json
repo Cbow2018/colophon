@@ -1,0 +1,68 @@
+{
+  "data": {
+    "editions": [
+      {
+        "title": "Berwick",
+        "isbn_13": "9781529978940",
+        "isbn_10": "1529978947",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 2379453,
+          "title": "Berwick",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 24,
+              "series": {
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "title": "Berwick",
+        "isbn_13": null,
+        "isbn_10": null,
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 2379453,
+          "title": "Berwick",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 24,
+              "series": {
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

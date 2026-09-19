@@ -1,0 +1,37 @@
+{
+  "data": {
+    "editions": [
+      {
+        "title": "Belsay",
+        "isbn_13": null,
+        "isbn_10": null,
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1647114,
+          "title": "Belsay",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 23,
+              "series": {
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

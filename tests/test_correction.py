@@ -9,19 +9,35 @@ from colophon.config import Config
 from colophon.correction import Corrector
 from colophon.epub import read
 from colophon.hardcover import SourceError
+from colophon.matching import Candidate
 from tests.opf import calibre_series, entries_of, epub3_series
 from tests.samplebooks import (
     AS_DOWNLOADED,
+    BELSAY,
+    BERWICK,
     CHAPTER,
+    CRAGSIDE,
     DRM,
     GUTENBERG_DIR,
+    INITIALS_WITHOUT_STOPS,
     ISBN,
     KEPUB_CHAPTER,
+    SAPIENS,
     SIMPLE,
+    WITHOUT_AUTHOR,
+    WITHOUT_AUTHOR_OR_LANGUAGE,
     add_isbn,
     write_epub,
 )
-from tests.sources import FakeSource
+from tests.sources import (
+    ANOTHER_INFIRMARY,
+    BELSAY_CANDIDATE,
+    BERWICK_CANDIDATE,
+    CRAGSIDE_CANDIDATE,
+    SAPIENS_CANDIDATE,
+    THE_INFIRMARY_CANDIDATE,
+    FakeSource,
+)
 from tests.tempdir import TemporaryDirectory
 
 # A book that already says everything the source says, in both series formats,
@@ -227,16 +243,6 @@ class WhenThereIsNothingToChangeTests(CorrectionTestCase):
         self.assertEqual(self.kept(), [])
         self.assertEqual(path.read_bytes(), before)
 
-    def test_a_book_with_no_isbn_is_left_alone_and_the_source_is_not_asked(self):
-        path = write_epub(self.folder / "Cragside.epub", SIMPLE, version="2.0")
-
-        outcome = self.corrector().correct(path)
-
-        self.assertFalse(outcome.matched)
-        self.assertEqual(self.source.asked, [])
-        self.assertEqual(self.kept(), [])
-        self.assertIn("no ISBN", outcome.fragment())
-
     def test_a_book_the_source_does_not_know_is_left_alone(self):
         source = FakeSource(found=None)
         path = self.book()
@@ -285,6 +291,387 @@ class WhenThereIsNothingToChangeTests(CorrectionTestCase):
 
         self.assertFalse(outcome.matched)
         self.assertIn("no Hardcover token", outcome.fragment())
+
+
+class BooksWithoutAnIsbnTests(CorrectionTestCase):
+    """The books CBO-36 exists for: no ISBN, so the title and author carry it.
+
+    Each of the three real books was recorded from Hardcover with the query the
+    client ships. The lookalike is `The Infirmary` - the same author's other
+    book, whose work title matches none of the three - so it is only ever
+    rejected by the title half of the comparison. A source is free to offer
+    whatever it likes, which is what these fixtures do.
+    """
+
+    def book(self, name, metadata):
+        return write_epub(self.folder / name, metadata, version="2.0")
+
+    def a_book_the_source_has(self, name, metadata, candidate):
+        return self.book(name, metadata), FakeSource(found=None, candidates=[candidate])
+
+    def test_cragside_is_matched_by_its_cleaned_title(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        book = read(path)
+        self.assertEqual(book.title, "Cragside")
+        self.assertEqual(book.authors, ("L.J. Ross",))
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_berwick_is_matched_too(self):
+        path, source = self.a_book_the_source_has("Berwick.epub", BERWICK, BERWICK_CANDIDATE)
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Berwick")
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "24"))
+
+    def test_belsay_is_matched_and_gets_the_number_its_title_never_had(self):
+        """Belsay is #23 on the record, and the file's title does not say so."""
+        path, source = self.a_book_the_source_has("Belsay.epub", BELSAY, BELSAY_CANDIDATE)
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Belsay")
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "23"))
+
+    def test_the_cleaned_title_is_what_the_source_is_asked_about(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+
+        self.corrector(source=source).correct(path)
+
+        # The cleaned title first, then the same title with the subtitle left on
+        # for a source that kept it, both in the one request.
+        self.assertEqual(source.asked_titles, [["Cragside", "Cragside: A DCI Ryan Mystery"]])
+        self.assertEqual(source.asked_languages, ["en"])
+        self.assertEqual(source.asked, [], "there was no ISBN to ask about")
+
+    def test_the_book_is_searched_in_its_own_language(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_languages, ["en"])
+
+    def test_initials_run_together_in_the_file_still_match(self):
+        """The file says `LJ Ross`; the record says `L.J. Ross`."""
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", INITIALS_WITHOUT_STOPS, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).authors, ("L.J. Ross",))
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_a_book_with_no_language_is_searched_without_one(self):
+        path = self.book("Cragside.epub", WITHOUT_AUTHOR_OR_LANGUAGE)
+        source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_languages, [None])
+
+    def test_a_book_is_searched_by_the_primary_part_of_its_language(self):
+        """`en-GB` is asked about as `en`, or the editions are never found.
+
+        The three-letter tag is asked about on `code3` instead, checked against
+        the live API: `code3: {_eq: "eng"}` returns the editions a `code2`
+        filter returns. What comes back then says `code2: en`, and that is still
+        this book - the query is what keeps other languages out, so the
+        comparison does not re-check and reject the record the query found.
+        """
+        for written, expected in (
+            ("en-GB", "en"),
+            ("en-US", "en"),
+            ("EN", "en"),
+            ("eng", "eng"),
+        ):
+            with self.subTest(language=written):
+                metadata = CRAGSIDE.replace(
+                    "<dc:language>en</dc:language>", f"<dc:language>{written}</dc:language>"
+                )
+                path, source = self.a_book_the_source_has(
+                    f"{written}.epub", metadata, CRAGSIDE_CANDIDATE
+                )
+
+                outcome = self.corrector(source=source).correct(path)
+
+                self.assertEqual(source.asked_languages, [expected])
+                self.assertTrue(outcome.matched, f"`{written}` and `en` are one language")
+
+    def test_a_file_tagged_eng_matches_a_record_carrying_both_codes(self):
+        """The case the client-side language check used to refuse.
+
+        A file says `eng`. The lookup asks about `code3`, and the record comes
+        back carrying `code2: en` and `code3: eng` - which the client reads as
+        `en`. Both codes are the same language, so the book is matched.
+        """
+        metadata = CRAGSIDE.replace(
+            "<dc:language>en</dc:language>", "<dc:language>eng</dc:language>"
+        )
+        path, source = self.a_book_the_source_has(
+            "Cragside-eng.epub", metadata, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_languages, ["eng"], "asked about on code3")
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_a_regional_language_still_matches_a_record_that_says_en(self):
+        """The usual case: the file says `en-GB`, the record says `en`."""
+        metadata = CRAGSIDE.replace(
+            "<dc:language>en</dc:language>", "<dc:language>en-GB</dc:language>"
+        )
+        path, source = self.a_book_the_source_has(
+            "Cragside-en-GB.epub", metadata, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_languages, ["en"])
+        self.assertTrue(outcome.matched)
+
+    def test_a_named_subtitle_is_asked_about_both_ways(self):
+        """A record may keep the subtitle, so both forms go in the one request."""
+        path = self.book("Sapiens.epub", SAPIENS)
+        source = FakeSource(found=None, candidates=[SAPIENS_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(
+            source.asked_titles, [["Sapiens", "Sapiens: A Brief History of Humankind"]]
+        )
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Sapiens: A Brief History of Humankind")
+
+    def test_a_subtitle_the_record_kept_is_still_matched(self):
+        """The short form finds nothing; the long one, in the same request, does."""
+        path = self.book("Sapiens.epub", SAPIENS)
+        source = FakeSource(found=None, candidates=[SAPIENS_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertIn("hardcover matched Sapiens", outcome.fragment())
+
+    def test_a_title_with_no_subtitle_is_asked_about_once(self):
+        """Nothing was taken off, so there is no second form to ask about."""
+        path = self.book(
+            "Normal People.epub",
+            """    <dc:title>Normal People</dc:title>
+    <dc:creator>Sally Rooney</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Normal People",
+                    authors=("Sally Rooney",),
+                    language="en",
+                )
+            ],
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_titles, [["Normal People"]])
+        self.assertTrue(outcome.matched)
+
+    def test_a_near_miss_is_named_from_the_same_single_pass(self):
+        """Scoring happens once: the source is not asked again for the near miss."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertEqual(len(source.asked_titles), 1, "one request, one scoring pass")
+        self.assertEqual(source.asked_titles[0], ["Cragside", "Cragside: A DCI Ryan Mystery"])
+
+    def test_the_lookalike_is_not_accepted_for_any_of_them(self):
+        for name, metadata in (
+            ("Cragside.epub", CRAGSIDE),
+            ("Berwick.epub", BERWICK),
+            ("Belsay.epub", BELSAY),
+        ):
+            with self.subTest(book=name):
+                path = self.book(name, metadata)
+                source = FakeSource(
+                    found=None,
+                    candidates=[THE_INFIRMARY_CANDIDATE, ANOTHER_INFIRMARY],
+                )
+                before = path.read_bytes()
+
+                outcome = self.corrector(source=source).correct(path)
+
+                self.assertFalse(outcome.matched)
+                self.assertEqual(self.kept(), [])
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_a_book_with_no_author_is_not_matched_on_its_title_alone(self):
+        """A title match alone never reaches the threshold."""
+        path = self.book("Cragside.epub", WITHOUT_AUTHOR)
+        source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertEqual(self.kept(), [])
+
+    def test_the_best_of_several_candidates_is_the_one_accepted(self):
+        """The author's other book is offered first, and the right one wins."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(
+            found=None,
+            candidates=[THE_INFIRMARY_CANDIDATE, ANOTHER_INFIRMARY, CRAGSIDE_CANDIDATE],
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_a_confident_match_is_backed_up_before_it_is_written(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+        before = path.read_bytes()
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(self.kept(), ["Cragside.epub"])
+        self.assertEqual((self.folder / "backups" / "Cragside.epub").read_bytes(), before)
+
+    def test_the_outcome_says_which_title_the_match_was_made_on(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertIn("hardcover matched Cragside by title and author", outcome.fragment())
+        self.assertIn("confidence 1.00", outcome.fragment())
+
+    def test_a_near_miss_says_which_book_it_was_and_what_was_wrong_with_it(self):
+        """A book that was found, trusted less, but still named.
+
+        The candidate is the right author and a title that only contains the
+        file's, with the wrong position in the series on top: 0.84, under the
+        threshold, and named rather than silently dropped.
+        """
+        path = self.book("Cragside.epub", CRAGSIDE)
+        nearly = Candidate(
+            source="hardcover",
+            title="Cragside: A DCI Ryan Mystery",
+            authors=("L.J. Ross",),
+            series_number="11",
+            language="en",
+        )
+
+        outcome = self.corrector(
+            source=FakeSource(found=None, candidates=[nearly])
+        ).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertIn("Cragside", outcome.fragment())
+        self.assertIn("confidence 0.84", outcome.fragment())
+        self.assertIn("contained", outcome.fragment())
+
+    def test_a_book_the_source_has_nothing_like_is_not_named_at_all(self):
+        """Nothing in the reply agrees on title or author, so there is no near miss."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertIn("no edition is called Cragside", outcome.fragment())
+        self.assertNotIn("The Infirmary", outcome.fragment())
+
+    def test_a_dry_run_reports_the_match_without_writing_it(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+        before = path.read_bytes()
+
+        outcome = self.corrector(source=source, dry_run=True).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertNotEqual(outcome.changed, ())
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.kept(), [])
+
+    def test_a_title_the_source_does_not_know_is_not_a_match(self):
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None)
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertIn("Cragside", outcome.fragment())
+
+    def test_a_book_with_no_title_is_not_asked_about(self):
+        path = self.book("Cragside.epub", "    <dc:creator>L. J. Ross</dc:creator>")
+        source = FakeSource(found=None)
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertEqual(source.asked_titles, [])
+        self.assertIn("no title", outcome.fragment())
+
+    def test_a_source_that_cannot_answer_leaves_the_book_alone(self):
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(title_error=SourceError("Hardcover is rate limiting (HTTP 429)"))
+        before = path.read_bytes()
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertIn("Hardcover could not be asked", outcome.fragment())
+        self.assertIn("rate limiting", outcome.fragment())
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.kept(), [])
+
+    def test_a_book_that_already_says_what_the_source_says_is_not_rewritten(self):
+        """A source with nothing but a title and an author has nothing to write."""
+        path = self.book(
+            "Already.epub",
+            """    <dc:title>Cragside</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+""",
+        )
+        source = FakeSource(
+            found=None,
+            candidates=[Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
+        )
+        before = path.read_bytes()
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(outcome.changed, ())
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(path.read_bytes(), before)
 
 
 class WhenTheSourceFailsTests(CorrectionTestCase):

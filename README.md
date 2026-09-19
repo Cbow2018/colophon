@@ -9,9 +9,10 @@ point of the project: CWA's Hardcover matcher searches on the raw file title,
 so a book like *Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)*
 never finds its match. Colophon cleans the question before it is asked.
 
-**What works today:** files pass through, and an EPUB or KEPUB carrying a known
-ISBN gets its core metadata corrected from Hardcover on the way. No ISBN, no
-match, or a book that already matches: nothing is touched.
+**What works today:** files pass through, and an EPUB or KEPUB gets its core
+metadata corrected from Hardcover on the way - by its ISBN where the file
+carries one, and otherwise by its cleaned title and author. A book that already
+matches, or one nothing confident was found for, is passed through untouched.
 
 ## What it does today
 
@@ -20,6 +21,9 @@ match, or a book that already matches: nothing is touched.
   never moved half-written
 - Reads the title, author, language and ISBN out of an EPUB or KEPUB (EPUB 2 and
   EPUB 3 layouts both), and looks the ISBN up exactly on Hardcover
+- The book that carries no ISBN is looked up by its title instead, with the
+  subtitle and the series bracket taken off first, and searched for in the
+  language the file says it is written in
 - Writes back the title, the author(s), the series and the series number the
   source is sure of - the series in Calibre's format *and* the EPUB 3 one, so any
   library app reads it
@@ -37,9 +41,8 @@ match, or a book that already matches: nothing is touched.
   confidence, what changed and where each value came from
 - Runs as a non-root user, with a read-only root filesystem and no open ports
 
-Everything else - cleaning messy titles, Google Books, the LLM fallback, field
-rules, covers, failure handling - is still to come. Books without an ISBN and
-formats other than EPUB/KEPUB pass through untouched.
+Everything else - Google Books, the LLM fallback, field rules, covers, failure
+handling, and formats other than EPUB/KEPUB - is still to come.
 
 ## Getting started
 
@@ -85,12 +88,16 @@ and the compose file mounts that file as a Docker secret.
        file: ./secrets/hardcover_token
    ```
 
-4. Start in dry run and watch the log. Each book gets one line, and a book with
-   an ISBN gets a note like:
+4. Start in dry run and watch the log. Each book gets one line, and a book gets
+   a note like one of these:
 
    ```
-   dry run: would move "Cragside.epub" -> /output/Cragside.epub (2.1 MB) [hardcover matched ISBN 9781786813891 by exact ISBN, confidence 1.00; would change title="Cragside"<-hardcover, authors="LJ Ross"<-hardcover, series="DCI Ryan"<-hardcover, series_number="6"<-hardcover]
+   dry run: would move "Cragside.epub" -> /output/Cragside.epub (2.1 MB) [hardcover matched ISBN 9781521748831 by exact ISBN, confidence 1.00; would change title="Cragside"<-hardcover, authors="L.J. Ross"<-hardcover, series="DCI Ryan Mysteries"<-hardcover, series_number="6"<-hardcover]
+   dry run: would move "Berwick.epub" -> /output/Berwick.epub (1.5 MB) [hardcover matched Berwick by title and author, confidence 1.00; would change title="Berwick"<-hardcover, authors="L.J. Ross"<-hardcover, series="DCI Ryan Mysteries"<-hardcover, series_number="24"<-hardcover]
    ```
+
+   The first is a book matched on its ISBN, the second one with no ISBN in the
+   file, matched on its cleaned title and its author.
 
 If the token file is missing, Colophon says so at startup and passes every book
 through with its metadata as it is.
