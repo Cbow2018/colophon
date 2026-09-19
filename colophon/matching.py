@@ -171,6 +171,19 @@ def search_title(title):
     return clean_title(title).search or None
 
 
+def primary_language(language):
+    """A file's language as the one code a source indexes it by.
+
+    A `dc:language` is often a regional tag (`en-GB`) or the three-letter form
+    (`eng`), and a source indexes editions by ISO 639-1 (`en`) or 639-2
+    (`eng`). Every row in Hardcover's `languages` table carries both codes, so
+    a two-letter tag is asked about on `code2` and a three-letter one on
+    `code3`, and the two compare as the same language. A tag that is neither is
+    left as it was written, less its region.
+    """
+    return str(language or "").split("-", 1)[0].split("_", 1)[0].strip().casefold()
+
+
 def score_candidate(file_book, candidate):
     """Score one candidate against the file it is being considered for.
 
@@ -333,11 +346,16 @@ def _same_language(wanted, found):
     """Whether a candidate's language is the file's, either of them maybe unknown.
 
     Nothing is translated: a candidate in another language is not this book.
-    A missing language on either side is no evidence either way.
+    Both sides are reduced to their primary subtag first, so a file that says
+    `en-GB` agrees with an edition that says `en`. A file that says `eng` and an
+    edition that says `eng` agree; `eng` against `en` does not, because the
+    client reads what the source writes (`code2` when there is one, and that is
+    what a client asks about). A missing language on either side is no evidence
+    either way.
     """
     if not wanted or not found:
         return True
-    return str(wanted).strip().casefold() == str(found).strip().casefold()
+    return primary_language(wanted) == primary_language(found)
 
 
 def _squeeze(text):

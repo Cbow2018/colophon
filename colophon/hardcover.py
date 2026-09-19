@@ -89,10 +89,13 @@ query BooksByTitle($titles: [String!]!%s) {
 }
 """
 
-_TITLE_LANGUAGE = ", $language: String!"
-_TITLE_FILTER = "language: {code2: {_eq: $language}}"
-
-TITLE_QUERY = _TITLE_QUERY % (_TITLE_LANGUAGE, _TITLE_FILTER)
+# The query per language length. Every caller means the two-letter one, which
+# is what most files say; a three-letter tag needs the other column.
+TITLE_QUERY = _TITLE_QUERY % (", $language: String!", "language: {code2: {_eq: $language}}")
+_TITLE_QUERY_BY_LENGTH = {
+    2: TITLE_QUERY,
+    3: _TITLE_QUERY % (", $language: String!", "language: {code3: {_eq: $language}}"),
+}
 _TITLE_QUERY_ANY_LANGUAGE = _TITLE_QUERY % ("", "")
 
 
@@ -162,7 +165,9 @@ class Hardcover:
             return []
         language = str(language).strip() if language else ""
         if language:
-            query = TITLE_QUERY
+            # Which column holds it depends on how long the tag is: a two-letter
+            # code is ISO 639-1, a three-letter one is 639-2.
+            query = _TITLE_QUERY_BY_LENGTH.get(len(language), TITLE_QUERY)
             variables = {"titles": titles, "language": language}
         else:
             query = _TITLE_QUERY_ANY_LANGUAGE
