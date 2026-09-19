@@ -173,8 +173,9 @@ class Outcome:
         found, while the book itself has been changed - or would be, in a dry run,
         which is why the mark is the one thing here that says which: there is no
         `changed` list after the word "changed" for it to sit behind. The fields
-        are named the way a matched book's are, and all of them come from
-        Colophon, which is worth showing as plainly as a source's name is.
+        are named the way a matched book's are, and for a book nothing matched
+        they are Colophon's own, which is worth showing as plainly as a source's
+        name is.
         """
         if not self.unverified:
             return ""

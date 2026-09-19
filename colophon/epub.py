@@ -122,10 +122,10 @@ class Book:
 class Edits:
     """What a source says the book is. None leaves that field as it was.
 
-    There is no way to say "take this field off": no rule spells it, so nothing
-    produces it, and `None` is only ever the source having said nothing - except
-    for `unverified`, which is a state rather than a value and so has to be able
-    to say "off" as well as "on".
+    None is how a source spells "I have nothing to say about this field", and
+    there is no value that means the opposite: taking something off a book is a
+    separate flag, and there are two of them, because a value and its absence are
+    not the only two states a field can be in.
     """
 
     title: str | None = None
