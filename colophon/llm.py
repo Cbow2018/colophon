@@ -104,14 +104,17 @@ PROVIDERS = {
     # `deepseek-chat` is served as `deepseek-flash` without saying so.
     "deepseek": Provider("https://api.deepseek.com", "deepseek-flash"),
     # Ends in `/v1/` already, and ignores `response_format` (so its JSON mode
-    # is untested rather than known to work).
+    # is untested rather than known to work). Haiku 4.5 is the fastest and
+    # cheapest of the four models that documentation lists, and the dateless
+    # name is the alias it gives for the dated snapshot.
     "anthropic": Provider(
-        "https://api.anthropic.com/v1/", "claude-3-5-haiku-latest", json_mode=False
+        "https://api.anthropic.com/v1/", "claude-haiku-4-5", json_mode=False
     ),
-    # The trap: the OpenAI-compatible layer has no `/v1` in it at all.
+    # The trap: the OpenAI-compatible layer has no `/v1` in it at all, and the
+    # model its own compatibility examples ask for is the current Flash.
     "gemini": Provider(
         "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "gemini-2.0-flash",
+        "gemini-3.8-flash",
     ),
     "openai": Provider("https://api.openai.com/v1", "gpt-4o-mini"),
     "openrouter": Provider("https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),

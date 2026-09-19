@@ -277,6 +277,17 @@ class ProviderTests(LlmTestCase):
             PROVIDERS["anthropic"].base_url, "https://api.anthropic.com/v1/"
         )
 
+    def test_the_presets_name_models_their_providers_still_serve(self):
+        """Model names rot faster than anything else a preset carries.
+
+        Both were re-read against the providers' own documentation. Anthropic's
+        current lineup is Fable 5.1, Opus 5, Sonnet 5 and Haiku 4.5, and 3.5
+        Haiku is not on it; Gemini's OpenAI-compatibility page asks for Gemini
+        3.8 Flash, which is two generations on from the 2.0 the preset named.
+        """
+        self.assertEqual(PROVIDERS["anthropic"].model, "claude-haiku-4-5")
+        self.assertEqual(PROVIDERS["gemini"].model, "gemini-3.8-flash")
+
 
 class FromConfigTests(LlmTestCase):
     def config(self, **values):
