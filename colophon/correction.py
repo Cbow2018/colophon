@@ -28,22 +28,23 @@ from colophon.sources import SourceError
 
 LOG = logging.getLogger("colophon")
 
-# One entry per source Colophon knows: where its key is mounted, what to call it
-# in a sentence, and how to build it from that key file. A name missing from here
-# is a programming mistake rather than a user one - `config.py` refuses a name it
-# does not know long before this is reached - which is why the label lives here
-# too, rather than in a second map keyed by the same names.
-SECRET_FILES = {
+# One entry per source Colophon knows: the setting naming its key file, what to
+# call the source in a sentence, what to call that key file, and how to build the
+# source from it. A name missing from here is a programming mistake rather than a
+# user one - `config.py` refuses a name it does not know long before this is
+# reached - which is why the label lives here too, rather than in a second map
+# keyed by the same names.
+SOURCE_SETUP = {
     "hardcover": {
         "file": "hardcover_token_file",
         "label": "Hardcover",
-        "thing": "Hardcover token",
+        "secret_name": "Hardcover token",
         "make": Hardcover.from_secret_file,
     },
     "google_books": {
         "file": "google_books_key_file",
         "label": "Google Books",
-        "thing": "Google Books key",
+        "secret_name": "Google Books key",
         "make": GoogleBooks.from_secret_file,
     },
 }
@@ -355,7 +356,7 @@ def _build(name, config):
     the user is told once, at startup, rather than once per book. A key file
     that is there but unreadable is a real problem and is said so.
     """
-    entry = SECRET_FILES[name]
+    entry = SOURCE_SETUP[name]
     where = getattr(config, entry["file"])
     try:
         source = entry["make"](where)
@@ -366,7 +367,7 @@ def _build(name, config):
         LOG.info(
             "no %s at %s, so %s is not asked and the rest of the list carries on "
             "without it",
-            entry["thing"],
+            entry["secret_name"],
             where,
             name,
         )
@@ -380,7 +381,7 @@ def _blamed(source):
     sentence wants it the way a person writes it. A stand-in that the tests use
     need not be in the map at all: its own name already reads as a sentence.
     """
-    return SECRET_FILES.get(source.name, {}).get("label", source.name)
+    return SOURCE_SETUP.get(source.name, {}).get("label", source.name)
 
 
 def _changes(fields, edits, source):
