@@ -1910,6 +1910,36 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertIn(f"marked {UNVERIFIED_TAG}", again.fragment())
         self.assertNotIn("description<-", again.fragment(), "nothing moved to report")
 
+    def test_an_isbn_no_source_has_with_no_title_is_marked_not_called_untitled(self):
+        """A book the sources were asked about is not a book nobody asked about.
+
+        The fallback needs a title, and this file has none - but its ISBN was
+        asked about and no source had it, so the honest line is the ISBN one and
+        the honest outcome is the mark. Reporting the title path's "no title in
+        the file, so no source was asked" would be false here, and it left the
+        book unmarked as well.
+        """
+        path = write_epub(
+            self.folder / "NoTitle.epub",
+            f"""    <dc:creator>L. J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+""",
+            version="2.0",
+        )
+        source = FakeSource(found=None)
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked, [ISBN], "the ISBN is what it was asked about")
+        self.assertEqual(source.asked_titles, [], "and there is no title to fall back to")
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified, "so the book is marked like any other")
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        self.assertIn(ISBN, outcome.fragment())
+        self.assertIn("marked colophon:unverified", outcome.fragment())
+        self.assertNotIn("no title", outcome.fragment(), "it was asked about, by its ISBN")
+
     def test_the_near_miss_line_says_the_book_was_marked_too(self):
         """A near miss is still a miss, so the book is marked and the line says so."""
         path = self.book("Cragside.epub", CRAGSIDE)

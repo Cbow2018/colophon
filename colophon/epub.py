@@ -183,6 +183,21 @@ def read(path):
     )
 
 
+def _unverified_subjects(metadata):
+    """Every `dc:subject` on this book that is Colophon's unverified tag.
+
+    A list rather than one element because a book can carry more than one: the
+    tag is written once, but another tool - or an older Colophon - may have left
+    duplicates, and a reader and a writer that disagreed about that would leave a
+    book half-marked. Both of them ask this question here.
+    """
+    return [
+        element
+        for element in _elements(metadata, "subject")
+        if (element.text or "").strip() == UNVERIFIED_TAG
+    ]
+
+
 def _has_unverified(metadata, description):
     """Whether a book is marked unverified, by either half of the mark.
 
@@ -191,10 +206,7 @@ def _has_unverified(metadata, description):
     person who edited it - and a correction that matched the book should come out
     clean rather than half-marked.
     """
-    if any(
-        (element.text or "").strip() == UNVERIFIED_TAG
-        for element in _elements(metadata, "subject")
-    ):
+    if _unverified_subjects(metadata):
         return True
     return has_note((description or "").strip())
 
@@ -356,11 +368,7 @@ def _set_unverified_tag(metadata, unverified):
     book is about as well as what became of it, and only one of those two is
     Colophon's to decide.
     """
-    found = [
-        element
-        for element in _elements(metadata, "subject")
-        if (element.text or "").strip() == UNVERIFIED_TAG
-    ]
+    found = _unverified_subjects(metadata)
     if found:
         if unverified:
             return False

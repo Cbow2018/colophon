@@ -310,6 +310,12 @@ class Corrector:
         The match the fallback finds keeps the ISBN the file came with: the record
         that recognised the book is a different edition, and writing its ISBN over
         the file's would be claiming an edition this book has not been shown to be.
+
+        A file with no title has nothing to fall back to. The sources were asked
+        about it - by its ISBN, which is the one thing the file did say - and none
+        of them had it, so the book is marked like any other nobody could vouch
+        for. Returning the title path's "no title, so no source was asked" would
+        be a plain falsehood on this path: they were asked.
         """
         tried = []
         for source in self.sources:
@@ -320,6 +326,9 @@ class Corrector:
                 return self._failed(source, error, f"ISBN {book.isbn}")
             if found is not None:
                 return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
+
+        if not search_titles(book.title):
+            return self._unverified(path, book, None, tried)
 
         # The book is still recognisable without its ISBN, so the title path
         # answers - whatever it answers. `replace` carries the ISBN the file came
@@ -378,8 +387,9 @@ class Corrector:
         # with - and is marked, which is what tells a person browsing their
         # library that nobody could vouch for it. The mark is written here rather
         # than left to the relay, because the correction is the pass that knows
-        # why: a book with no title at all, or one whose source could not be
-        # asked, never reaches this line.
+        # what was asked: a book whose source could not be asked never reaches
+        # this line, and a book with no title at all reaches it by the ISBN path
+        # instead, where the sources were asked and did not have it.
         return self._unverified(path, book, title, tried, nearest)
 
     def _unverified(self, path, book, title, tried, nearest=None):
@@ -391,8 +401,12 @@ class Corrector:
         its own blurb staying where it was, and it is then delivered like any
         other book. A book that was matched later - by being dropped in again -
         has all of this taken off it, which is the other half of the same rule.
+
+        `title` is None for a book whose own title says nothing, which only the
+        ISBN path reaches. The book's ISBN is carried onto the outcome either
+        way: on that path it is what the sources were asked, so the line names it.
         """
-        outcome = self._write(path, None, book=book)
+        outcome = self._write(path, None, book=book, isbn=book.isbn or None)
         return replace(
             outcome,
             # A near miss is named as it always was; the title the book was
