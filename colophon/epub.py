@@ -9,7 +9,6 @@ as possible: the text, the images and the licence all come out untouched.
 import hashlib
 import os
 import re
-import time
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -743,13 +742,21 @@ def _add_image(path, name, image):
     Its own step rather than part of the package document's: the declaration and
     the image are written separately so that a refusal - bytes that are not an
     image - cannot take corrections that are already on disk down with it.
+
+    The entry is stamped with the book's own date, not the clock. Correcting the
+    same book twice has to give the same bytes - the relay decides a re-dropped
+    book is a duplicate by comparing them - and a wall-clock stamp would make
+    every re-drop a different file, or a "different file" beside it.
     """
     half_written = path.parent / f".{path.name}.colophon-new"
     try:
         with zipfile.ZipFile(path) as book, zipfile.ZipFile(half_written, "w") as rewritten:
+            stamped = _EPOCH
             for entry in book.infolist():
+                if stamped is _EPOCH:
+                    stamped = entry.date_time
                 _copy_entry(rewritten, entry, book.read(entry.filename))
-            added = zipfile.ZipInfo(name, _now())
+            added = zipfile.ZipInfo(name, stamped)
             added.compress_type = zipfile.ZIP_DEFLATED
             rewritten.writestr(added, image)
         os.replace(half_written, path)
@@ -758,14 +765,10 @@ def _add_image(path, name, image):
         raise
 
 
-def _now():
-    """A timestamp for a new entry, in the tuple a zip entry wants.
-
-    An image needs a date and time and has none of its own, and the zip format
-    cannot store one before 1980. The book's own entries keep theirs.
-    """
-    found = time.localtime()
-    return (max(found.tm_year, 1980), found.tm_mon, found.tm_mday, found.tm_hour, found.tm_min, found.tm_sec)
+# What a zip entry is stamped with when the book has no entry to copy a date
+# from. The zip format cannot store anything before 1980, so this is the earliest
+# a valid one can be - which is what makes it the same every time.
+_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 
 def _copy_entry(rewritten, entry, body):

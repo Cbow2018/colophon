@@ -4,6 +4,7 @@ import inspect
 import json
 import shutil
 import textwrap
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -744,6 +745,24 @@ class MatchingTests(CorrectionTestCase):
 
         self.corrector(source=FakeSource(found=MATCH)).correct(first)
         self.corrector(source=FakeSource(found=MATCH)).correct(second)
+
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+
+    def test_two_corrections_a_second_apart_still_give_the_same_bytes(self):
+        """The same, with the clock moved between them.
+
+        A wall-clock stamp on the added cover is invisible until two corrections
+        of the same book fall either side of a second - which, over a library,
+        they do - and then a re-dropped book stops being recognised as a
+        duplicate and is filed beside itself instead. This is what says the
+        bytes do not depend on when the pass ran.
+        """
+        first = write_epub(self.folder / "First.epub", AS_DOWNLOADED, version="2.0")
+        second = write_epub(self.folder / "Second.epub", AS_DOWNLOADED, version="2.0")
+
+        self.corrector(source=FakeSource(found=MATCH)).correct(first)
+        with mock.patch("time.localtime", return_value=time.localtime(time.time() + 3)):
+            self.corrector(source=FakeSource(found=MATCH)).correct(second)
 
         self.assertEqual(first.read_bytes(), second.read_bytes())
 

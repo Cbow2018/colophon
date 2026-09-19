@@ -184,7 +184,11 @@ Two things came out of it:
 
 * **A correction has to be reproducible**, because the relay decides a re-drop
   is a duplicate by comparing bytes. A cover's entry name is therefore built
-  from the image's own bytes, never from a timestamp.
+  from the image's own bytes, and its zip entry is stamped with the book's own
+  date rather than the clock. The clock was the subtle half: it is invisible
+  until two corrections of the same book fall either side of a second, which
+  over a library they do, and then every re-drop is filed beside itself as a
+  "different file" instead of being recognised as the duplicate it is.
 * **No test may reach the network at all.** The relay tests now patch
   `urllib.request.urlopen` so an outbound request fails loudly, and the stand-in
   offers no cover unless a test asks for one. This is test infrastructure, not a

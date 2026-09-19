@@ -2,7 +2,7 @@
 
 Each metadata field now follows its own rule, set in `config.toml`: skip, fill
 if empty, or overwrite. A cover is added to a book that has none, from the
-source that matched it. Test-first throughout; the suite is 401 tests, `ruff`
+source that matched it. Test-first throughout; the suite is 402 tests, `ruff`
 is clean.
 
 ## What changed, per acceptance criterion
@@ -139,7 +139,20 @@ cover cases.
   suite fail about one run in eight: whether the fetch succeeded changed the
   book's bytes and so the relay's duplicate detection. Every corrector a test
   builds now gets a fetch that cannot leave the machine, and both test bases
-  patch `urlopen` as a backstop. 401 tests, 25 consecutive clean runs.
+  patch `urlopen` as a backstop.
+
+## A bug the tests found on the way
+
+- **A correction was not reproducible across a second boundary.** The cover's
+  zip entry was stamped with the wall clock, so two corrections of the same book
+  either side of a second gave different bytes - and the relay decides a
+  re-dropped book is a duplicate by comparing exactly those bytes. Over a
+  library that means a re-dropped book is filed beside itself as a "different
+  file" instead of being recognised as the duplicate it is. The entry is stamped
+  with the book's own date now, and
+  `test_two_corrections_a_second_apart_still_give_the_same_bytes` moves the clock
+  to keep it that way. Found by the reproducibility test rather than by the
+  review; 40 consecutive clean suite runs after the fix.
 
 ## Deferred
 
