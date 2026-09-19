@@ -262,11 +262,16 @@ like any other. The line says when the LLM was the one that decided:
 ```
 
 Any OpenAI-compatible endpoint works. The presets are `deepseek` (the default),
-`anthropic`, `gemini`, `openai`, `openrouter`, `groq` and `ollama`; anything
-else is a custom `llm_base_url`. **Without a key file the LLM is simply not
-used**, and uncertain books take the unverified path as they always did - which
-is the default, since no key file is set up until you make one. Ollama is local
-and needs no key at all.
+`anthropic`, `gemini`, `openai`, `openrouter`, `groq` and `ollama`. Any other
+name is a **custom endpoint**: set `llm_base_url` and `llm_model` to say where it
+is and what to ask for, and Colophon uses it as it finds it.
+
+**Without a key file a preset that needs one is simply not used**, and uncertain
+books take the unverified path as they always did - which is the default, since
+no key file is set up until you make one. Ollama needs no key at all, and a
+custom endpoint's key is optional: it is sent when the file is there, because the
+endpoint may want one, and left out when it is not, because it may be a local
+server that wants none.
 
 Put the key in a file, as the other secrets are, and mount it at the path
 `llm_key_file` points to (`/run/secrets/llm_key` by default). One file, for
@@ -275,12 +280,13 @@ secret.
 
 A book the LLM could not be asked about - the endpoint is down, the key was
 refused, or the day's calls are spent - is **left in the ingest folder**,
-untouched and not delivered, and skipped until the next UTC day. It is not
-marked: nothing answered, so nothing is final. `llm_daily_limit` is
-`200` calls a UTC day by default, counted in
-`/backups/.colophon-llm.json` and counted whether or not the call succeeded;
-`0` means no limit. That counter is deliberately never deleted by the backup
-cleanup, so a container that restarts does not get a fresh day's calls.
+untouched and not delivered, and skipped until the next UTC day, when it is
+tried again. It is not marked: nothing answered, so nothing is final.
+`llm_daily_limit` is `200` calls a UTC day by default, counted whether or not the
+call succeeded, and `0` means no limit. The count lives in a hidden file in the
+backups folder, beside the originals - the one place Colophon is already
+guaranteed to be able to write, and a folder whose cleanup is proven never to
+touch it, so a container that restarts does not get a fresh day's calls.
 
 ## Settings
 

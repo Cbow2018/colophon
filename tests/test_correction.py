@@ -1141,6 +1141,27 @@ class FromConfigTests(unittest.TestCase):
 
         self.assertEqual([source.name for source in corrector.sources], ["google_books"])
 
+    def test_a_custom_endpoint_with_no_key_is_not_reported_as_no_llm(self):
+        """"No LLM key at …" is about a preset that needed one. A custom endpoint
+        is used without a key, so saying the LLM is not set up would be a lie."""
+        (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            corrector = Corrector.from_config(
+                self.config(
+                    sources=("hardcover", "google_books"),
+                    llm_provider="llamacpp",
+                    llm_base_url="http://localhost:8080/v1",
+                    llm_model="qwen2.5",
+                ),
+                Backups(self.folder / "backups"),
+            )
+
+        self.assertIsNotNone(corrector.llm, "it is set up, and no key file is needed")
+        said = "\n".join(captured.output)
+        self.assertIn("Google Books key", said, "the source with no key is still named")
+        self.assertNotIn("no LLM key", said)
+
     def test_a_source_with_no_key_file_is_skipped_once_then_left_out(self):
         """Hardcover's token is there; Google Books' key is not set up at all.
 

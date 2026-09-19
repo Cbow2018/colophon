@@ -19,7 +19,7 @@ from colophon.config import DEFAULT_CONFIDENCE, FIELD_DEFAULTS, KNOWN_FIELDS
 from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
-from colophon.llm import Llm, LlmError, LlmLimited, needs_key
+from colophon.llm import Llm, LlmError, LlmLimited, needs_key, utc_today
 from colophon.matching import (
     FileBook,
     nearest_candidate,
@@ -62,6 +62,7 @@ LLM_CHOOSER = "llm"
 
 # How many candidates one source may contribute to a single prompt. A long tail
 # of lookalikes would otherwise bury the right record and cost tokens for it.
+# `top_candidates` is where it is applied, once per source's own reply.
 CANDIDATES_PER_SOURCE = 5
 
 # What a change is attributed to when Colophon itself made it rather than a
@@ -335,17 +336,22 @@ class Corrector:
         try:
             llm = Llm.from_config(config)
         except LlmError as error:
+            # A name with nowhere to send to, or a key file that cannot be read:
+            # a real problem, said as one, and the pass carries on without it.
             LOG.error("%s; carrying on without it", error)
             llm = None
-        if llm is None and needs_key(config.llm_provider):
-            # Said once at startup, in the same spirit as "no Hardcover token at
-            # …, so hardcover is not asked": the user has simply not set an LLM
-            # up, and uncertain books are marked unverified rather than held.
-            LOG.info(
-                "no LLM key at %s, so uncertain books are marked unverified rather "
-                "than waiting for one",
-                config.llm_key_file,
-            )
+        else:
+            if llm is None and needs_key(config.llm_provider):
+                # Only a preset that wanted a key and did not get one means the
+                # user has simply not set an LLM up. Said once at startup, in the
+                # same spirit as "no Hardcover token at …, so hardcover is not
+                # asked": a custom endpoint with no key file is being used
+                # anyway, and saying "no LLM" about it would be a lie.
+                LOG.info(
+                    "no LLM key at %s, so uncertain books are marked unverified "
+                    "rather than waiting for one",
+                    config.llm_key_file,
+                )
         return cls(
             sources=sources,
             backups=backups,
@@ -360,6 +366,14 @@ class Corrector:
         path = Path(path)
         if path.suffix.lower() not in BOOK_SUFFIXES:
             return Outcome(silent=True)
+        # "Wait until tomorrow" is what every wait in this pass means, so this is
+        # where the day is allowed to move on: the first book of a new UTC day
+        # clears out the books that were left for an older one, and they are
+        # asked about again. Done here rather than when an entry is added, so a
+        # container that runs for weeks cannot skip a book for the life of the
+        # process - and done at a boundary the pass already crosses, so nothing
+        # has to run at midnight.
+        forget_yesterdays_waits(self._waiting, utc_today())
         note = self._waiting.get(path)
         if note is not None:
             # Already asked for today, and already answered "not today": asking
@@ -367,7 +381,7 @@ class Corrector:
             # finish. The answer still says the book is not finished with, so the
             # relay leaves it where it is - and says nothing, because the first
             # pass said why.
-            return Outcome(waiting=True, note=note)
+            return Outcome(waiting=True, note=note[1])
 
         try:
             book = epub.read(path)
@@ -473,7 +487,11 @@ class Corrector:
             match = nearest_candidate(file_book, candidates)
             if match is not None and match.confidence >= self.confidence:
                 return self._write(path, match.candidate, match.confidence, book=book)
-            offered.extend(candidates)
+            # No match yet, so this source's best few are what the model may be
+            # shown. The cap is per source, so a second source's best record is
+            # never crowded out by the first source's long tail - which is the
+            # whole reason there is a cap.
+            offered.extend(top_candidates(file_book, candidates, source.name))
             # A near miss - one that agrees on both title and author but not
             # confidently enough - is remembered rather than written, so a book
             # no source can match still names the closest thing to it. A reply
@@ -487,11 +505,19 @@ class Corrector:
                 nearest = match
 
         if offered:
-            chosen = self._ask_llm(
-                path, book, offered, title, tried, nearest, file_book
-            )
+            # Nothing cleared the threshold, so the model is the last thing to
+            # ask - and anything but a confident pick from it leaves the book
+            # where the rules left it, marked unverified.
+            chosen, answered = self._ask_llm(path, book, offered)
             if chosen is not None:
                 return chosen
+            if answered is not None:
+                return replace(
+                    self._unverified(path, book, title, tried, nearest),
+                    llm_pick=answered.pick,
+                    llm_confidence=answered.confidence,
+                    llm_reason=answered.short_reason,
+                )
 
         # Nothing cleared the threshold, so the book keeps the metadata it came
         # with - and is marked, which is what tells a person browsing their
@@ -502,20 +528,15 @@ class Corrector:
         # instead, where the sources were asked and did not have it.
         return self._unverified(path, book, title, tried, nearest)
 
-    def _ask_llm(self, path, book, candidates, title, tried, nearest, file_book=None):
-        """Put the candidates to the LLM, and produce the outcome its answer earns.
+    def _ask_llm(self, path, book, candidates):
+        """Put the candidates to the LLM, and say what it answered.
 
-        Three answers and three endings, and the differences matter:
-
-        * A pick that clears the threshold is written - from the picked
-          candidate's own record, and from nothing else.
-        * Anything else the model says - a null pick, a low confidence, a reply
-          that is not the contract at all - ends in the unverified path like any
-          other book nobody could vouch for. The model answered, so there is
-          nothing to wait for, and the answer is recorded as evidence.
-        * Not being able to ask at all ends in the waiting path instead: the
-          file is left exactly as it was, in the ingest folder, and skipped until
-          the next UTC day.
+        Returns `(outcome, choice)`, and the three answers are three of those:
+        a pick that clears the threshold is `(the book written, choice)`; a pick
+        that is not sure enough, a null pick, or a reply that is not the contract
+        at all is `(None, choice)` - the model answered, so there is nothing to
+        wait for, and the caller ends it in the unverified path; and not being
+        able to ask at all is `(the book left waiting, None)`.
 
         "Not being able to ask" is not only an outage: the day's call limit is
         spent, and a 4xx that is not a 401 is a configuration mistake that
@@ -525,26 +546,22 @@ class Corrector:
         if self.llm is None:
             # Not "waiting": a fresh install with no key has nothing to wait for,
             # or every uncertain book would be held for ever (Q16).
-            return None
-        details = {"title": book.title, "filename": path.name}
+            return None, None
         try:
-            choice = self.llm.choose(details, top_candidates(file_book, candidates))
+            choice = self.llm.choose(
+                {"title": book.title, "filename": path.name}, candidates
+            )
         except (LlmError, LlmLimited) as error:
-            return self._wait(path, error)
+            return self._wait(path, error), None
 
-        picked = choice.candidate
-        if picked is not None and choice.confidence >= self.confidence:
-            return self._write(path, picked, choice.confidence, book=book, llm=choice)
+        if choice.candidate is not None and choice.confidence >= self.confidence:
+            return self._write(
+                path, choice.candidate, choice.confidence, book=book, llm=choice
+            ), choice
         # A null pick is never applied whatever its confidence says, and a pick
         # the model is not sure of is not applied either. Both are still said:
         # the number is evidence, and the mark is the outcome.
-        answered = self._unverified(path, book, title, tried, nearest)
-        return replace(
-            answered,
-            llm_pick=choice.pick,
-            llm_confidence=choice.confidence,
-            llm_reason=choice.short_reason,
-        )
+        return None, choice
 
     def _wait(self, path, error):
         """Leave the book where it is until the next UTC day, and say why.
@@ -562,11 +579,11 @@ class Corrector:
         the LLM logs that last class as a probable misconfiguration rather than
         as an outage.
         """
-        self._waiting[path] = str(error)
+        self._waiting[path] = (utc_today(), str(error))
         LOG.warning(
             "%s is left in the ingest folder until tomorrow: %s", path.name, error
         )
-        return Outcome(waiting=True, note=str(error), dry_run=self.dry_run)
+        return Outcome(waiting=True, note=str(error))
 
     def _unverified(self, path, book, title, tried, nearest=None):
         """Mark a book nothing matched confidently, and say what was looked for.
@@ -842,27 +859,45 @@ class Corrector:
         )
 
 
-def top_candidates(file_book, candidates, limit=CANDIDATES_PER_SOURCE):
-    """The candidates worth putting to the LLM, best first, and at most `limit`.
+def forget_yesterdays_waits(waiting, today):
+    """Drop the books that were left for another day than this one.
 
-    A source can return a long tail of lookalikes, and every one of them costs
-    tokens and buries the right record a little deeper. So the cap is on the
-    *best* few rather than the first few: the ones the source listed first are
-    in whatever order its own search ranked them, while the score is what this
-    project's rules make of them against this file. The best candidate is
-    therefore candidate 1 in the prompt, which is the number a reply is read
-    against.
+    A book waiting on a day that has passed is a book nobody has tried since,
+    so it is forgotten rather than kept: the whole point of waiting is that
+    tomorrow it is worth asking again.
+    """
+    for path in [path for path, (day, _) in waiting.items() if day != today]:
+        del waiting[path]
+
+
+def top_candidates(file_book, candidates, source):
+    """This source's candidates worth putting to the LLM, best first.
+
+    At most `CANDIDATES_PER_SOURCE` of them, because a source can return a long
+    tail of lookalikes and every one of them costs tokens and buries the right
+    record a little deeper. The cap is on the *best* few rather than the first
+    few: the ones the source listed first are in whatever order its own search
+    ranked them, while the score is what this project's rules make of them
+    against this file. The best candidate is therefore candidate 1 in the
+    prompt, which is the number a reply is read against.
+
+    The cap is per source, so this is called once per source's own reply and not
+    over everything the sources offered between them: otherwise the first source
+    to answer would spend the whole prompt and a second source's best record
+    would never be shown.
 
     Being ranked here does not mean being accepted: a candidate that agrees on
     neither title nor author is not an explanation of the book to the rules, and
     is still offered to the model - they read the title and the author, and the
     reason a book needs an LLM is usually that those two are not enough.
     """
-    scored = [(score_candidate(file_book, candidate), candidate) for candidate in candidates]
+    scored = [
+        (score_candidate(file_book, candidate), candidate) for candidate in candidates
+    ]
     # Largest first; ties keep the order the source offered them in, which is
     # what `sorted` does with a stable sort and a single key.
     scored.sort(key=lambda pair: pair[0].confidence, reverse=True)
-    return [candidate for _, candidate in scored[:limit]]
+    return [candidate for _, candidate in scored[:CANDIDATES_PER_SOURCE]]
 
 
 def _series_consistent(edits, found, book):

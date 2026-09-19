@@ -94,10 +94,12 @@ class Config:
     llm_base_url: str = ""
     llm_model: str = ""
     llm_key_file: Path = Path("/run/secrets/llm_key")
-    # How many calls a UTC day may spend. 0 means no limit. The counter lives in
-    # a hidden file in the backups folder, beside the originals it must survive.
+    # How many calls a UTC day may spend. 0 means no limit. The count itself
+    # lives beside the backups, in the hidden file `colophon.llm.COUNTER_NAME`
+    # names: that folder is already writable, already created, and already
+    # protected from deletion, and a setting for one internal path would be
+    # deployment surface for nothing (Q13).
     llm_daily_limit: int = 200
-    llm_counter_file: Path = Path("/backups/.colophon-llm.json")
     # Which sources to consult, in order. Both paths - the ISBN one and the
     # title one - walk this same list.
     sources: tuple = KNOWN_SOURCES
@@ -156,7 +158,6 @@ def load_config(env=None):
     values["llm_base_url"] = str(_setting(env, values, "llm_base_url", str)).strip()
     values["llm_model"] = str(_setting(env, values, "llm_model", str)).strip()
     values["llm_key_file"] = Path(_setting(env, values, "llm_key_file", str))
-    values["llm_counter_file"] = Path(_setting(env, values, "llm_counter_file", str))
     values["llm_daily_limit"] = _to_call_limit(
         _setting(env, values, "llm_daily_limit", int)
     )

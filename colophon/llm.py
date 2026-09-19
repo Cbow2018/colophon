@@ -33,6 +33,11 @@ TIMEOUT_SECONDS = 30
 # a model landing in `docker logs`, so it is capped and its newlines are escaped.
 MAX_REASON_CHARS = 120
 
+# The daily call count is a hidden file in the backups folder. Hidden because
+# that folder is cleared out on a retention, and a name starting with a dot is
+# what `Backups.expire` leaves alone.
+COUNTER_NAME = ".colophon-llm.json"
+
 # The contract, and the word JSON is not decoration: DeepSeek refuses
 # `response_format` outright when the messages never mention it.
 SYSTEM_PROMPT = (
@@ -57,14 +62,15 @@ class LlmLimited(Exception):
 
 
 def needs_key(provider):
-    """Whether this provider is one that wants a key.
+    """Whether this provider is one that cannot be used without a key.
 
-    Only Ollama is not. A name that is not a preset is a custom endpoint, which
-    is assumed to have asked for the key the user configured.
+    True only for the presets that say so: a custom endpoint is used with or
+    without a key, and Ollama wants none. This is what tells a missing key apart
+    from an LLM that is simply not set up - the first is a setting the user has
+    not made, the second is nothing to report.
     """
-    return PROVIDERS.get(
-        str(provider or "").strip().lower(), _A_KEYED_ENDPOINT
-    ).needs_key
+    preset = PROVIDERS.get(str(provider or "").strip().lower())
+    return preset.needs_key if preset is not None else False
 
 
 @dataclass(frozen=True)
@@ -169,7 +175,6 @@ class Llm:
         key=None,
         daily_limit=200,
         counter=None,
-        timeout=TIMEOUT_SECONDS,
         transport=None,
     ):
         self.provider = provider
@@ -179,45 +184,55 @@ class Llm:
         self.counter = Path(counter) if counter else None
         self._key = key
         # The key goes out only to a provider that checks one: Ollama ignores the
-        # header, so sending it would buy nothing and hand a local server a
-        # secret. A name that is not a preset is a custom endpoint, which is
-        # assumed to have asked for the key the user configured.
-        self._sends_key = (
-            bool(key) and PROVIDERS.get(provider, _A_KEYED_ENDPOINT).needs_key
-        )
-        self._timeout = timeout
+        # header, so sending it would buy nothing and hand a local server a secret.
+        # A key file that exists for a custom endpoint is sent, because an endpoint
+        # nobody has described to us may well be one that wants it.
+        self._sends_key = bool(key) and PROVIDERS.get(
+            provider, _A_KEYED_ENDPOINT
+        ).needs_key
         self._transport = transport or self._post
 
     @classmethod
     def from_config(cls, config):
         """The chooser this configuration asks for, or None when there is none.
 
-        A preset that needs a key and has no key file means no LLM at all: the
-        user has not set one up, and books go to the unverified path rather than
-        waiting for an endpoint that was never configured. Ollama needs none, so
-        a missing key file does not disable it.
+        A preset is one of the seven Colophon ships, and a preset that needs a
+        key and has no key file means no LLM at all: the user has not set one up,
+        and books go to the unverified path rather than waiting for an endpoint
+        that was never configured. Ollama needs none, so a missing key file does
+        not disable it.
+
+        Any other name is a **custom endpoint**, which the ticket asks for by
+        name: the user says where it is with `llm_base_url` and what to ask for
+        with `llm_model`, and Colophon has no opinion about it. Its key is
+        optional rather than absent - sent when the file is there, because the
+        endpoint may want one, and left out when it is not, because it may be a
+        local server that wants none.
         """
         name = str(getattr(config, "llm_provider", "") or "").strip().lower()
+        base_url = str(getattr(config, "llm_base_url", "") or "").strip()
         preset = PROVIDERS.get(name)
-        if preset is None:
+        if preset is None and not base_url:
             raise LlmError(
-                f"llm_provider names {name!r}, which is not a provider Colophon has; "
-                "expected one of " + ", ".join(PROVIDERS)
+                f"llm_provider names {name!r}, which is neither a provider Colophon "
+                "has (" + ", ".join(PROVIDERS) + ") nor a custom endpoint: set "
+                "llm_base_url to say where it is"
             )
+        wants_key = preset.needs_key if preset is not None else False
         key = (
             _read_key(getattr(config, "llm_key_file", None))
-            if preset.needs_key
+            if wants_key or preset is None
             else None
         )
-        if preset.needs_key and key is None:
+        if wants_key and key is None:
             return None
         return cls(
             provider=name,
-            model=getattr(config, "llm_model", "") or preset.model,
-            base_url=getattr(config, "llm_base_url", "") or preset.base_url,
+            model=getattr(config, "llm_model", "") or (preset.model if preset else ""),
+            base_url=base_url or preset.base_url,
             key=key,
             daily_limit=getattr(config, "llm_daily_limit", 200),
-            counter=getattr(config, "llm_counter_file", None),
+            counter=Path(config.backup_dir) / COUNTER_NAME,
         )
 
     def choose(self, file_details, candidates):
@@ -373,7 +388,7 @@ class Llm:
         """The real transport: one POST, with whatever status came back."""
         request = urllib.request.Request(url, data=body, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
                 return response.status, response.read()
         except urllib.error.HTTPError as error:
             return error.code, error.read()

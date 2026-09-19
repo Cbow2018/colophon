@@ -491,7 +491,7 @@ All top-level, so `COLOPHON_LLM_*` works like every other setting. A user with n
 | Key | Default | Notes |
 | --- | --- | --- |
 | `llm_provider` | `deepseek` | One of the seven preset names, or a name for a custom endpoint |
-| `llm_base_url` | the preset's | Empty means the preset's |
+| `llm_base_url` | the preset's | Empty means the preset's. **Required** for a custom name |
 | `llm_model` | the preset's | Empty means the preset's. DeepSeek's is `deepseek-flash` |
 | `llm_key_file` | `/run/secrets/llm_key` | **One default for every provider** (Q15) |
 | `llm_daily_limit` | `200` | `0` = no limit |
@@ -503,6 +503,20 @@ All top-level, so `COLOPHON_LLM_*` works like every other setting. A user with n
 Presets are a module table with a comment per decision, matching the repo's habit.
 `llm_provider` naming a preset that needs a key and having no `llm_key_file` is
 **not an error** — it is logged once at startup and the LLM is skipped.
+
+**The table deliberately has no key for the counter file**, and Q13's reasoning is
+why: it holds one internal path, the folder it belongs in is already a setting
+(`backup_dir`) and already the one Q13 chose for being writable and for surviving
+`Backups.expire()`, and a key for it would be the deployment surface Q13 refused.
+The path is `backup_dir / ".colophon-llm.json"`, so pointing `backup_dir` somewhere
+else moves the counter with the folder that protects it.
+
+**A custom endpoint is a real endpoint, not an unknown name.** `llm_provider`
+naming something outside the seven presets is accepted as long as `llm_base_url`
+says where it is; without one there is nowhere to send the request, and *that* is
+the error. Its key is **optional** rather than required or absent: a custom
+endpoint may be a local server that wants none, so the missing key file does not
+disable it — and it may want one, so a key file that is there is sent.
 
 ### The request
 
@@ -622,6 +636,24 @@ A JSON file in `/backups`, written atomically (temp file in the same directory,
 then `os.replace`), holding the UTC date and the count. Read at startup, checked
 before each call, incremented **when the request is sent** (Q10). `0` means no
 limit. `Backups.expire()` must be proven not to touch it.
+
+The file is `backup_dir / ".colophon-llm.json"` rather than a setting of its own;
+see the config table above. Its temp file is written beside it, so `os.replace`
+stays on one filesystem, and `Backups.expire()` skips hidden names.
+
+### The waiting list, and the day it waits for
+
+The list is in memory (Q14) and keyed by path, and each entry holds **the UTC day
+the book was left for** along with the reason. The day is what makes the list
+work: `Corrector.correct` drops every entry from another day before it looks at
+this one, so the first scan after midnight starts with an empty list and the book
+is asked again.
+
+Without the day on the entry the list only ever grows — a container scans for
+weeks, so a book that first waited at 23:59 would be skipped for the life of the
+process, which under `restart: unless-stopped` means for ever. The check is at
+the reading end rather than the writing end for the same reason a restart has to
+be free: nothing has to run at midnight for the day to turn over.
 
 ### Fixtures the tests read
 

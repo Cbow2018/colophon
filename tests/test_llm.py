@@ -13,14 +13,13 @@ from pathlib import Path
 
 from colophon.backups import Backups
 from colophon.config import Config, load_config
-from colophon.correction import Corrector, top_candidates
+from colophon.correction import Corrector, forget_yesterdays_waits, top_candidates
 from colophon.epub import read
 from colophon.llm import PROVIDERS, Llm, LlmError, LlmLimited
 from colophon.matching import Candidate, FileBook
-from colophon.sources import SourceError
 from tests.samplebooks import HOLY_ISLAND as HOLY_ISLAND_BOOK
 from tests.samplebooks import write_epub
-from tests.sources import FakeSource
+from tests.sources import FakeSource, no_network
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "llm"
@@ -293,7 +292,7 @@ class FromConfigTests(LlmTestCase):
         secret.write_text(KEY + "\n", encoding="utf-8")
 
         llm = Llm.from_config(
-            self.config(llm_key_file=secret, llm_counter_file=self.tmp / "llm.json")
+            self.config(llm_key_file=secret)
         )
 
         self.assertEqual(llm.provider, "deepseek")
@@ -305,7 +304,6 @@ class FromConfigTests(LlmTestCase):
             self.config(
                 llm_provider="ollama",
                 llm_key_file=self.tmp / "missing",
-                llm_counter_file=self.tmp / "llm.json",
             )
         )
 
@@ -321,20 +319,86 @@ class FromConfigTests(LlmTestCase):
                 llm_key_file=secret,
                 llm_base_url="https://example.invalid/v1",
                 llm_model="some-other-model",
-                llm_counter_file=self.tmp / "llm.json",
             )
         )
 
         self.assertEqual(llm.base_url, "https://example.invalid/v1")
         self.assertEqual(llm.model, "some-other-model")
 
-    def test_an_unknown_provider_is_a_plain_error_not_a_traceback(self):
+    def test_a_name_that_is_not_a_preset_is_a_custom_endpoint(self):
+        """The ticket's "any other compatible endpoint" is a name and a base URL."""
+        secret = self.tmp / "llm_key"
+        secret.write_text(KEY, encoding="utf-8")
+
+        llm = Llm.from_config(
+            self.config(
+                llm_provider="llamacpp",
+                llm_base_url="http://localhost:8080/v1",
+                llm_model="qwen2.5",
+                llm_key_file=secret,
+            )
+        )
+
+        self.assertIsNotNone(llm, "a custom endpoint is not an unknown provider")
+        self.assertEqual(llm.base_url, "http://localhost:8080/v1")
+        self.assertEqual(llm.model, "qwen2.5")
+
+    def test_a_custom_endpoint_with_no_key_file_is_still_an_endpoint(self):
+        """It may be local and need no key; the key is optional, not required."""
+        llm = Llm.from_config(
+            self.config(
+                llm_provider="llamacpp",
+                llm_base_url="http://localhost:8080/v1",
+                llm_model="qwen2.5",
+                llm_key_file=self.tmp / "missing",
+            )
+        )
+
+        self.assertIsNotNone(llm)
+
+    def test_a_custom_endpoint_sends_the_key_when_there_is_one(self):
+        """Optional is not the same as never: an endpoint that wants one gets it."""
+        secret = self.tmp / "llm_key"
+        secret.write_text(KEY, encoding="utf-8")
+        llm = Llm.from_config(
+            self.config(
+                llm_provider="llamacpp",
+                llm_base_url="http://localhost:8080/v1",
+                llm_model="qwen2.5",
+                llm_key_file=secret,
+            )
+        )
+        llm._transport = Replay("belsay-picked.json")
+
+        llm.choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(
+            llm._transport.sent[0]["headers"]["Authorization"], f"Bearer {KEY}"
+        )
+
+    def test_the_counter_lives_in_the_configured_backups_folder(self):
+        """Not at a fixed `/backups`: the folder `expire()` protects is the point."""
+        secret = self.tmp / "llm_key"
+        secret.write_text(KEY, encoding="utf-8")
+        elsewhere = self.tmp / "kept"
+        config = self.config(llm_key_file=secret, backup_dir=elsewhere)
+
+        llm = Llm.from_config(config)
+        llm._transport = Replay("belsay-picked.json")
+        llm.choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(llm.counter, elsewhere / ".colophon-llm.json")
+        self.assertTrue((elsewhere / ".colophon-llm.json").exists())
+
+    def test_a_custom_name_with_no_base_url_is_a_plain_error_not_a_traceback(self):
+        """There is nowhere to send it, so the setting is wrong rather than unknown."""
         with self.assertRaises(LlmError) as caught:
             Llm.from_config(
-                self.config(llm_provider="nope", llm_key_file=self.tmp / "missing")
+                self.config(llm_provider="llamacpp", llm_key_file=self.tmp / "missing")
             )
 
-        self.assertIn("nope", str(caught.exception))
+        self.assertIn("llamacpp", str(caught.exception))
+        self.assertIn("llm_base_url", str(caught.exception))
 
 
 class NobodyToAskTests(LlmTestCase):
@@ -463,22 +527,19 @@ class FailureTests(LlmTestCase):
         self.assertIn("configuration", " ".join(captured.output))
         self.assertIn("400", " ".join(captured.output))
 
+    def test_a_reply_with_no_body_at_all_is_still_a_named_failure(self):
+        """A wrong path answers 404 with nothing, so the summariser gets b""."""
+        with self.assertRaises(LlmError) as caught:
+            self.client(status=404, body=b"").choose(FILE, [BELSAY_RECORD])
+
+        self.assertIn("404", str(caught.exception))
+        self.assertIn("empty", str(caught.exception))
+
 
 class ParsingTests(LlmTestCase):
     def record(self, content, finish="stop"):
         """A reply body carrying this content, shaped the way the API shapes one."""
-        return json.dumps(
-            {
-                "model": "deepseek-flash",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": content},
-                        "finish_reason": finish,
-                    }
-                ],
-            }
-        ).encode("utf-8")
+        return _reply_with(content, finish=finish)
 
     def choose(self, content, candidates=None, finish="stop"):
         client = self.client(status=200, body=self.record(content, finish))
@@ -622,11 +683,8 @@ class ChooserTests(unittest.TestCase):
             sources=[source],
             backups=self.backups,
             llm=llm,
-            fetch=self.offline_cover,
+            fetch=no_network,
         )
-
-    def offline_cover(self, url):
-        raise SourceError(f"a test tried to fetch {url} from the network")
 
     def test_the_rules_alone_do_not_match_this_book(self):
         """The premise the fallback is built on, checked rather than assumed."""
@@ -802,32 +860,7 @@ class TheCandidateCapTests(unittest.TestCase):
     def setUp(self):
         self._tmp = TemporaryDirectory()
         self.folder = Path(self._tmp.name)
-        self.backups = Backups(self.folder / "backups")
-        self.calls = 0
         self.addCleanup(self._tmp.cleanup)
-
-    def llm(self, *names):
-        self.calls += 1
-        return Llm(
-            provider="deepseek",
-            model="deepseek-flash",
-            base_url="https://api.deepseek.com",
-            key=KEY,
-            daily_limit=0,
-            counter=self.folder / f"llm-{self.calls}.json",
-            transport=Replay(*names),
-        )
-
-    def corrector(self, llm, candidates):
-        return Corrector(
-            sources=[FakeSource(found=None, candidates=list(candidates))],
-            backups=self.backups,
-            llm=llm,
-            fetch=self.offline_cover,
-        )
-
-    def offline_cover(self, url):
-        raise SourceError(f"a test tried to fetch {url} from the network")
 
     def test_the_one_the_rules_like_best_is_kept_even_when_it_is_listed_last(self):
         """The file is Belsay; the source lists five other books first.
@@ -845,7 +878,7 @@ class TheCandidateCapTests(unittest.TestCase):
         ]
         candidates = distractors + [BELSAY_RECORD]
 
-        kept = top_candidates(file_book, candidates)
+        kept = top_candidates(file_book, candidates, "hardcover")
 
         self.assertEqual(len(kept), 5)
         self.assertEqual(kept[0], BELSAY_RECORD, "the best candidate goes first")
@@ -859,7 +892,7 @@ class TheCandidateCapTests(unittest.TestCase):
             for number in range(1, 6)
         ]
 
-        kept = top_candidates(file_book, distractors + [BELSAY_RECORD])
+        kept = top_candidates(file_book, distractors + [BELSAY_RECORD], "hardcover")
 
         self.assertEqual(kept, [BELSAY_RECORD, *distractors[:4]])
 
@@ -867,23 +900,186 @@ class TheCandidateCapTests(unittest.TestCase):
         file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
         candidates = [BELSAY_RECORD, BERWICK]
 
-        self.assertEqual(top_candidates(file_book, candidates), candidates)
+        self.assertEqual(top_candidates(file_book, candidates, "hardcover"), candidates)
 
 
-def _reply(pick, confidence):
-    content = json.dumps(
-        {"pick": pick, "confidence": confidence, "reason": "a recorded reason"}
-    )
+class TheWaitingDayTests(unittest.TestCase):
+    """A book waits for the next UTC day, and is tried again when it arrives."""
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.folder = Path(self._tmp.name)
+        self.backups = Backups(self.folder / "backups")
+        self.calls = 0
+        self.addCleanup(self._tmp.cleanup)
+
+    def book(self, name="Holy Island.epub"):
+        return write_epub(self.folder / name, HOLY_ISLAND_BOOK, version="2.0")
+
+    def corrector(self, llm):
+        return Corrector(
+            sources=[FakeSource(found=None, candidates=[BELSAY_RECORD])],
+            backups=self.backups,
+            llm=llm,
+            fetch=no_network,
+        )
+
+    def llm(self, *names, status=503, body=b"nope"):
+        self.calls += 1
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key=KEY,
+            daily_limit=0,
+            counter=self.folder / f"llm-{self.calls}.json",
+            transport=Replay(*names, status=status, body=body),
+        )
+
+    def test_forgetting_yesterdays_wait_leaves_todays_alone(self):
+        waiting = {
+            Path("today.epub"): ("2026-09-19", "the endpoint is down"),
+            Path("yesterday.epub"): ("2026-09-18", "the endpoint is down"),
+        }
+
+        forget_yesterdays_waits(waiting, "2026-09-19")
+
+        self.assertEqual(
+            list(waiting), [Path("today.epub")], "only the other day's are forgotten"
+        )
+
+    def test_a_waited_book_is_asked_again_when_the_day_has_moved_on(self):
+        """`forget_yesterdays_waits` is what the next day's pass runs first."""
+        waiting = {
+            Path("today.epub"): ("2026-09-19", "the endpoint is down"),
+            Path("yesterday.epub"): ("2026-09-18", "the endpoint is down"),
+        }
+
+        forget_yesterdays_waits(waiting, "2026-09-20")
+
+        self.assertEqual(waiting, {}, "both are the other day's now")
+
+
+class ThePerSourceCapTests(unittest.TestCase):
+    """The cap is per source, not over the whole prompt.
+
+    Q7 caps "each source's contribution at 5 candidates", because what it guards
+    against is one source's long tail burying the right record. A cap over the
+    merged list would do the opposite of that: the first source to answer would
+    spend the whole prompt, and a second source's best record would never be
+    shown at all.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.folder = Path(self._tmp.name)
+        self.backups = Backups(self.folder / "backups")
+        self.calls = 0
+        self.addCleanup(self._tmp.cleanup)
+
+    def book(self, name="Holy Island.epub"):
+        return write_epub(self.folder / name, HOLY_ISLAND_BOOK, version="2.0")
+
+    def llm(self, *names):
+        self.calls += 1
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key=KEY,
+            daily_limit=0,
+            counter=self.folder / f"llm-{self.calls}.json",
+            transport=Replay(*names),
+        )
+
+    def corrector(self, llm, *sources):
+        return Corrector(
+            sources=list(sources),
+            backups=self.backups,
+            llm=llm,
+            fetch=no_network,
+        )
+
+    def test_a_source_that_answers_first_does_not_spend_the_whole_prompt(self):
+        """Two sources, one candidate each: both are shown, not one of them."""
+        llm = self.llm("belsay-picked.json")
+        first = FakeSource(found=None, candidates=[BELSAY_RECORD])
+        second = FakeSource(found=None, candidates=[BERWICK], name="google_books")
+
+        self.corrector(llm, first, second).correct(self.book())
+
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn("title=Belsay", prompt)
+        self.assertIn("title=Berwick", prompt)
+
+    def test_both_sources_still_contribute_their_best_few(self):
+        """Each keeps its own best of a tail, rather than one taking all five."""
+        llm = self.llm("belsay-picked.json")
+        hardcover = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title=f"Belsay {number}",
+                    authors=("L.J. Ross",),
+                )
+                for number in range(1, 7)
+            ],
+        )
+        google = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="google_books",
+                    title=f"Berwick {number}",
+                    authors=("L.J. Ross",),
+                )
+                for number in range(1, 7)
+            ],
+            name="google_books",
+        )
+
+        self.corrector(llm, hardcover, google).correct(self.book())
+
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn("title=Belsay 1", prompt, "the first source's best")
+        self.assertIn("title=Berwick 1", prompt, "and the second's")
+        self.assertEqual(prompt.count("title="), 10, "five from each, not five in all")
+
+    def test_the_prompt_does_not_grow_past_what_the_sources_offer(self):
+        llm = self.llm("belsay-picked.json")
+        source = FakeSource(found=None, candidates=[BELSAY_RECORD, BERWICK])
+
+        self.corrector(llm, source).correct(self.book())
+
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertEqual(prompt.count("title="), 2)
+
+
+def _reply_with(content, confidence=None, finish="stop"):
+    """A reply body the way the API shapes one, carrying this content.
+
+    `confidence` is set only by the callers that want the model's own reason
+    written for them; a parser test hands the whole content in itself.
+    """
+    if confidence is not None:
+        content = json.dumps(
+            {"pick": content, "confidence": confidence, "reason": "a recorded reason"}
+        )
     return json.dumps(
         {
             "choices": [
                 {
                     "message": {"role": "assistant", "content": content},
-                    "finish_reason": "stop",
+                    "finish_reason": finish,
                 }
             ]
         }
     ).encode("utf-8")
+
+
+def _reply(pick, confidence):
+    return _reply_with(pick, confidence)
 
 
 class ConfiguredLimitTests(unittest.TestCase):
