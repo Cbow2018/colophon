@@ -659,19 +659,6 @@ class OtherFieldTests(EpubTestCase):
         self.assertEqual(changed, ())
         self.assertEqual(path.read_bytes(), before)
 
-    def test_clearing_a_field_is_not_the_same_as_leaving_it_alone(self):
-        """`None` means the source said nothing; `""` means take it off.
-
-        Nothing in CBO-38's rules spells the second one, but the two must not be
-        the same thing, or a field could never be removed at all.
-        """
-        path = write_epub(self.folder / "Cragside.epub", WITH_THE_OTHER_FIELDS)
-
-        changed = correct(path, Edits(description=""))
-
-        self.assertEqual(changed, ("description",))
-        self.assertIsNone(read(path).description)
-
     def test_the_isbn_and_the_language_can_be_written_too(self):
         path = write_epub(self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>")
 
@@ -690,6 +677,46 @@ class OtherFieldTests(EpubTestCase):
         correct(path, Edits(isbn="9781521748831"))
 
         self.assertEqual(text_of(path, "identifier"), "urn:isbn:9781521748831")
+
+    def test_the_same_isbn_in_another_form_is_not_a_change(self):
+        """`urn:isbn:…`, a hyphenated ISBN and a bare one are one number.
+
+        The comparison is of the digits, so a book already carrying this ISBN -
+        however it is spelt - is not rewritten, and the pass does not report a
+        change it did not make.
+        """
+        for carried in (
+            "urn:isbn:9781521748831",
+            "978-1-5217-4883-1",
+            "9781521748831",
+            "ISBN:9781521748831",
+        ):
+            with self.subTest(carried=carried):
+                path = write_epub(
+                    self.folder / "Cragside.epub",
+                    f'    <dc:title>Cragside</dc:title>\n'
+                    f'    <dc:identifier opf:scheme="ISBN">{carried}</dc:identifier>',
+                    version="2.0",
+                )
+                before = path.read_bytes()
+
+                changed = correct(path, Edits(isbn="9781521748831"))
+
+                self.assertEqual(changed, (), "the same ISBN, spell it how you like")
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_a_different_isbn_is_rewritten_in_place(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            '    <dc:title>Cragside</dc:title>\n'
+            '    <dc:identifier opf:scheme="ISBN">1786813895</dc:identifier>',
+            version="2.0",
+        )
+
+        changed = correct(path, Edits(isbn="9781521748831"))
+
+        self.assertEqual(changed, ("isbn",))
+        self.assertEqual(read(path).isbn, "9781521748831")
 
 
 if __name__ == "__main__":

@@ -25,8 +25,7 @@ from colophon.matching import (
     primary_language,
     search_titles,
 )
-from colophon.sources import SourceError
-from colophon.sources import image as fetch_image
+from colophon.sources import SourceError, fetcher_for
 
 LOG = logging.getLogger("colophon")
 
@@ -202,7 +201,7 @@ class Corrector:
         self.fields = dict(fields or FIELD_DEFAULTS)
         self.add_cover = add_cover
         # How a cover is fetched, injected so no test reaches the network.
-        self.fetch = fetch or fetch_image
+        self.fetch = fetch or fetcher_for()
 
     @classmethod
     def from_config(cls, config, backups):
@@ -326,7 +325,7 @@ class Corrector:
         to read every book's line to notice it. What happens to the book next -
         the retry window, and the `colophon:source-unavailable` tag - is CBO-43's.
         """
-        blamed = _blamed(source)
+        blamed = _label(source.name)
         LOG.warning(
             "%s could not be asked about %s, so the book is left alone: %s",
             blamed,
@@ -500,10 +499,10 @@ def _series_consistent(edits, found, book):
       series the book is in, and its own rule decides whether to write it.
     * If the book ends up in some other series - because the series was skipped,
       or because the source does not name one at all - the source's number is a
-      position in a series this book is not in. It is not written, and the
-      number the file came with is left alone, unless the series around it has
-      changed, in which case it is dropped: it would then be a claim about the
-      wrong series rather than an old number.
+      position in a series this book is not in, so it is not written. The number
+      the file came with stays where it is, and is dropped only when a series
+      was actually written in place of the one around it: a series nobody wrote
+      is not a change, so a book with no series name and a number keeps both.
 
     Both names are compared without regard to case, because a capitalisation
     difference between a file and a record is the same series.
@@ -516,17 +515,20 @@ def _series_consistent(edits, found, book):
     resulting = edits.series if edits.series is not None else book.series
     if edits.series_number is not None:
         # The source's number, on its way in. It belongs to the source's series,
-        # so it is written only if the book ends up in that series; otherwise it
-        # is a position in a series this book is not in, and neither it nor the
-        # file's own number is written.
+        # so it is written only if the book ends up in that series.
         if _same_series(resulting, found.series):
             return edits
         return replace(edits, series_number=None)
 
-    # The file's number, being left alone - which is right only while the series
-    # around it is too. A number whose series has just been replaced is a claim
-    # about the wrong series, so it goes.
-    if book.series_number and not _same_series(resulting, book.series):
+    # The file's number, being left alone - which is right unless the series
+    # around it has actually changed, because then it is a claim about a series
+    # this book is no longer in. A series nobody wrote is not a change: a book
+    # with no series name and a number keeps both.
+    if (
+        book.series_number
+        and edits.series is not None
+        and not _same_series(edits.series, book.series)
+    ):
         return replace(edits, drop_series_number=True)
     return edits
 
@@ -563,13 +565,8 @@ def _build(name, config):
     return source
 
 
-def _blamed(source):
-    """What to call a source in a sentence, as opposed to in a log field."""
-    return _label(source.name)
-
-
 def _label(name):
-    """The label of a source, by name.
+    """What to call a source in a sentence, as opposed to in a log field.
 
     A source names itself the way a log field wants it - `hardcover` - and a
     sentence wants it the way a person writes it, which is the label in

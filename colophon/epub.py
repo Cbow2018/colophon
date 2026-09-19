@@ -93,9 +93,8 @@ class Book:
 class Edits:
     """What a source says the book is. None leaves that field as it was.
 
-    An empty string is not the same as None: it means the field is to be taken
-    off the book. Nothing in the field rules spells that, but the two have to be
-    distinguishable or a field could never be removed at all.
+    There is no way to say "take this field off": no rule spells it, so nothing
+    produces it, and `None` is only ever the source having said nothing.
     """
 
     title: str | None = None
@@ -184,33 +183,39 @@ def correct(path, edits, write=True, cover=None, would_add_cover=False):
 
     An image the file will not take raises `EpubError`, and nothing is written
     before the answer is known, so a caller left holding that error has an
-    untouched book rather than a half-corrected one.
+    untouched book rather than a half-corrected one. The declaration and the
+    image go in together, in one rewrite of the zip, so a failure cannot leave
+    the book saying it has a cover it has not got.
     """
-    package, opf_path, metadata = _open_package(path)
+    package, opf_path, metadata, taken = _open_package(path)
+    folder = _folder_of(opf_path)
     changed = list(_apply(metadata, edits))
-    image = _set_cover(path, package, metadata, cover, would_add_cover)
+    image = _set_cover(package, metadata, folder, taken, cover, would_add_cover)
     if image is not None:
         changed.append("cover")
     if not changed or not write:
         return tuple(changed)
 
-    # The declaration and the metadata go into the package document together,
-    # and the image is added after it: one write for what the book says about
-    # itself, and one for the file that backs the new cover.
-    name, image_bytes, _ = image if image is not None else (None, None, False)
-    _rewrite(path, opf_path, _document(package))
-    if name is not None and image_bytes:
-        _add_image(path, name, image_bytes)
+    document = _document(package)
+    if image is not None and image[1]:
+        _rewrite(path, opf_path, document, image[:2])
+    else:
+        _rewrite(path, opf_path, document)
     return tuple(changed)
 
 
 def _open_package(path):
-    """The package document's tree, where it lives, and its metadata element."""
+    """The package document's tree, where it lives, its metadata, and the book's names.
+
+    Everything the correction needs from the file is read here, in the one open,
+    so nothing downstream has to open the book again to ask it something.
+    """
     try:
         with zipfile.ZipFile(path) as book:
             _refuse_if_locked(book, path)
             opf_path = _package_path(book)
             declared = book.read(opf_path)
+            taken = {entry.filename for entry in book.infolist()}
     except zipfile.BadZipFile as error:
         raise EpubError(f"{path} is not an EPUB: {error}") from error
     except KeyError as error:
@@ -221,7 +226,13 @@ def _open_package(path):
     metadata = _metadata(package)
     if metadata is None:
         raise EpubError(f"{path} has no metadata section to correct")
-    return package, opf_path, metadata
+    return package, opf_path, metadata, taken
+
+
+def _folder_of(opf_path):
+    """The folder the package document lives in, as a zip-name prefix."""
+    folder, _, _ = opf_path.rpartition("/")
+    return f"{folder}/" if folder else ""
 
 
 def _document(package):
@@ -359,17 +370,11 @@ def _as_isbn(text, scheme=None):
 
 
 def _set_text(metadata, name, value):
-    """Put a value on the first dc:<name>, adding the element if it is missing.
-
-    An empty value takes the element off the book, which is the one way a field
-    the design spec never asks to clear can still be cleared.
-    """
+    """Put a value on the first dc:<name>, adding the element if it is missing."""
     value = str(value).strip()
-    elements = _elements(metadata, name)
     if not value:
-        for element in elements:
-            metadata.remove(element)
-        return bool(elements)
+        return False
+    elements = _elements(metadata, name)
     if not elements:
         element = ET.Element(f"{{{DC}}}{name}")
         element.text = value
@@ -388,22 +393,38 @@ def _set_isbn(metadata, isbn):
     identify the file, and the ISBN identifies the edition. An identifier that
     already says it is an ISBN is rewritten in place rather than added to, so a
     book corrected twice does not end up claiming two ISBNs.
+
+    The comparison is of the numbers, not of the strings: `urn:isbn:9781521748831`,
+    `978-1-5217-48831` and `9781521748831` are one ISBN, and writing the same one
+    again in another form would be a change reported for nothing.
     """
-    wanted = f"urn:isbn:{str(isbn).strip()}"
+    wanted = _isbn_digits(isbn)
+    if not wanted:
+        return False
     for element in _elements(metadata, "identifier"):
         text = (element.text or "").strip()
         scheme = (element.get(f"{{{OPF}}}scheme") or "").lower()
         if "isbn" in scheme or text.lower().startswith("urn:isbn:"):
-            if text.lower() == wanted.lower():
+            if _isbn_digits(text) == wanted:
                 return False
-            element.text = wanted
+            element.text = f"urn:isbn:{wanted}"
             element.attrib.pop(f"{{{OPF}}}scheme", None)
             return True
 
     element = ET.Element(f"{{{DC}}}identifier")
-    element.text = wanted
+    element.text = f"urn:isbn:{wanted}"
     _insert_dc(metadata, element)
     return True
+
+
+def _isbn_digits(value):
+    """An ISBN as its digits, so the ways of writing one compare equal."""
+    digits = str(value or "").strip().lower()
+    for prefix in ("urn:isbn:", "isbn:"):
+        if digits.startswith(prefix):
+            digits = digits[len(prefix) :]
+            break
+    return digits.replace("-", "").replace(" ", "").strip()
 
 
 def _set_authors(metadata, authors):
@@ -628,8 +649,8 @@ def _declared_cover(package):
     return False
 
 
-def _set_cover(path, package, metadata, cover, would_add_cover=False):
-    """Add an image as the book's cover, or None when there is nothing to do.
+def _set_cover(package, metadata, folder, taken, cover, would_add_cover=False):
+    """Declare an image the book's cover, or None when there is nothing to declare.
 
     A book that already has a cover keeps it: the setting says a cover is added
     to a book that has none, so being offered one is not a reason to replace
@@ -643,49 +664,55 @@ def _set_cover(path, package, metadata, cover, would_add_cover=False):
     `would_add_cover` the declaration is made and no entry is named for an image,
     which is what a dry run is: what the book would say, without fetching or
     storing the image it would say it about.
+
+    Returns (name, image) for the rewrite to put in the zip, or (None, None) for
+    a declaration with no image behind it. The name is the zip entry's own, which
+    is the href resolved back against the folder the package document lives in.
     """
     if cover is None and not would_add_cover:
         return None
     if _cover_id(metadata) is not None or _declared_cover(package):
         return None
 
-    package_folder = _package_folder(path)
     identifier = _free_id(metadata, COVER_ID)
     # A declaration with no image behind it still needs a media type, and the
     # media type is what says what the image is. Nothing reads it in a dry run;
     # it is the one both sources serve, so it is the least surprising guess.
     media_type = "image/jpeg"
     name = None
-    href = None
     if cover:
         media_type, extension = _image_type(cover)
         if media_type is None:
-            raise EpubError(
-                f"{path}: the offered cover is not an image Colophon recognises"
-            )
-        with zipfile.ZipFile(path) as book:
-            taken = {entry.filename for entry in book.infolist()}
-        digest = hashlib.md5(cover).hexdigest()[:8]
-        name = f"{package_folder}cover-{digest}{extension}"
-        number = 2
-        while name in taken:
-            # The same image under a name the book already uses: not ours to
-            # overwrite, so it goes beside it. Re-running on an unchanged book
-            # never reaches here, because it already says it has a cover.
-            name = f"{package_folder}cover-{digest}-{number}{extension}"
-            number += 1
-        href = _relative_href(name, package_folder)
+            raise EpubError("the offered cover is not an image Colophon recognises")
+        name = _free_name(folder, taken, cover, extension)
 
     manifest = package.find(f"{{{OPF}}}manifest")
     item = ET.SubElement(manifest, f"{{{OPF}}}item")
     item.set("id", identifier)
     item.set("media-type", media_type)
-    if href is not None:
-        item.set("href", href)
+    if name is not None:
+        item.set("href", _relative_href(name, folder))
     if _is_epub3(package):
         item.set("properties", "cover-image")
     _set_meta(metadata, COVER_META, identifier)
-    return name, cover, True
+    return name, cover
+
+
+def _free_name(folder, taken, image, extension):
+    """A name for this image that the book does not already use.
+
+    Built from the image's own bytes, so the same image added twice is the same
+    entry rather than a second copy, and so the name does not depend on when the
+    pass ran. A book that already uses the name keeps it: the new image goes
+    beside it.
+    """
+    digest = hashlib.md5(image).hexdigest()[:8]
+    name = f"{folder}cover-{digest}{extension}"
+    number = 2
+    while name in taken:
+        name = f"{folder}cover-{digest}-{number}{extension}"
+        number += 1
+    return name
 
 
 def _image_type(cover):
@@ -699,14 +726,6 @@ def _image_type(cover):
 def _is_epub3(package):
     """Which of the two layout versions this package document declares."""
     return str(package.get("version", "3.0")).startswith("3")
-
-
-def _package_folder(path):
-    """The folder the package document lives in, as a zip-name prefix."""
-    with zipfile.ZipFile(path) as book:
-        full_path = _package_path(book)
-    folder, _, _ = full_path.rpartition("/")
-    return f"{folder}/" if folder else ""
 
 
 def _relative_href(name, package_folder):
@@ -728,31 +747,17 @@ def _keep_namespace_prefixes(declared):
             ET.register_namespace(prefix.decode() if prefix else "", uri.decode())
 
 
-def _rewrite(path, opf_path, document):
+def _rewrite(path, opf_path, document, image=None):
     """Rewrite the zip with the new package document and nothing else disturbed.
 
     Both handles are closed before the swap: Windows refuses to replace a file
     that anything still has open, so the book is read, closed, and only then
     replaced by the rewritten copy.
-    """
-    half_written = path.parent / f".{path.name}.colophon-new"
-    try:
-        with zipfile.ZipFile(path) as book, zipfile.ZipFile(half_written, "w") as rewritten:
-            for entry in book.infolist():
-                body = document if entry.filename == opf_path else book.read(entry.filename)
-                _copy_entry(rewritten, entry, body)
-        os.replace(half_written, path)
-    except OSError:
-        half_written.unlink(missing_ok=True)
-        raise
 
-
-def _add_image(path, name, image):
-    """Add one image to the book, after everything it already had.
-
-    Its own step rather than part of the package document's: the declaration and
-    the image are written separately so that a refusal - bytes that are not an
-    image - cannot take corrections that are already on disk down with it.
+    `image` is the cover to add, as (zip name, bytes), and it goes into this same
+    rewrite as the last entry - after everything the book already had, so the
+    order it was written in is left as it was. One rewrite, so the book can
+    never end up declaring a cover whose image never arrived.
 
     The entry is stamped with the book's own date, not the clock. Correcting the
     same book twice has to give the same bytes - the relay decides a re-dropped
@@ -766,10 +771,13 @@ def _add_image(path, name, image):
             for entry in book.infolist():
                 if stamped is _EPOCH:
                     stamped = entry.date_time
-                _copy_entry(rewritten, entry, book.read(entry.filename))
-            added = zipfile.ZipInfo(name, stamped)
-            added.compress_type = zipfile.ZIP_DEFLATED
-            rewritten.writestr(added, image)
+                body = document if entry.filename == opf_path else book.read(entry.filename)
+                _copy_entry(rewritten, entry, body)
+            if image is not None:
+                name, cover = image
+                added = zipfile.ZipInfo(name, stamped)
+                added.compress_type = zipfile.ZIP_DEFLATED
+                rewritten.writestr(added, cover)
         os.replace(half_written, path)
     except OSError:
         half_written.unlink(missing_ok=True)

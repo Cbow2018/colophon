@@ -72,14 +72,19 @@ def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):
     a source that could not be asked - and the second one is worth saying out
     loud rather than passing over in silence.
 
-    `transport` is the seam the tests replay recorded covers through; left out,
-    this fetches over HTTP.
+    What comes back is accepted for one reason only, which is that its bytes are
+    an image `epub.is_cover` knows. A `Content-Type` header is not a second
+    opinion: it is whatever the server felt like saying, and a book should not
+    take an image the writer will refuse because a header claimed otherwise.
+
+    `transport` is the seam the tests replay recorded covers through, and it is
+    handed the same `timeout` this was given; left out, this fetches over HTTP.
     """
     if not url:
         return None
     fetch = transport or _fetch
     try:
-        status, body, content_type = fetch(str(url), {"User-Agent": USER_AGENT})
+        status, body = fetch(str(url), {"User-Agent": USER_AGENT}, timeout)
     except SourceError:
         raise
     except Exception as error:
@@ -93,16 +98,25 @@ def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):
         raise SourceError(
             f"the cover is too large to be one ({len(body)} bytes); leaving the book alone"
         )
-    if not is_cover(body) and not str(content_type or "").startswith("image/"):
+    if not is_cover(body):
         raise SourceError("the cover was not an image")
     return body
 
 
-def _fetch(url, headers, timeout=IMAGE_TIMEOUT_SECONDS):
-    """The real fetch: one GET, with whatever status, bytes and type came back."""
+def _fetch(url, headers, timeout):
+    """The real fetch: one GET, with whatever status and bytes came back."""
     request = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, response.read(), response.headers.get("Content-Type")
+            return response.status, response.read()
     except urllib.error.HTTPError as error:
-        return error.code, error.read(), error.headers.get("Content-Type")
+        return error.code, error.read()
+
+
+def fetcher_for(timeout=IMAGE_TIMEOUT_SECONDS):
+    """The real fetch, with its timeout bound, as the corrector calls it.
+
+    The corrector asks for a cover by URL and nothing else, so the timeout is
+    decided here rather than passed through every layer that does not care.
+    """
+    return lambda url: image(url, timeout=timeout)

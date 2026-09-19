@@ -538,6 +538,28 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertEqual(calibre_series(path), ("An Old Series", "3"))
         self.assertNotIn("series_number", {change.field for change in outcome.changed})
 
+    def test_a_number_survives_a_series_nobody_wrote(self):
+        """No series name and a number is a book as it arrived, not a fault.
+
+        Nothing wrote a series, so nothing changed, and a number that has not
+        been orphaned is left where it is - there is no series for it to
+        contradict.
+        """
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <meta name="calibre:series_index" content="3"/>
+""",
+            version="2.0",
+        )
+
+        outcome = self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(path)
+
+        self.assertEqual(calibre_series(path), (None, "3"))
+        self.assertNotIn("series_number", {change.field for change in outcome.changed})
+
     def test_a_number_is_not_written_under_a_series_the_source_does_not_name(self):
         """A number with no series behind it is not a position in anything.
 

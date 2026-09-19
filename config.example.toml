@@ -69,9 +69,11 @@ log_level = "INFO"
 # source that matched is asked, so a book matched from a source with no cover
 # for it is left without one rather than reaching down the priority list.
 #
-# This one comes before the [fields] table below on purpose: in TOML everything
-# after a table header belongs to that table.
-add_cover = true
+# The line below is commented out because `true` is already what Colophon does.
+# Uncomment it - and change it - only to overrule that. It is written before the
+# [fields] table on purpose: in TOML everything after a table header belongs to
+# that table.
+# add_cover = true
 
 # What to do with each metadata field when a source has the book. One rule each:
 #
@@ -79,19 +81,32 @@ add_cover = true
 #   "fill"      - write it only when the file has nothing for that field
 #   "skip"      - never write it; the file keeps what it came with
 #
+# A field written here takes that rule; a field left out keeps the default, and
+# every one of these is its default, so nothing needs uncommenting to get the
+# behaviour described. Uncomment the ones you want to change.
+#
 # Every value written comes from the matched source's own record. Nothing here
 # is generated, and a field the source does not have is never written at all -
 # "fill" on a field a source is silent about is not a blank.
 #
 # The description is the book's blurb, taken from the matched source. Colophon
 # never writes one of its own.
-[fields]
-title = "overwrite"
-authors = "overwrite"
-series = "overwrite"
-series_number = "overwrite"
-description = "fill"
-publisher = "fill"
-date = "fill"
-isbn = "fill"
-language = "fill"
+#
+# The defaults, as the design settled them:
+#
+# [fields]
+# title = "overwrite"
+# authors = "overwrite"
+# series = "overwrite"
+# series_number = "overwrite"
+# description = "fill"
+# publisher = "fill"
+# date = "fill"
+# isbn = "fill"
+# language = "fill"
+#
+# A series number is a position in a named series, so it always follows its
+# series: the source's number is written only when the series the book ends up
+# in is the source's own. Otherwise the file's own number stays, unless a series
+# was written in place of the one around it, and then it is dropped.
+
