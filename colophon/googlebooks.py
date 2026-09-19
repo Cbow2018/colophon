@@ -106,9 +106,9 @@ class GoogleBooks:
             return None
         payload = self._ask(f"isbn:{isbn}")
         for volume in _volumes(payload):
-            found = _candidate(volume)
+            # Only the volume carrying the ISBN is worth turning into a candidate.
             if wanted in _identifiers(volume):
-                return found
+                return _candidate(volume)
         return None
 
     def by_title(self, titles, language=None, author=None):
