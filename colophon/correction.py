@@ -444,7 +444,12 @@ class Corrector:
             LOG.warning(
                 "%s offered a cover for %s that the file would not take, so the "
                 "book is corrected without it: %s",
-                _label(found.source),
+                # `found` is None on the unverified path, and no source offered a
+                # cover there: whatever the file refused, Colophon is what wrote
+                # it - and a log line is not worth an AttributeError on the one
+                # path that must never raise, because the relay would lose the
+                # whole scan rather than this book.
+                _label(found.source) if found is not None else COLOPHON,
                 path.name,
                 error,
             )

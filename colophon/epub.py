@@ -585,7 +585,6 @@ def unmarked(text):
     for note in _NOTES:
         if text.endswith(note):
             return text[: -len(note)].strip() or None
-    return None
 
 
 def has_note(text):

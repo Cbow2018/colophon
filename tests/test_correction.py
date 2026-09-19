@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from colophon import epub as colophon_epub
 from colophon import sources as colophon_sources
 from colophon.backups import Backups
 from colophon.config import (
@@ -19,7 +20,7 @@ from colophon.config import (
     load_config,
 )
 from colophon.correction import SOURCE_SETUP, Corrector
-from colophon.epub import read
+from colophon.epub import EpubError, read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.matching import Candidate
@@ -2713,6 +2714,38 @@ class WhenTheSourceFailsTests(CorrectionTestCase):
 
         self.assertEqual(path.read_bytes(), before, "the book must not change unbacked-up")
         self.assertIn("nothing written", outcome.fragment())
+
+    def test_an_epub_error_while_marking_a_book_is_handled_not_raised(self):
+        """The one thing a source is not: an error handler that cannot cope.
+
+        A book can change between being read and being planned - another process
+        may be rewriting it - and then `epub.correct` raises. The handler says so
+        and leaves the book alone. It used to name the source that refused the
+        cover, which does not exist on the unverified path, and an AttributeError
+        there would take the whole relay scan down rather than one book.
+        """
+        # Written straight, because `book()` builds the ISBN-carrying fixture and
+        # the unverified path is the title path's.
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        before = path.read_bytes()
+        real = colophon_epub.correct
+        calls = []
+
+        def refuse_the_first_plan(*args, **kwargs):
+            calls.append(kwargs.get("write"))
+            if len(calls) == 1:
+                raise EpubError("the file changed underneath us")
+            return real(*args, **kwargs)
+
+        with mock.patch.object(colophon_epub, "correct", refuse_the_first_plan):
+            outcome = self.corrector(source=FakeSource(found=None)).correct(path)
+
+        self.assertEqual(calls, [False], "the planning call is the one that raised")
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified, "the book is still the book it was")
+        self.assertEqual(outcome.changed, ())
+        self.assertEqual(path.read_bytes(), before)
 
 
 class DryRunTests(CorrectionTestCase):
