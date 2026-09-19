@@ -1,0 +1,36 @@
+# Colophon settings. Copy this to config/config.toml and edit it.
+#
+# Every setting here can also be given as an environment variable: the name in
+# capitals with COLOPHON_ in front, e.g. COLOPHON_DRY_RUN=false. The
+# environment wins over this file. Secrets never go in either (later versions
+# read API keys from Docker secrets).
+
+# Watched for new books. Anything dropped here is moved to output_dir.
+ingest_dir = "/ingest"
+
+# Where your library app (CWA, Grimmory, ...) imports from.
+output_dir = "/output"
+
+# Kept copies of originals. For now only identical duplicates land here; from
+# v0.2 the file's original is backed up here before its metadata is changed,
+# and anything older than 30 days is cleared out automatically.
+backup_dir = "/backups"
+
+# On by default, so a fresh install cannot surprise you: Colophon logs what it
+# would do and moves nothing. Set this to false once the log looks right.
+dry_run = true
+
+# How often to look in the ingest folder, in seconds.
+poll_seconds = 5
+
+# How many checks in a row a file must be unchanged before it counts as
+# finished copying. With the default poll_seconds, 2 means about 5 seconds of
+# quiet. Raise it if books arrive over a slow or flaky network share.
+stable_checks = 2
+
+# Name endings that mean a download is still running. These are left alone.
+# Files whose names begin with a dot are always skipped.
+skip_suffixes = [".part", ".tmp", ".!qb", ".crdownload"]
+
+# DEBUG, INFO, WARNING or ERROR.
+log_level = "INFO"

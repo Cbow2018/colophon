@@ -1,0 +1,29 @@
+services:
+  colophon:
+    image: ghcr.io/cbow2018/colophon:v1.0.0   # pin a version, not :latest
+    container_name: colophon
+    restart: unless-stopped
+
+    # PUID:PGID. Use the same user your library app runs as, so it can read
+    # the books Colophon puts in the output folder.
+    user: "1000:1000"
+
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # No ports. Colophon never listens for anything.
+
+    volumes:
+      - ./config:/config:ro
+      - /srv/books/ingest:/ingest
+      - /srv/books/output:/output
+      - /srv/books/backups:/backups
+
+    environment:
+      # Overrides config.toml. Remove this once you trust the log.
+      - COLOPHON_DRY_RUN=true

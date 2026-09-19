@@ -1,0 +1,60 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -t . --verbose
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t colophon:test .
+
+      - name: Relay a book through a read-only, non-root container
+        run: |
+          mkdir -p books/ingest books/output books/backups
+          echo "a book" > books/ingest/Cragside.epub
+
+          docker run --detach --name colophon \
+            --user "$(id -u):$(id -g)" \
+            --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --env COLOPHON_DRY_RUN=false \
+            --env COLOPHON_POLL_SECONDS=1 \
+            --volume "$PWD/books/ingest:/ingest" \
+            --volume "$PWD/books/output:/output" \
+            --volume "$PWD/books/backups:/backups" \
+            colophon:test
+
+          for _ in $(seq 1 30); do
+            [ -f books/output/Cragside.epub ] && break
+            sleep 1
+          done
+
+          docker logs colophon
+          docker stop colophon
+
+          echo "the book arrived"
+          test -f books/output/Cragside.epub
+          echo "and left the ingest folder"
+          test ! -f books/ingest/Cragside.epub
+          echo "owned by the user the container ran as"
+          test "$(stat -c %u books/output/Cragside.epub)" = "$(id -u)"
+          echo "with no ports open"
+          test -z "$(docker port colophon)"
