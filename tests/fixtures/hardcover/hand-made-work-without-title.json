@@ -1,0 +1,17 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9780000000003",
+        "isbn_10": null,
+        "title": "The Edition Title",
+        "language": { "language": "French", "code2": "fr", "code3": "fra" },
+        "book": {
+          "title": null,
+          "contributions": [],
+          "book_series": []
+        }
+      }
+    ]
+  }
+}

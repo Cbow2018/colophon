@@ -1,0 +1,269 @@
+"""Tests for the Hardcover source: what it asks for, and what it makes of the reply.
+
+The replies are real recordings from Hardcover's API, replayed here, so the
+suite needs no key and never touches the network. See
+`fixtures/hardcover/README.md` for what each one is.
+"""
+
+import json
+import unittest
+from pathlib import Path
+
+from colophon.hardcover import Hardcover, SourceError
+from tests.tempdir import TemporaryDirectory
+
+RECORDED = Path(__file__).parent / "fixtures" / "hardcover"
+TOKEN = "hardcover-token-that-must-never-be-logged"
+
+CRAGSIDE = "9781521748831"
+NORMAL_PEOPLE = "9780571334650"
+MISTBORN = "9780765311788"
+THE_HOBBIT = "9780007458424"
+# The ISBN the design spec uses for Cragside, which Hardcover has no edition for.
+NO_SUCH_BOOK = "9781786813891"
+A_HAND_MADE_BOOK = "9780000000003"
+A_WIDER_REPLY = "9780000000004"
+
+
+class Replay:
+    """Stands in for the network: hands back a recorded reply, remembers the request."""
+
+    def __init__(self, name="by-isbn-found.json", status=200):
+        self.body = (RECORDED / name).read_bytes()
+        self.status = status
+        self.sent = None
+
+    def __call__(self, url, headers, body):
+        self.sent = {"url": url, "headers": headers, "body": json.loads(body)}
+        return self.status, self.body
+
+
+def answering(status, body):
+    return lambda url, headers, request: (status, body)
+
+
+class LookupTests(unittest.TestCase):
+    def source(self, replay=None):
+        return Hardcover(TOKEN, transport=replay or Replay())
+
+    def test_it_finds_the_book_by_isbn_and_reads_what_the_source_says(self):
+        book = self.source().by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.source, "hardcover")
+        self.assertEqual(book.title, "Cragside")
+        self.assertEqual(book.authors, ("L.J. Ross",))
+        self.assertEqual(book.series, "DCI Ryan Mysteries")
+        self.assertEqual(book.series_number, "6")
+        self.assertEqual(book.language, "en")
+        self.assertEqual(book.isbn, CRAGSIDE)
+
+    def test_an_isbn_no_edition_carries_is_not_a_match(self):
+        source = self.source(Replay("by-isbn-not-found.json"))
+
+        self.assertIsNone(source.by_isbn(NO_SUCH_BOOK))
+
+    def test_it_asks_about_editions_because_books_carry_no_isbn(self):
+        replay = Replay()
+
+        self.source(replay).by_isbn(CRAGSIDE)
+
+        query = replay.sent["body"]["query"]
+        for wanted in ("editions", "isbn_13", "isbn_10", "book_series", "language"):
+            self.assertIn(wanted, query)
+
+    def test_it_asks_for_the_featured_series_first(self):
+        replay = Replay()
+
+        self.source(replay).by_isbn(CRAGSIDE)
+
+        query = replay.sent["body"]["query"]
+        self.assertIn("featured", query)
+        self.assertIn("featured: desc", query)
+        self.assertIn("position: asc", query)
+
+    def test_it_does_not_ask_for_the_series_details_it_never_uses(self):
+        replay = Replay()
+
+        self.source(replay).by_isbn(CRAGSIDE)
+
+        self.assertNotIn("details", replay.sent["body"]["query"])
+
+    def test_the_isbn_is_sent_as_a_variable_and_not_spliced_into_the_query(self):
+        replay = Replay()
+
+        self.source(replay).by_isbn(CRAGSIDE)
+
+        self.assertEqual(replay.sent["body"]["variables"], {"isbn": CRAGSIDE})
+        self.assertNotIn(CRAGSIDE, replay.sent["body"]["query"])
+
+    def test_it_takes_the_work_title_rather_than_the_edition_title(self):
+        """The Hobbit's edition is called "The Hobbit"; the work is not."""
+        source = self.source(Replay("by-isbn-edition-title.json"))
+
+        book = source.by_isbn(THE_HOBBIT)
+
+        self.assertEqual(book.title, "The Hobbit, or There and Back Again")
+        self.assertEqual(book.authors, ("J.R.R. Tolkien",))
+
+    def test_it_falls_back_to_the_edition_title_when_the_work_has_none(self):
+        source = self.source(Replay("hand-made-work-without-title.json"))
+
+        book = source.by_isbn(A_HAND_MADE_BOOK)
+
+        self.assertEqual(book.title, "The Edition Title")
+        self.assertEqual(book.language, "fr")
+
+    def test_it_takes_authors_and_leaves_the_translator_behind(self):
+        """A reply wider than the question is filtered again, not trusted."""
+        source = self.source(Replay("hand-made-wider-than-the-question.json"))
+
+        book = source.by_isbn(A_WIDER_REPLY)
+
+        self.assertEqual(book.authors, ("The Author",))
+
+    def test_a_standalone_book_comes_back_with_no_series(self):
+        source = self.source(Replay("by-isbn-no-series.json"))
+
+        book = source.by_isbn(NORMAL_PEOPLE)
+
+        self.assertEqual(book.title, "Normal People")
+        self.assertEqual(book.authors, ("Sally Rooney",))
+        self.assertIsNone(book.series)
+        self.assertIsNone(book.series_number)
+
+    def test_it_prefers_the_series_hardcover_marks_as_featured(self):
+        """Mistborn is in three series, and Hardcover lists the featured one last."""
+        source = self.source(Replay("by-isbn-two-series.json"))
+
+        book = source.by_isbn(MISTBORN)
+
+        self.assertEqual(book.series, "The Mistborn Saga: The Original Trilogy")
+        self.assertEqual(book.series_number, "1")
+
+    def test_it_names_itself_to_the_source(self):
+        replay = Replay()
+
+        self.source(replay).by_isbn(CRAGSIDE)
+
+        self.assertEqual(replay.sent["url"], "https://api.hardcover.app/v1/graphql")
+        self.assertIn("Colophon", replay.sent["headers"]["User-Agent"])
+        self.assertEqual(replay.sent["headers"]["Content-Type"], "application/json")
+
+
+class ErrorTests(unittest.TestCase):
+    def test_a_rejected_token_is_a_source_problem(self):
+        source = Hardcover(TOKEN, transport=answering(401, b'{"error":"invalid_token"}'))
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertIn("token", str(caught.exception))
+
+    def test_a_token_without_the_right_scope_is_a_source_problem(self):
+        source = Hardcover(TOKEN, transport=answering(403, b'{"error":"forbidden"}'))
+
+        with self.assertRaises(SourceError):
+            source.by_isbn(CRAGSIDE)
+
+    def test_rate_limiting_is_a_source_problem(self):
+        source = Hardcover(TOKEN, transport=answering(429, b'{"error":"Too Many Requests"}'))
+
+        with self.assertRaises(SourceError):
+            source.by_isbn(CRAGSIDE)
+
+    def test_a_server_error_is_a_source_problem(self):
+        source = Hardcover(TOKEN, transport=answering(500, b"<html>oops</html>"))
+
+        with self.assertRaises(SourceError):
+            source.by_isbn(CRAGSIDE)
+
+    def test_a_reply_that_is_not_json_is_a_source_problem(self):
+        source = Hardcover(TOKEN, transport=answering(200, b"not json at all"))
+
+        with self.assertRaises(SourceError):
+            source.by_isbn(CRAGSIDE)
+
+    def test_graphql_errors_in_the_reply_are_a_source_problem(self):
+        source = Hardcover(
+            TOKEN, transport=answering(200, b'{"errors":[{"message":"no such field"}]}')
+        )
+
+        with self.assertRaises(SourceError):
+            source.by_isbn(CRAGSIDE)
+
+    def test_a_reply_that_does_not_answer_the_question_is_a_source_problem(self):
+        """Better to say we could not ask than to report a book as not found."""
+        source = Hardcover(TOKEN, transport=answering(200, b'{"data":{}}'))
+
+        with self.assertRaises(SourceError):
+            source.by_isbn(CRAGSIDE)
+
+    def test_a_network_failure_is_a_source_problem(self):
+        def refuse(url, headers, body):
+            raise OSError("connection refused")
+
+        with self.assertRaises(SourceError):
+            Hardcover(TOKEN, transport=refuse).by_isbn(CRAGSIDE)
+
+    def test_the_token_never_reaches_the_error_message(self):
+        """Even when the failure itself quotes the headers it was given."""
+        def echoing(url, headers, body):
+            raise OSError(f"could not send {headers}")
+
+        source = Hardcover(TOKEN, transport=echoing)
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertNotIn(TOKEN, str(caught.exception))
+        self.assertIn("[token]", str(caught.exception))
+
+
+class SecretFileTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.folder = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def secret(self, text):
+        path = self.folder / "hardcover_token"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_the_token_comes_from_the_secret_file(self):
+        replay = Replay()
+
+        source = Hardcover.from_secret_file(self.secret(TOKEN + "\n"), transport=replay)
+        source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(replay.sent["headers"]["Authorization"], f"Bearer {TOKEN}")
+
+    def test_a_token_file_that_says_bearer_is_not_doubled_up(self):
+        """A token copied whole from Hardcover's settings page carries its own prefix."""
+        for prefix in ("Bearer ", "bearer ", "BEARER "):
+            with self.subTest(prefix=prefix):
+                replay = Replay()
+
+                source = Hardcover.from_secret_file(
+                    self.secret(f"{prefix}{TOKEN}\n"), transport=replay
+                )
+                source.by_isbn(CRAGSIDE)
+
+                self.assertEqual(replay.sent["headers"]["Authorization"], f"Bearer {TOKEN}")
+
+    def test_no_secret_file_means_there_is_no_source(self):
+        self.assertIsNone(Hardcover.from_secret_file(self.folder / "hardcover_token"))
+
+    def test_an_empty_secret_file_means_there_is_no_source(self):
+        self.assertIsNone(Hardcover.from_secret_file(self.secret("   \n")))
+
+    def test_a_secret_file_that_cannot_be_read_is_a_source_problem(self):
+        unreadable = self.folder / "hardcover_token"
+        unreadable.mkdir()
+
+        with self.assertRaises(SourceError):
+            Hardcover.from_secret_file(unreadable)
+
+
+if __name__ == "__main__":
+    unittest.main()

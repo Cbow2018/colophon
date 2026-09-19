@@ -2,18 +2,26 @@
 
 import logging
 import os
-import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from colophon.backups import Backups
 from colophon.config import Config
-from colophon.relay import Relay, RelayError, temp_name
+from colophon.correction import Corrector
+from colophon.epub import read
+from colophon.files import temp_name
+from colophon.relay import Relay, RelayError
+from tests.opf import calibre_series, epub3_series
+from tests.samplebooks import AS_DOWNLOADED, SIMPLE, write_epub
+from tests.sources import FakeSource
+from tests.tempdir import TemporaryDirectory
 
 
 class RelayTestCase(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = TemporaryDirectory()
         root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 
@@ -352,6 +360,138 @@ class LoggingTests(RelayTestCase):
 
         self.assertEqual(len(captured.output), 1)
         self.assertIn("collision", captured.output[0])
+
+
+class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
+    """A book carrying an ISBN is corrected before it reaches the output folder."""
+
+    def setUp(self):
+        super().setUp()
+        self.source = FakeSource()
+        self.relay = Relay(
+            self.config,
+            corrector=Corrector(
+                source=self.source,
+                backups=Backups(self.backups),
+                dry_run=False,
+            ),
+        )
+
+    def drop_a_book(self):
+        return write_epub(self.ingest / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+    def backups_kept(self):
+        return sorted(path.name for path in self.backups.iterdir())
+
+    def test_the_book_that_reaches_output_carries_the_corrected_metadata(self):
+        self.drop_a_book()
+
+        self.settle()
+
+        delivered = self.output / "Cragside.epub"
+        book = read(delivered)
+        self.assertEqual(book.title, "Cragside")
+        self.assertEqual(book.authors, ("L.J. Ross",))
+        self.assertEqual(calibre_series(delivered), ("DCI Ryan Mysteries", "6"))
+        self.assertEqual(epub3_series(delivered), ("DCI Ryan Mysteries", "series", "6"))
+
+    def test_the_original_is_backed_up_before_it_is_changed(self):
+        original = self.drop_a_book().read_bytes()
+
+        self.settle()
+
+        self.assertEqual(self.backups_kept(), ["Cragside.epub"])
+        self.assertEqual((self.backups / "Cragside.epub").read_bytes(), original)
+        self.assertNotEqual((self.output / "Cragside.epub").read_bytes(), original)
+
+    def test_the_single_line_says_the_match_the_confidence_the_fields_and_the_source(self):
+        self.drop_a_book()
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        line = "\n".join(captured.output)
+        self.assertIn("moved", line)
+        self.assertIn("hardcover matched ISBN 9781521748831", line)
+        self.assertIn("confidence 1.00", line)
+        self.assertIn('title="Cragside"<-hardcover', line)
+        self.assertIn('series_number="6"<-hardcover', line)
+        self.assertEqual(len(captured.output), 1, "still one line per book")
+
+    def test_the_line_says_when_there_was_no_isbn_to_look_up(self):
+        write_epub(self.ingest / "Cragside.epub", SIMPLE, version="2.0")
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        self.assertIn("no ISBN", "\n".join(captured.output))
+
+    def test_a_re_dropped_book_is_a_duplicate_of_the_one_already_corrected(self):
+        original = self.drop_a_book().read_bytes()
+        self.settle()
+
+        (self.ingest / "Cragside.epub").write_bytes(original)
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        self.assertEqual(read(self.output / "Cragside.epub").title, "Cragside")
+        self.assertEqual(self.backups_kept(), ["Cragside (2).epub", "Cragside.epub"])
+        self.assertEqual(list(self.ingest.iterdir()), [])
+        self.assertIn("duplicate", captured.output[0])
+        self.assertIn("already kept as a backup", captured.output[0])
+
+    def test_a_stale_backup_is_cleared_out_without_being_asked(self):
+        stale = self.backups / "Old.epub"
+        stale.write_text("an original from weeks ago", encoding="utf-8")
+        long_ago = time.time() - 31 * 24 * 60 * 60
+        os.utime(stale, (long_ago, long_ago))
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.relay.scan_once()
+
+        self.assertFalse(stale.exists())
+        self.assertIn("deleted 1 backup older than 30 days", "\n".join(captured.output))
+
+
+class CorrectingInDryRunTests(RelayTestCase):
+    def setUp(self):
+        super().setUp()
+        self.source = FakeSource()
+        self.relay = Relay(
+            Config(
+                ingest_dir=self.ingest,
+                output_dir=self.output,
+                backup_dir=self.backups,
+                dry_run=True,
+                stable_checks=2,
+            ),
+            corrector=Corrector(
+                source=self.source,
+                backups=Backups(self.backups),
+                dry_run=True,
+            ),
+        )
+
+    def test_it_says_what_it_would_change_and_moves_and_backs_up_nothing(self):
+        write_epub(self.ingest / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle(times=6)
+
+        line = "\n".join(captured.output)
+        self.assertIn("would move", line)
+        self.assertIn("would change", line)
+        self.assertIn('title="Cragside"<-hardcover', line)
+        self.assertTrue((self.ingest / "Cragside.epub").exists())
+        self.assertEqual(list(self.output.iterdir()), [])
+        self.assertEqual(list(self.backups.iterdir()), [])
+
+    def test_it_asks_the_source_once_however_many_scans_a_book_sits_there(self):
+        write_epub(self.ingest / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        self.settle(times=6)
+
+        self.assertEqual(len(self.source.asked), 1)
 
 
 if __name__ == "__main__":

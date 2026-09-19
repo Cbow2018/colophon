@@ -1,12 +1,12 @@
 """Tests for the entry point: startup, the loop, and shutting down."""
 
 import logging
-import tempfile
 import threading
 import unittest
 from pathlib import Path
 
 from colophon.__main__ import main, run, warn_if_root
+from tests.tempdir import TemporaryDirectory
 
 
 class FakeRelay:
@@ -42,7 +42,7 @@ class RunTests(unittest.TestCase):
 
 class MainTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = TemporaryDirectory()
         self.root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 

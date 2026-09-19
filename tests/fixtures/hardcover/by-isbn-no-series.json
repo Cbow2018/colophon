@@ -1,0 +1,28 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9780571334650",
+        "isbn_10": "0571334652",
+        "title": "Normal People",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "title": "Normal People",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "Sally Rooney"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      }
+    ]
+  }
+}

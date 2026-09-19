@@ -1,0 +1,21 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9780000000004",
+        "isbn_10": null,
+        "title": "A Book With Company",
+        "language": { "language": "English", "code2": "en", "code3": "eng" },
+        "book": {
+          "title": "A Book With Company",
+          "contributions": [
+            { "contribution": "Author", "author": { "name": "The Author" } },
+            { "contribution": "Translator", "author": { "name": "A Translator" } },
+            { "contribution": "Narrator", "author": { "name": "A Narrator" } }
+          ],
+          "book_series": []
+        }
+      }
+    ]
+  }
+}
