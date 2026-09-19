@@ -2,18 +2,18 @@
 
 import logging
 import os
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from colophon.config import Config
 from colophon.relay import Relay, RelayError, temp_name
+from tests.tempdir import TemporaryDirectory
 
 
 class RelayTestCase(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = TemporaryDirectory()
         root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 

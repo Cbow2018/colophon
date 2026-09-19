@@ -1,15 +1,15 @@
 """Tests for reading config.toml and applying environment overrides."""
 
-import tempfile
 import unittest
 from pathlib import Path
 
 from colophon.config import ConfigError, load_config
+from tests.tempdir import TemporaryDirectory
 
 
 class LoadConfigTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 
