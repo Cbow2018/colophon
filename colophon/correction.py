@@ -105,9 +105,14 @@ class Outcome:
                 return f"[{self.problem}]"
             if self.passed_over is not None:
                 # The best explanation of this file, and what was wrong with it.
+                # The sources are named here for the same reason they are named
+                # when nothing was found at all: the reader has no match to
+                # anchor on, and "confidence 0.84 - against which source?" is
+                # the next question they would have.
                 return (
-                    f"[no edition is called {self.sought} confidently enough: "
-                    f"{self.passed_over}, confidence {self.confidence:.2f}]"
+                    f"[no source{self._among()} has an edition called {self.sought} "
+                    f"confidently enough: {self.passed_over}, "
+                    f"confidence {self.confidence:.2f}]"
                 )
             return f"[{self._nothing_found()}]"
 
@@ -131,18 +136,22 @@ class Outcome:
         )
         return f"[{head}; {'changed' if self.applied else 'would change'} {fields}]"
 
-    def _nothing_found(self):
-        """The one line that names every source asked, since none of them had it.
+    def _among(self):
+        """The sources that were tried, for the log lines that have no match.
 
         A book that was matched says which source matched it, and the sources
         that were passed over on the way are reconstructible from the config. A
-        book that nothing matched has no such anchor, so this is where the
-        sources that were tried are worth writing down.
+        book that was not matched has no such anchor, so the sources that were
+        actually asked are worth writing down - on both the near-miss line and
+        the nothing-found line, which are the two that have no match to name.
         """
-        among = f" among {', '.join(self.tried)}" if self.tried else ""
+        return f" among {', '.join(self.tried)}" if self.tried else ""
+
+    def _nothing_found(self):
+        """The line for a book not one source had, naming every source asked."""
         if self.sought:
-            return f"no source{among} has an edition called {self.sought}"
-        return f"no source{among} carries ISBN {self.isbn}"
+            return f"no source{self._among()} has an edition called {self.sought}"
+        return f"no source{self._among()} carries ISBN {self.isbn}"
 
 
 class Corrector:

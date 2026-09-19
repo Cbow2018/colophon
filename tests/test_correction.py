@@ -713,7 +713,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         ).correct(path)
 
         self.assertFalse(outcome.matched)
-        self.assertIn("Cragside", outcome.fragment())
+        self.assertIn(
+            "no source among hardcover has an edition called Cragside", outcome.fragment()
+        )
         self.assertIn("confidence 0.84", outcome.fragment())
         self.assertIn("contained", outcome.fragment())
 
@@ -936,7 +938,10 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         ).correct(path)
 
         self.assertFalse(outcome.matched)
-        self.assertIn("Cragside", outcome.fragment())
+        self.assertIn(
+            "no source among hardcover, google_books has an edition called Cragside",
+            outcome.fragment(),
+        )
         self.assertIn("confidence 0.84", outcome.fragment())
         self.assertEqual(path.read_bytes(), before, "a book nothing matches is not touched")
         self.assertEqual(self.kept(), [])
