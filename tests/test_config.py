@@ -216,14 +216,19 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(from_env.confidence, 0.7, "the environment wins")
 
     def test_a_threshold_of_one_is_allowed_because_a_perfect_match_is_reachable(self):
-        """1.0 means 'only a match nothing can be doubted about', which happens.
+        """The range is `(0, 1]`, and the top of it is a setting rather than a wall.
 
-        A title and an author that both agree exactly score exactly 1.0, so 1.0 is
-        a setting rather than a threshold nothing can clear.
+        A title and an author that both agree exactly score exactly 1.0, so 1.0
+        refuses everything else without being a value nothing can reach. The
+        boundary is tested from both sides: 1.0 is accepted, and just above it is
+        refused because no candidate could ever clear it.
         """
         config = load_config(env={"COLOPHON_CONFIDENCE": "1.0"})
 
         self.assertEqual(config.confidence, 1.0)
+        for refused in ("1.0000001", "1.5"):
+            with self.subTest(given=refused), self.assertRaises(ConfigError):
+                load_config(env={"COLOPHON_CONFIDENCE": refused})
 
     def test_every_field_has_a_rule_and_the_defaults_are_the_ones_documented(self):
         """The design spec's own list, which is what a fresh install gets."""

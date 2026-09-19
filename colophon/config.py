@@ -97,9 +97,10 @@ class Config:
     add_cover: bool = True
     # How sure a title-and-author match has to be before it is written. At 1.0
     # only a match nothing can be doubted about is accepted, which is a title and
-    # an author that both agree exactly - that scores exactly 1.0 - so the setting
-    # can turn the title path off and leave the ISBN path without being a value
-    # nothing could ever reach.
+    # an author that both agree exactly - those score exactly 1.0, so 1.0 is a
+    # setting that leaves almost every book unverified rather than a value nothing
+    # could reach. It does not turn the title path off: an exact match still
+    # clears it.
     confidence: float = DEFAULT_CONFIDENCE
 
 

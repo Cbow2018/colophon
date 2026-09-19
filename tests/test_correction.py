@@ -1673,21 +1673,18 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     "accepted means the record's values are written",
                 )
 
-    def test_a_threshold_of_one_accepts_only_a_perfect_match(self):
-        """1.0 is the setting that says 'the ISBN path only', and it is coherent.
+    def test_the_top_of_the_range_is_one_and_one_is_a_usable_setting(self):
+        """1.0 is allowed, and it is not "the ISBN path only".
 
-        A title and author match scores exactly 1.0, so it is the one thing that
-        can still clear a threshold of 1.0 - and a candidate that agrees on both
-        halves with a disagreeing series position does not.
+        A title and an author that both agree exactly score exactly 1.0 - the
+        weights add up to one and the series nudge is bounded - so a threshold of
+        1.0 is one a match can reach, which is why `(0, 1]` is the range rather
+        than `(0, 1)`. What it accepts is that exact agreement and nothing else:
+        the 0.94 a contained title earns is refused. The line a threshold of 1.0
+        draws is *certainty*, not *route* - an ISBN match always clears it and an
+        exact title-and-author match does too.
         """
-        never = self.book("Cragside.epub", CRAGSIDE)
-        never_source = FakeSource(found=None, candidates=[A_NEAR_MISS])
-
-        outcome = self.corrector(source=never_source, confidence=1.0).correct(never)
-
-        self.assertFalse(outcome.matched, "0.84 does not clear 1.0")
-        self.assertTrue(outcome.unverified)
-
+        # The top of the range is reachable, and reachable by title.
         perfect = self.book("Perfect.epub", CRAGSIDE)
         perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
@@ -1695,6 +1692,52 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertTrue(outcome.matched, "an exact title and author is exactly 1.0")
         self.assertFalse(outcome.unverified)
+        self.assertIsNone(outcome.isbn, "and it is a title match, not an ISBN one")
+        self.assertEqual(outcome.sought, "Cragside", "found by its title")
+
+        # One step below it is not.
+        contained = self.book("Contained.epub", CRAGSIDE)
+        contained_source = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Cragside: A DCI Ryan Mystery",
+                    authors=("L.J. Ross",),
+                    series="DCI Ryan Mysteries",
+                    series_number="6",
+                    language="en",
+                )
+            ],
+        )
+
+        outcome = self.corrector(source=contained_source, confidence=1.0).correct(
+            contained
+        )
+
+        self.assertFalse(outcome.matched, "0.94 does not clear 1.0")
+        self.assertTrue(outcome.unverified)
+
+        # And the same candidate clears a threshold one step lower, so what
+        # refused it above was the number and not the candidate.
+        accepted = self.book("Accepted.epub", CRAGSIDE)
+
+        outcome = self.corrector(
+            source=FakeSource(found=None, candidates=contained_source.candidates),
+            confidence=0.9,
+        ).correct(accepted)
+
+        self.assertTrue(outcome.matched, "0.94 clears 0.9")
+
+    def test_a_threshold_of_one_refuses_a_near_miss_too(self):
+        """The 0.84 near miss is nowhere near the top of the range."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None, candidates=[A_NEAR_MISS])
+
+        outcome = self.corrector(source=source, confidence=1.0).correct(path)
+
+        self.assertFalse(outcome.matched, "0.84 does not clear 1.0")
+        self.assertTrue(outcome.unverified)
 
     def test_the_best_of_several_candidates_is_the_one_accepted(self):
         """The author's other book is offered first, and the right one wins."""

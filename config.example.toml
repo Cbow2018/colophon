@@ -74,12 +74,17 @@ log_level = "INFO"
 # description - so you can find it in your library without reading logs. Drop a
 # marked book in again once a source has it and the mark comes off.
 #
-# 1.0 is a coherent setting rather than a dead one: a title and an author that
-# both agree exactly score exactly 1.0, so 1.0 means "only a match nothing can be
-# doubted about" and leaves the ISBN path. The line below is the default;
-# uncomment and change it to overrule that. It is written before the [fields]
-# table on purpose: in TOML everything after a table header belongs to that
-# table.
+# 1.0 is a setting rather than a dead one, and it does not mean "ISBN only": a
+# title and an author that both agree exactly score exactly 1.0, so they still
+# clear it. What 1.0 does mean is that nothing short of that is written, which
+# leaves almost every book unverified - and a title and an author that agree
+# exactly is the common case for a book the sources do have, so it is a stranger
+# setting than it sounds. The line below is the default; uncomment and change it
+# to overrule that. It is written before the [fields] table on purpose: in TOML
+# everything after a table header belongs to that table.
+#
+# Anything above 1.0 is refused rather than treated as "match nothing": no
+# candidate can score above 1.0, so it is a typo, not an intention.
 # confidence = 0.85
 
 # Add a cover to a book that has none, from the source that matched it. A book
