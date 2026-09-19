@@ -85,6 +85,19 @@ class Config:
     # The same for Google Books. Unlike Hardcover's token this one is required
     # for the source to work at all: Google gives a keyless caller no queries.
     google_books_key_file: Path = Path("/run/secrets/google_books_key")
+    # The LLM fallback chooser: which OpenAI-compatible endpoint to ask when the
+    # rules cannot decide. One default key file for every provider, because a
+    # per-provider default means switching provider silently means renaming the
+    # Docker secret, and it is easy to end up with no LLM without noticing. An
+    # empty base URL or model means the preset's own.
+    llm_provider: str = "deepseek"
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_key_file: Path = Path("/run/secrets/llm_key")
+    # How many calls a UTC day may spend. 0 means no limit. The counter lives in
+    # a hidden file in the backups folder, beside the originals it must survive.
+    llm_daily_limit: int = 200
+    llm_counter_file: Path = Path("/backups/.colophon-llm.json")
     # Which sources to consult, in order. Both paths - the ISBN one and the
     # title one - walk this same list.
     sources: tuple = KNOWN_SOURCES
@@ -136,6 +149,16 @@ def load_config(env=None):
     )
     values["google_books_key_file"] = Path(
         _setting(env, values, "google_books_key_file", str)
+    )
+    values["llm_provider"] = (
+        str(_setting(env, values, "llm_provider", str)).strip().lower()
+    )
+    values["llm_base_url"] = str(_setting(env, values, "llm_base_url", str)).strip()
+    values["llm_model"] = str(_setting(env, values, "llm_model", str)).strip()
+    values["llm_key_file"] = Path(_setting(env, values, "llm_key_file", str))
+    values["llm_counter_file"] = Path(_setting(env, values, "llm_counter_file", str))
+    values["llm_daily_limit"] = _to_call_limit(
+        _setting(env, values, "llm_daily_limit", int)
     )
     values["sources"] = _to_sources(_setting(env, values, "sources", list))
     values["fields"] = _to_fields(values.pop("fields", {}))
@@ -233,6 +256,23 @@ def _to_confidence(value):
         raise ConfigError(
             f"confidence should be above 0 and at most 1, not {number:g}"
         )
+    return number
+
+
+def _to_call_limit(value):
+    """A daily call limit: a whole number of calls, or 0 for no limit at all.
+
+    Zero is allowed and means what it says, so this cannot be `_to_positive_int`:
+    a user who does not want a limit has to be able to say so.
+    """
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as error:
+        raise ConfigError(
+            f"llm_daily_limit should be a whole number, not {value!r}"
+        ) from error
+    if number < 0:
+        raise ConfigError(f"llm_daily_limit cannot be negative, not {number}")
     return number
 
 

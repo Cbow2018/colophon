@@ -89,6 +89,14 @@ WITHOUT_AUTHOR = """    <dc:title>Cragside</dc:title>
     <dc:language>en</dc:language>
 """
 
+# The series' first book, for the tests where the file is genuinely not among
+# the candidates a source offered: the author agrees and no title does, so the
+# rules score it 0.6 and cannot decide - which is what the LLM is for.
+HOLY_ISLAND = """    <dc:title>Holy Island: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
 # The same book with the initials run together, which is how a file often spells
 # an author a source spaces out, and the other way round from AS_DOWNLOADED.
 INITIALS_WITHOUT_STOPS = """    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)</dc:title>

@@ -119,6 +119,13 @@ class Relay:
             return
 
         outcome = self.correction.correct(path)
+        if outcome.waiting:
+            # The LLM could not be asked, so the book is not finished with. It
+            # stays exactly where it is for the next UTC day: rewriting it would
+            # change its hash, and delivering it would hand the library a book
+            # Colophon knows it has not finished. The correction already said
+            # why, once, so nothing is logged here.
+            return
         correction = outcome.fragment()
         # Correcting a book rewrites it, so what it looked like a moment ago
         # is not what is about to be copied out.

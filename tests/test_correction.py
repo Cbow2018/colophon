@@ -1095,10 +1095,13 @@ class FromConfigTests(unittest.TestCase):
 
     def config(self, **extra):
         # One source's file by default, so a test about that source is not also
-        # a test about the other one's key being absent.
+        # a test about the other one's key being absent. The LLM's key file is
+        # pointed at a path under the temporary folder for the same reason: it is
+        # absent either way, but not at the real `/run/secrets` path.
         settings = {
             "hardcover_token_file": self.folder / "hardcover_token",
             "google_books_key_file": self.folder / "google_books_key",
+            "llm_key_file": self.folder / "llm_key",
             "sources": ("hardcover",),
         }
         settings.update(extra)
@@ -1139,7 +1142,11 @@ class FromConfigTests(unittest.TestCase):
         self.assertEqual([source.name for source in corrector.sources], ["google_books"])
 
     def test_a_source_with_no_key_file_is_skipped_once_then_left_out(self):
-        """Hardcover's token is there; Google Books' key is not set up at all."""
+        """Hardcover's token is there; Google Books' key is not set up at all.
+
+        Said once each, not once per book: the source that is set up, and the
+        LLM that is not.
+        """
         (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
 
         with self.assertLogs("colophon", level="INFO") as captured:
@@ -1149,8 +1156,10 @@ class FromConfigTests(unittest.TestCase):
             )
 
         self.assertEqual([source.name for source in corrector.sources], ["hardcover"])
-        self.assertEqual(len(captured.output), 1, "said once, not once per book")
-        self.assertIn("Google Books key", "\n".join(captured.output))
+        said = "\n".join(captured.output)
+        self.assertEqual(len(captured.output), 2, "said once, not once per book")
+        self.assertIn("Google Books key", said)
+        self.assertIn("no LLM key", said)
 
     def test_a_key_file_that_cannot_be_read_is_not_fatal(self):
         """A path that is not a readable key file is a real error, and said so.

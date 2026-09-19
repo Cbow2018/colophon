@@ -45,6 +45,46 @@ hardcover_token_file = "/run/secrets/hardcover_token"
 # Create one in the Google Cloud console with the Books API enabled.
 google_books_key_file = "/run/secrets/google_books_key"
 
+# The LLM fallback chooser. When the rules cannot decide between the candidates
+# a source offered, an OpenAI-compatible endpoint can be asked which of them is
+# the same book - or that none is. It only ever chooses: every value written
+# still comes from the chosen candidate's own record, and a pick its own
+# reported confidence is not sure of is not applied.
+#
+# Leave the key file out and the LLM is simply not used: uncertain books take
+# the unverified path exactly as they did before. That is the default, because
+# no key file exists until you make one.
+#
+# Anything OpenAI-compatible works. `llm_provider` names a preset that fills in
+# the base URL and a suggested model, and both can be overridden below:
+#
+#   deepseek (default)  https://api.deepseek.com
+#   anthropic           https://api.anthropic.com/v1/
+#   gemini              https://generativelanguage.googleapis.com/v1beta/openai/
+#   openai              https://api.openai.com/v1
+#   openrouter          https://openrouter.ai/api/v1
+#   groq                https://api.groq.com/openai/v1
+#   ollama              http://localhost:11434/v1/   (no key needed)
+#
+# Any other name is a custom endpoint: set llm_base_url and llm_model, and
+# llm_key_file if it needs a key. Only DeepSeek has been tested with Colophon.
+# The rest are their providers' documented endpoints and models.
+#
+# llm_provider = "deepseek"
+# llm_base_url = ""            # empty means the preset's own
+# llm_model = ""               # empty means the preset's suggestion
+
+# Where the Docker secret holding your LLM API key is mounted. A path, never
+# the key itself, and one file for every provider: switching provider should
+# mean changing these settings, not renaming the secret. Ollama ignores it.
+# llm_key_file = "/run/secrets/llm_key"
+
+# How many calls a UTC day may spend, counted in /backups/.colophon-llm.json as
+# calls are made, whether or not they succeed. 0 means no limit. A book that
+# could not be asked - the limit is spent, the endpoint is down, the key was
+# refused - waits in the ingest folder untouched until the next UTC day.
+# llm_daily_limit = 200
+
 # On by default, so a fresh install cannot surprise you: Colophon logs what it
 # would do and moves nothing. Set this to false once the log looks right.
 dry_run = true

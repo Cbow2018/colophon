@@ -41,11 +41,18 @@ class Backups:
 
         Identical duplicates the relay filed here are ordinary files as far as
         this is concerned; a folder left empty is tidied away with them.
+
+        A name starting with a dot is not an original and is never deleted: the
+        LLM call counter lives in this folder, and a folder-clearing pass is
+        exactly how it would otherwise disappear - which would hand a
+        crash-looping container a fresh daily limit on every restart.
         """
         cutoff = time.time() - self.retention_days * SECONDS_A_DAY
         deleted = []
         for folder, subfolders, names in os.walk(self.folder, topdown=False):
             for name in names:
+                if name.startswith("."):
+                    continue
                 path = Path(folder) / name
                 if _older_than(path, cutoff) and _remove(path):
                     deleted.append(path)

@@ -243,6 +243,45 @@ sentence and leaving the rest of the description as it was.
 
 The threshold is `confidence`, `0.85` by default; see the table below.
 
+## Asking an LLM to choose
+
+Sometimes the rules cannot decide but a person could: the book is *Belsay*, the
+candidate list is every other book in the series, and the title and the author
+alone do not separate them. If you give Colophon an LLM, it is asked one
+question about the candidates the sources did offer - which of these is the same
+book, or is none of them - and answers with a number, a confidence of its own and
+a one-line reason.
+
+It chooses; it never writes. Whatever is written still comes from the chosen
+candidate's own record, the confidence it reports is held to the same
+`confidence` threshold as the rules, and a book it rejects is marked unverified
+like any other. The line says when the LLM was the one that decided:
+
+```
+[hardcover matched Belsay by title and author, confidence 0.98 (llm picked candidate 1, its own confidence 0.98: Title 'Belsay' matched the file exactly.); changed ...]
+```
+
+Any OpenAI-compatible endpoint works. The presets are `deepseek` (the default),
+`anthropic`, `gemini`, `openai`, `openrouter`, `groq` and `ollama`; anything
+else is a custom `llm_base_url`. **Without a key file the LLM is simply not
+used**, and uncertain books take the unverified path as they always did - which
+is the default, since no key file is set up until you make one. Ollama is local
+and needs no key at all.
+
+Put the key in a file, as the other secrets are, and mount it at the path
+`llm_key_file` points to (`/run/secrets/llm_key` by default). One file, for
+every provider: switching provider means changing settings, not renaming the
+secret.
+
+A book the LLM could not be asked about - the endpoint is down, the key was
+refused, or the day's calls are spent - is **left in the ingest folder**,
+untouched and not delivered, and skipped until the next UTC day. It is not
+marked: nothing answered, so nothing is final. `llm_daily_limit` is
+`200` calls a UTC day by default, counted in
+`/backups/.colophon-llm.json` and counted whether or not the call succeeded;
+`0` means no limit. That counter is deliberately never deleted by the backup
+cleanup, so a container that restarts does not get a fresh day's calls.
+
 ## Settings
 
 All settings live in `config.toml`; see `config.example.toml` for the full list
@@ -258,6 +297,11 @@ the same name in capitals, prefixed with `COLOPHON_`:
 | `sources` | `COLOPHON_SOURCES` | `hardcover,google_books` |
 | `hardcover_token_file` | `COLOPHON_HARDCOVER_TOKEN_FILE` | `/run/secrets/hardcover_token` |
 | `google_books_key_file` | `COLOPHON_GOOGLE_BOOKS_KEY_FILE` | `/run/secrets/google_books_key` |
+| `llm_provider` | `COLOPHON_LLM_PROVIDER` | `deepseek` |
+| `llm_base_url` | `COLOPHON_LLM_BASE_URL` | the preset's |
+| `llm_model` | `COLOPHON_LLM_MODEL` | the preset's |
+| `llm_key_file` | `COLOPHON_LLM_KEY_FILE` | `/run/secrets/llm_key` |
+| `llm_daily_limit` | `COLOPHON_LLM_DAILY_LIMIT` | `200` |
 | `add_cover` | `COLOPHON_ADD_COVER` | `true` |
 | `confidence` | `COLOPHON_CONFIDENCE` | `0.85` |
 | `dry_run` | `COLOPHON_DRY_RUN` | `true` |
