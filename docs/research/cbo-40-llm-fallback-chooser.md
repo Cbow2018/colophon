@@ -71,25 +71,46 @@ quietly rewrites hides a change from the user.
 The legacy `/v1` path still works (`POST https://api.deepseek.com/v1/chat/completions`
 → HTTP 200), but the official base URL carries no version segment at all.
 
-### 2. JSON mode is required, and it is not self-enforcing
+### 2. The system prompt is what produces the contract, not `response_format`
 
-`response_format: {"type": "json_object"}` produced the contract reply every time.
-Without it — with a neutral system prompt that asked for nothing in particular —
-the model answered in prose:
+This was measured twice, because the first reading of it was wrong. The first
+recording pass asked the Belsay-absent question **without** `response_format` and
+still got a clean contract object, and the note originally credited
+`response_format` for that. The two runs differed in *two* ways — the system
+prompt as well — so the factors were separated afterwards, one at a time, with
+the same question throughout:
 
-```
-The book is **Belsay** by **LJ Ross**.\n\nThe matching candidate is:\n\n**1. title='Belsay'
-author='L.J. Ross' series='DCI Ryan Mysteries' position='23' year='2021' publisher='…'
-isbn='…' language='en'**
-```
+| System prompt | `response_format` | Reply |
+| --- | --- | --- |
+| The contract prompt (below) | **omitted** | **bare contract object**, `pick: null`, `confidence: 0.98` |
+| Neutral ("You are a helpful assistant.") | omitted | prose |
+| Neutral | **sent** | **HTTP 400** |
+| Asks for "JSON" but not the contract | omitted | `{"answer": null}` — JSON, but not the contract |
 
-So the `{"pick": ...}` contract holds *because of* `response_format`. That prose
-reply is committed as `tests/fixtures/llm/prose-not-json.json`, because "a reply
-that is not JSON counts as null" needs a real one to test against.
+So **the system prompt is what holds the contract**, and it held it three times
+without `response_format` — every `belsay-absent` recording is one of those runs.
+The prose reply above is a *neutral* prompt's answer, not a missing
+`response_format`'s. `response_format` does two other things, neither of them the
+contract:
+
+- **It requires the word "JSON" in the messages.** The neutral prompt has no such
+  word and is refused with a 400 (measured again here, with `belsay-absent`'s own
+  prompt as the control). The contract prompt does contain it, which is why
+  `response_format` is accepted alongside it.
+- **It constrains the reply to some JSON object, not to the object we asked
+  for.** "Asks for JSON but not the contract" answered `{"answer": null}` — valid
+  JSON, no `pick`, and therefore a null by the parsing rules.
+
+The prose reply is committed as `tests/fixtures/llm/prose-not-json.json`, because
+"a reply that is not JSON counts as null" needs a real one to test against.
+Whether the shipped request sends `response_format` at all is a live question —
+see "The one decision left open" at the end.
 
 **The word "JSON" must be in the prompt, and this is a hard requirement rather
-than a nicety.** A system prompt asking for "an object with pick, confidence and
-reason" — no mention of JSON — was refused outright:
+than a nicety** — it is what makes `response_format` usable at all. A system
+prompt asking for "an object with pick, confidence and reason" — no mention of
+JSON — was refused outright, and the contract prompt below contains the word
+deliberately:
 
 ```
 HTTP 400  {"error": {"message": "...", ...}}     (response_format json_object
@@ -169,10 +190,11 @@ Both were asked live, with the real candidate records from
 | Belsay removed | Berwick #24, Holy Island #1, The Infirmary (Carly Reagon) | `{"pick": null, "confidence": 0.95, "reason": "Title 'Belsay' does not match any candidate title; candidates are different books in the series."}` |
 
 The absent case is the one that carries an awkward truth: **`pick: null` came with
-a high confidence** — `0.95` in the recording the suite keeps, and `1.0` in a
-second variant of the same request. A confidence of 1.0 on a null pick is honest —
-the model is certain that none of them is the book — but it means the gate must
-never read "confidence clears the threshold" as "there is something to write".
+a high confidence** — `0.95` in `belsay-absent.json`, and `1.0` in a second
+variant of the same request, which is committed as
+`null-pick-confident.json`. A confidence of 1.0 on a null pick is honest — the
+model is certain that none of them is the book — but it means the gate must never
+read "confidence clears the threshold" as "there is something to write".
 
 An empty candidate list was also asked, and answered
 `{"pick": null, "confidence": 0.0, ...}`. That is a legitimate shape, and the
@@ -231,6 +253,12 @@ parameter (Anthropic's compatibility layer, possibly Gemini's) will answer prose
 a fenced code block, and **that becomes `null` as the ticket says**. There is
 explicitly **no fence-stripping**: unwrapping ```json is guessing at a reply we
 said we would not guess at.
+
+*One premise of this answer was later found to be wrong and is corrected in §2:
+the contract is held by the **system prompt**, not by `response_format`, and the
+system prompt held it without `response_format` three times. The answer is still
+the recommendation, for the reliability reason rather than the contract one, but
+it is now the one open decision in this note — see the end.*
 
 **Q3. What counts as a malformed reply.** → **`null`, all of these:** not JSON;
 missing or non-string content; `pick` not a real integer; `pick` out of range for
@@ -511,9 +539,16 @@ code has to keep them apart:
 
 | Situation | Goes where |
 | --- | --- |
-| No candidate cleared the threshold, LLM unavailable or unconfigured | **Unverified path** — tagged, final state (CBO-39) |
-| No candidate cleared the threshold, LLM available but the limit is reached or the call failed | **Waits in ingest**, untouched, skipped until the next UTC day (Q8, Q12) |
-| The LLM answered | Applied if its confidence clears the threshold and the pick is not null; otherwise the unverified path |
+| No candidate cleared the threshold, and **no LLM is configured** (no key file for a preset that needs one) | **Unverified path, immediately** — tagged, final state. Never the waiting path (Q16), or a fresh install with no LLM key would hold every uncertain book forever |
+| No candidate cleared the threshold, LLM configured but **unreachable**, or the **daily limit is reached** | **Waits in ingest**, untouched, skipped on later scans until the next UTC day (Q8, Q12) |
+| **The LLM answered `null`** | **Unverified path** — tagged, final state, and the null is never written from. Never the waiting path: the LLM answered, so there is nothing to wait for (CBO-39) |
+| The LLM answered with a pick | Applied if its confidence clears the threshold; otherwise the unverified path |
+
+The third row is the one easiest to get wrong: a `null` reply **is an answer**, so
+it ends in the unverified path exactly as a failed rule-based match does. It must
+not be confused with "the LLM could not be asked", which is the row above it and
+is the only case that waits. Note also that a null pick can arrive with a high
+confidence (§5), so the decision is the `pick`, not the number.
 
 `Corrector.correct()` currently always returns an `Outcome`, and the relay always
 delivers. **A waiting book needs a third answer** — something the relay reads as
@@ -535,6 +570,25 @@ stop-on-source-error rule would now fail a book that used to succeed. **The walk
 must keep its existing stop-on-error behaviour for the books it can already match,
 and only touch the remaining sources when the rules did not answer.**
 
+### A 4xx that is not 401 or 429 repeats every day
+
+Worth its own rule, because treating it as an outage is silently fatal. Under Q12
+**every** LLM failure sends the book back to wait for the next UTC day — which is
+correct for a 5xx or a 429, where waiting genuinely helps. A **4xx other than 401
+and 429** is not like that. An unknown model name (measured: HTTP 400, "The
+supported API model names are deepseek-flash, deepseek-v4-pro, but you passed
+…"), a rejected `response_format`, a bad base URL that happens to answer 4xx —
+none of those will behave differently tomorrow. The book waits, the book is tried
+again the next day, and it fails identically, forever. Nothing surfaces except the
+book never arriving.
+
+So the log line for this class must say plainly that it is **probably a
+configuration problem, not an outage** — naming the status and the provider's own
+message — and it must be logged at WARNING rather than buried in the per-book
+line. The distinction to carry: 401 (a bad key) is CBO-44's to act on, 429 and 5xx
+are temporary, and everything else in the 4xx range is a misconfiguration. All of
+it is redacted before logging, per §4.
+
 ### The daily counter
 
 A JSON file in `/backups`, written atomically (temp file in the same directory,
@@ -551,17 +605,18 @@ fields (`id`, `created`, `system_fingerprint`, `usage`) and nothing else removed
 | --- | --- | --- |
 | `belsay-picked.json` | Belsay present among four candidates → `pick: 1` | The ticket's first required test |
 | `belsay-absent.json` | Belsay removed, Berwick a lookalike → `pick: null` | The ticket's second required test |
+| `null-pick-confident.json` | `pick: null` at `confidence: 1.0` | The null-pick-never-applied test Q23 requires |
 | `prose-not-json.json` | A reply that is prose, not JSON | "A non-JSON reply counts as null" |
 
-The prose recording asks the question with the field list Q23 settled — no
-`source`, no `description` — so it is the request the client really sends, minus
-`response_format`. It still picked the right book, which is worth knowing: the
-dropped fields were not carrying the decision.
+The prose recording is a **neutral** system prompt's answer, so it is not the
+request the client sends — the shipped prompt carries the contract and would not
+have produced it. It is here because the parsing rule needs a real prose reply to
+reject, and this is one.
 
-**One more fixture is needed and must be recorded rather than hand-made:** a reply
-of `{"pick": null, "confidence": 1.0}` — the shape §5 measured — for the
-null-pick-never-applied test Q23 requires. The probe has two such recordings in
-`.tmp/cbo40/`; promote one into `tests/fixtures/llm/` when the ticket is built.
+`null-pick-confident.json` is a separate recording from `belsay-absent.json` on
+purpose. Both conclude `null`, but only this one carries the confidence of `1.0`
+that makes the gate's job explicit, and it is the one the null-pick test should
+read.
 
 No fixture carries a request header or key material, and `.tmp/` is excluded via
 `.git/info/exclude`.
@@ -574,8 +629,9 @@ with Berwick as a lookalike → `null`.
 Parsing tests, all from recorded replies or hand-made bodies: the Q3 list; a
 boolean `pick` (`{"pick": true}`); a float `pick` (`1.0`); `"1"` as a string; an
 out-of-range `pick`; `confidence` outside 0–1; `finish_reason: "length"` with
-parseable content; `pick: null` at `confidence: 1.0`; a 401 whose body is a bare
-string rather than JSON; a 404 with an empty body.
+parseable content; `pick: null` at `confidence: 1.0` (read
+`null-pick-confident.json`); a 401 whose body is a bare string rather than JSON;
+a 404 with an empty body.
 
 Behaviour tests: the LLM is not called with zero candidates; it is called with one;
 a limit of `0` means no limit; the counter survives a restart (a fresh process
@@ -599,3 +655,32 @@ must not pretend otherwise: every recorded reply in `tests/fixtures/llm/` is
 DeepSeek's, the preset table's other six rows are documentation, and the two
 documentation traps that will bite first are Gemini's missing `/v1` and Anthropic's
 ignored `response_format`.
+
+## The one decision left open
+
+Everything else in this note is settled. This one is not, and it was reopened by
+the late probe in §2 rather than by a change of mind.
+
+**Should the shipped request send `response_format` at all?** Q2 answered yes, and
+that answer was given on the reading that `response_format` is what makes the model
+produce the contract. §2 shows that reading was wrong: the **system prompt** holds
+the contract, and it held it without `response_format`, repeatedly. What
+`response_format` actually adds is (a) a requirement that the word "JSON" appear in
+the messages — which the pinned prompt satisfies anyway — and (b) a constraint to
+*some* JSON object, which `{"answer": null}` shows is not the object we asked for.
+
+The case for **keeping it** is that it is a real reliability gain on DeepSeek at no
+cost to the request we care about: providers that ignore it (Anthropic) behave as
+if it were absent, and the fallback when it is refused is a null.
+
+The case for **dropping it** is portability. It is the one field in the body most
+likely to be rejected outright by an OpenAI-*ish* endpoint that is not OpenAI, and
+without it the request is the smallest possible: `model`, `messages`, `max_tokens`.
+The probe measured that the contract survives without it on the only provider
+available to test.
+
+**Recommendation: keep sending it** — the reliability gain is measured, the
+portability risk is unprobed, and a provider that refuses it fails loudly rather
+than quietly. But this is the maintainer's call and it has not been confirmed, so
+the builder should ask before writing the request. What must not happen is the
+builder deciding silently.

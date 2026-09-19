@@ -15,24 +15,33 @@ carries a request header or any key material.
 | --- | --- | --- | --- |
 | `belsay-picked.json` | Belsay present among four candidates | `{"pick": 1, "confidence": 1.0, …}` | recorded |
 | `belsay-absent.json` | Belsay removed, Berwick #24 as a lookalike | `{"pick": null, "confidence": 0.95, …}` | recorded |
-| `prose-not-json.json` | The same question asked with no JSON instruction | prose, not JSON | recorded |
+| `null-pick-confident.json` | Belsay absent, a later asking of the same question | `{"pick": null, "confidence": 1.0, …}` | recorded |
+| `prose-not-json.json` | The same question with a **neutral** system prompt | prose, not JSON | recorded |
 
 `belsay-picked.json` and `belsay-absent.json` are the two cases CBO-40's
-acceptance criteria name. Between them they also settle a design point: the
-absent case answers `null` **with a high confidence** — the model is certain that
-none of the candidates is the book — so a null pick is never applied, whatever
-its confidence says. A reply of `{"pick": null, "confidence": 1.0}` is recorded
-in the probe's raw replies for that test and should be promoted here when the
-ticket is built.
+acceptance criteria name.
 
-`prose-not-json.json` is what a client with no JSON mode produces. Answered with
-a neutral system prompt, the model writes prose rather than the contract object,
-which is why the shipped request always sends
-`response_format: {"type": "json_object"}`. A reply like this one counts as
-`null`.
+`null-pick-confident.json` is the one that keeps the gate honest, and that is why
+it is a separate recording from `belsay-absent.json` rather than a duplicate of it.
+The model answers `null` **with total confidence** — `1.0` — because it is certain
+that none of the candidates is the book. So "the confidence clears the threshold"
+must never be read as "there is something to write": a null pick is never applied,
+whatever its confidence says, and this fixture is what a test asserts that with. A
+confidence of `1.0` and a `pick` of `null` together are the whole point, so do not
+"fix" one of them.
 
-The candidates in these recordings are the real Hardcover records from
+`belsay-absent.json` reaches the same conclusion at a lower confidence (`0.95`) and
+is the recording that carries fewer candidate fields. One shows the conclusion, the
+other pins the confidence the gate has to ignore.
+
+`prose-not-json.json` is a **neutral** system prompt's answer, so it is *not* what
+the shipped client would produce — the shipped prompt carries the JSON contract and
+answered with the contract object even when `response_format` was left out. It is
+here because the parsing rule needs a real prose reply to reject. A reply like this
+one counts as `null`.
+
+The candidates in the three contract recordings are the real Hardcover records from
 `tests/fixtures/hardcover/by-title-*.json`, named the way the shipped prompt
-numbers them. The prompt carries each candidate's title, authors, series,
-series position, year, publisher, ISBN and language, and deliberately does **not**
-carry the source the record came from.
+numbers them. The prompt carries each candidate's title, authors, series, series
+position, year, publisher, ISBN and language, and deliberately does **not** carry
+the source the record came from.
