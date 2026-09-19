@@ -1709,7 +1709,7 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(self.kept(), [])
         self.assertIn("would mark", outcome.fragment(), "a dry run says it would, not that it did")
 
-    def test_the_log_line_says_the_book_was_marked(self):
+    def test_the_line_says_the_book_was_marked(self):
         path = self.book("Cragside.epub", CRAGSIDE)
 
         outcome = self.corrector(source=FakeSource(found=None)).correct(path)
@@ -1717,6 +1717,23 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         line = outcome.fragment()
         self.assertIn("no source among hardcover has an edition called Cragside", line)
         self.assertIn(f"marked {UNVERIFIED_TAG}", line)
+
+    def test_a_book_already_marked_says_so_without_naming_fields(self):
+        """A second pass over a marked book changes nothing, and the line is shorter.
+
+        The mark is not written again and no rule runs, so there is no field list
+        to append - and a line claiming changes that were not made would be worse
+        than one that just says what the book is.
+        """
+        path = self.book("Cragside.epub", CRAGSIDE)
+
+        self.corrector(source=FakeSource(found=None)).correct(path)
+        again = self.corrector(source=FakeSource(found=None)).correct(path)
+
+        self.assertEqual(again.changed, ())
+        self.assertTrue(again.unverified, "still a book nobody could vouch for")
+        self.assertIn(f"marked {UNVERIFIED_TAG}", again.fragment())
+        self.assertNotIn("description<-", again.fragment(), "nothing moved to report")
 
     def test_the_near_miss_line_says_the_book_was_marked_too(self):
         """A near miss is still a miss, so the book is marked and the line says so."""
@@ -2092,8 +2109,7 @@ class TheMarkComingOffAgainTests(CorrectionTestCase):
 
         Crediting `hardcover` with taking off a tag it never saw would be the
         same lie as crediting it with writing one - and a removal has no value to
-        show, so the value column is empty rather than claiming the tag was
-        written.
+        show, so the tag is named the way a blurb is: without one.
         """
         path = self.an_unverified_book()
         source = FakeSource(found=None, candidates=[NO_COVER_MATCH])
@@ -2104,7 +2120,7 @@ class TheMarkComingOffAgainTests(CorrectionTestCase):
         self.assertEqual(len(tagged), 1)
         self.assertEqual(tagged[0].source, "colophon")
         self.assertEqual(tagged[0].value, "", "taken off, not written")
-        self.assertIn('tag=""<-colophon', outcome.fragment())
+        self.assertIn("tag<-colophon", outcome.fragment())
 
     def test_a_blurb_the_source_supplied_is_still_credited_to_the_source(self):
         path = self.an_unverified_book()
@@ -2118,6 +2134,28 @@ class TheMarkComingOffAgainTests(CorrectionTestCase):
             [("hardcover", CRAGSIDE_BLURB)],
             "the note came off and a source's blurb is what went on",
         )
+
+    def test_the_file_s_own_blurb_is_not_credited_to_the_source(self):
+        """A source that has no blurb has not supplied the one left behind.
+
+        The text is the file's own with the note taken off, and a source silent
+        about the description cannot be said to have supplied it - which is the
+        case the log line would get wrong if it went by whether a rule wrote
+        something rather than by who wrote the text.
+        """
+        path = self.an_unverified_book("A house full of secrets.")
+        # The candidate says nothing about the description, so `fill` leaves the
+        # file's alone and removing the note is all that happens to it.
+        source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        blurb = [change for change in outcome.changed if change.field == "description"]
+        self.assertEqual(
+            [(change.source, change.value) for change in blurb],
+            [("colophon", "A house full of secrets.")],
+        )
+        self.assertEqual(read(path).description, "A house full of secrets.")
 
     def rules(self, **rules):
         """Every field's rule, with the ones a test cares about overridden."""

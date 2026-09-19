@@ -83,9 +83,12 @@ empty answer, and the existing recording stands: a second copy of the same bytes
 would have been a fixture with no reader and no new information. The relay test
 that needs it reads that one through a real `GoogleBooks` client.
 
-Hardcover had no recording of an empty title reply at all; the closest was
-`by-isbn-not-found.json`, which is the ISBN path. One recording is therefore new:
-`hardcover/by-title-nothing-found.json`.
+Hardcover had no recording of an empty title reply. The closest was
+`by-isbn-not-found.json`, which is the ISBN path - and asking live for a title
+nobody has produced the *same thirteen bytes*, because what is absent is an
+edition either way. The two questions turned out to have one answer, so the one
+recording is kept and renamed `nothing-found.json`, and both the ISBN test and
+CBO-39's relay test read it.
 
 ## 3. What the probe changed about the ticket's shape
 

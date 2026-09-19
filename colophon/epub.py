@@ -146,6 +146,12 @@ class Edits:
     # a description that is now nothing at all - which is what a marked book
     # whose blurb was only ever the note ends up with.
     drop_description: bool = False
+    # Set when the description being carried is the file's own with the
+    # unverified note taken off it, rather than a blurb a source offered. The log
+    # line needs the difference to credit the right one, and nothing about the
+    # text itself says which it is: a blurb the file came with and a blurb the
+    # source repeats are the same characters.
+    notes_taken_off: bool = False
     # Whether this book is being marked unverified (True), having that mark taken
     # off it (False), or is none of the correction's business (None). One field
     # rather than two because the tag and the note are one mark and go on and off
@@ -339,18 +345,28 @@ def _apply(metadata, edits):
 def _set_unverified_tag(metadata, unverified):
     """Put the unverified tag on a book, or take it off, saying whether it moved.
 
-    One tag and no more: a book that carries it already is left exactly as it is,
-    so a re-dropped file is not rewritten and a second pass reports nothing. The
-    book's own subjects are not touched either way, because a tag says what a
+    Every one of them, on the way off: the tag is meant to be written once, but a
+    book may have been through another tool, or through an older Colophon, that
+    left two - and taking one off while another stays would leave the book still
+    marked while the log said the mark had gone. On the way on, one tag and no
+    more: a book that carries it already is left exactly as it is, so a re-dropped
+    file is not rewritten and a second pass reports nothing.
+
+    The book's own subjects are not touched either way, because a tag says what a
     book is about as well as what became of it, and only one of those two is
     Colophon's to decide.
     """
-    for element in list(_elements(metadata, "subject")):
-        if (element.text or "").strip() == UNVERIFIED_TAG:
-            if unverified:
-                return False
+    found = [
+        element
+        for element in _elements(metadata, "subject")
+        if (element.text or "").strip() == UNVERIFIED_TAG
+    ]
+    if found:
+        if unverified:
+            return False
+        for element in found:
             metadata.remove(element)
-            return True
+        return True
     if not unverified:
         return False
 
@@ -563,10 +579,13 @@ def unmarked(text):
     """
     if not has_note(text):
         return (text or "").strip() or None
+    # `has_note` says one of the three fits, so this finds which and takes it off.
+    # The first that fits wins: the plain forms both end in the bare note, and the
+    # longest is tried first for exactly that reason.
     for note in _NOTES:
         if text.endswith(note):
             return text[: -len(note)].strip() or None
-    return (text or "").strip() or None
+    return None
 
 
 def has_note(text):

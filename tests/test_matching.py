@@ -9,7 +9,7 @@ come back untouched.
 
 import unittest
 
-from colophon.correction import TITLE_CONFIDENCE
+from colophon.config import DEFAULT_CONFIDENCE
 from colophon.matching import (
     AUTHOR_WEIGHT,
     TITLE_WEIGHT,
@@ -198,7 +198,7 @@ class ConfidenceTests(unittest.TestCase):
                 with self.subTest(file=file_title, candidate=candidate.title):
                     match = confidence_of(file_title, candidate=candidate)
                     if not match.agrees:
-                        self.assertLess(match.confidence, TITLE_CONFIDENCE)
+                        self.assertLess(match.confidence, DEFAULT_CONFIDENCE)
 
     def test_a_cleaned_title_and_an_agreeing_author_is_certain(self):
         match = confidence_of(AS_DOWNLOADED)
@@ -365,7 +365,7 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(match.title_score, 1.0, "same title")
         self.assertEqual(match.author_score, 1.0, "and the same person")
         self.assertEqual(match.confidence, 0.9, "0.05 of doubt, under the threshold")
-        self.assertGreaterEqual(match.confidence, TITLE_CONFIDENCE)
+        self.assertGreaterEqual(match.confidence, DEFAULT_CONFIDENCE)
 
     def test_a_wrong_number_still_costs_a_match_that_was_only_contained(self):
         """A weaker title cannot afford the doubt the position adds."""
@@ -381,7 +381,7 @@ class SeriesTests(unittest.TestCase):
 
         self.assertEqual(match.title_score, 0.9, "contained, not equal")
         self.assertEqual(match.confidence, 0.84, "0.94 less the doubt")
-        self.assertLess(match.confidence, TITLE_CONFIDENCE)
+        self.assertLess(match.confidence, DEFAULT_CONFIDENCE)
 
     def test_the_number_picks_between_two_candidates_nothing_else_can(self):
         right = Candidate(title="Berwick", authors=("L.J. Ross",), series_number="24")
@@ -446,7 +446,7 @@ class NearestCandidateTests(unittest.TestCase):
         found = nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [someone_elses])
 
         self.assertEqual(found.candidate, someone_elses)
-        self.assertLess(found.confidence, TITLE_CONFIDENCE)
+        self.assertLess(found.confidence, DEFAULT_CONFIDENCE)
         self.assertEqual(found.why, "same title; no author agrees")
 
     def test_no_candidates_is_no_match_rather_than_an_error(self):

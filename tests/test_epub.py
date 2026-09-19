@@ -814,6 +814,23 @@ class TheUnverifiedMarkTests(EpubTestCase):
 
         self.assertEqual(text_of(path, "description"), "A house full of secrets.")
 
+    def test_unmarking_takes_every_copy_of_the_tag_off(self):
+        """A book another tool left two tags on comes out with none.
+
+        The mark is written once, but a book may have been through something that
+        duplicated it, and taking one off while another stays would leave the book
+        still marked while the log said the mark had gone.
+        """
+        path = self.a_book(
+            f"    <dc:title>Cragside</dc:title>\n"
+            f"    <dc:subject>{UNVERIFIED_TAG}</dc:subject>\n"
+            f"    <dc:subject>{UNVERIFIED_TAG}</dc:subject>"
+        )
+
+        correct(path, Edits(unverified=False, drop_description=True))
+
+        self.assertEqual(subjects(path), [], "both of them, not the first one found")
+
     def test_the_tag_goes_beside_the_book_s_own_subjects(self):
         path = self.a_book(
             '    <dc:title>Cragside</dc:title>\n'

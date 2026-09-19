@@ -470,7 +470,7 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
             self.settle()
 
         line = "\n".join(captured.output)
-        self.assertIn('tag="colophon:unverified"<-colophon', line)
+        self.assertIn("tag<-colophon", line)
         self.assertIn("marked colophon:unverified", line)
         self.assertNotIn("<-hardcover", line.split("marked")[1].split("]")[0])
 
@@ -668,7 +668,12 @@ class ARealNoMatchThroughTheRelayTests(RelayTestCase):
         super().setUp()
 
         def replay_hardcover(url, headers, body):
-            return 200, (HARDCOVER_RECORDED / "by-title-nothing-found.json").read_bytes()
+            # The empty answer: no editions at all. It is the same reply for an
+            # ISBN nobody has and for a title nobody has, because it is the
+            # absence of an edition that is being answered either way - so one
+            # recording serves both questions rather than two files of the same
+            # thirteen bytes.
+            return 200, (HARDCOVER_RECORDED / "nothing-found.json").read_bytes()
 
         def replay_google(url, headers):
             # The recording CBO-37 made for a title nobody has. CBO-39 was

@@ -53,10 +53,6 @@ SOURCE_SETUP = {
 # An exact ISBN match is as certain as metadata matching gets.
 CONFIDENCE = 1.0
 MATCHED_BY = "exact ISBN"
-# A title and author match is never certain, so it has to clear this. The number
-# itself lives in `config`, which is where a user sets it, so that a Corrector
-# built by hand and one built from a config cannot disagree about the default.
-TITLE_CONFIDENCE = DEFAULT_CONFIDENCE
 TITLE_MATCHED_BY = "title and author"
 
 # What a change is attributed to when Colophon itself made it rather than a
@@ -69,7 +65,7 @@ COLOPHON = "colophon"
 # without it: the blurb is a thousand characters of prose that is in the book,
 # and a cover's value is bytes. The line's job is which fields moved and who
 # supplied them.
-_NAME_ONLY = ("description", "cover")
+_NAME_ONLY = ("description", "cover", "tag")
 
 # The formats whose metadata Colophon understands. Everything else - PDFs,
 # comics, MOBI - passes straight through, untouched and unread. Kobo writes
@@ -114,6 +110,9 @@ class Outcome:
     # confidently is not corrected - it keeps the metadata it came with - but it
     # is marked, so it can be found in the library without reading a log.
     unverified: bool = False
+    # Whether a correction was actually written. A dry run reports every change
+    # and applies none, so the two cannot be told apart from `changed`.
+    dry_run: bool = False
 
     def fragment(self):
         """The bracketed part of the log line, or nothing when there is nothing to say."""
@@ -179,7 +178,11 @@ class Outcome:
         """
         if not self.unverified:
             return ""
-        marked = f"; {'marked' if self.applied else 'would mark'} {UNVERIFIED_TAG}"
+        # "would" is the dry run's word, and it is asked of the mode rather than
+        # of whether anything moved: a book that is already marked and still
+        # unmatched has nothing to write but is still, on a real pass, marked -
+        # and a line calling that a "would" would be wrong in the other direction.
+        marked = f"; {'would mark' if self.dry_run else 'marked'} {UNVERIFIED_TAG}"
         return f"{marked}: {_names_and_values(self.changed)}" if self.changed else marked
 
     def _nothing_found(self):
@@ -216,7 +219,7 @@ class Corrector:
         fields=None,
         add_cover=True,
         fetch=None,
-        confidence=TITLE_CONFIDENCE,
+        confidence=DEFAULT_CONFIDENCE,
     ):
         self.sources = tuple(sources or ())
         self.backups = backups
@@ -413,6 +416,7 @@ class Corrector:
             "confidence": confidence,
             "source": None if unverified else found.source,
             "unverified": unverified,
+            "dry_run": self.dry_run,
         }
 
         # Ask the file what would move before touching it: a book that already
@@ -528,6 +532,7 @@ class Corrector:
             # in place - with the note off it, which is what this is for; and
             # taken off altogether when that was all it had.
             wanted["description"] = unmarked(marked)
+            wanted["notes_taken_off"] = True
             if wanted["description"] is None:
                 wanted["drop_description"] = True
 
@@ -712,14 +717,14 @@ def _changes(fields, edits, source):
 def _credited(field, edits, source):
     """Who to credit for one field that moved.
 
-    Colophon's own are the tag, and a description it only took the note off.
-    Telling the second from a source's blurb is what `description is None` is
-    for: it is set only when a rule wrote one, so an unmarked book whose
-    description is still unset is one where nothing but the note was removed.
+    Colophon's own are the tag, and a description it took the note off. The tag
+    is always Colophon's - no source supplies one - and the description is a
+    source's only when a rule wrote the text being written. `notes_taken_off` is
+    what says the description came from the file instead: the text alone cannot,
+    because a source repeating the file's own blurb is the same characters as the
+    file's own blurb.
     """
-    ours = field == "tag" or (
-        field == "description" and edits.unverified is False and edits.description is None
-    )
+    ours = field == "tag" or (field == "description" and edits.notes_taken_off)
     return COLOPHON if ours else source
 
 
