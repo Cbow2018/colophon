@@ -1,73 +1,89 @@
-# Issue tracker: GitHub
+# Issue tracker: Linear
 
-Public issues and specs for this repo live as **GitHub issues** in
-`Cbow2018/colophon`, driven by the `gh` CLI. That is the tracker anyone can
-read, file against and be answered in.
+Issues and specs for this repo live in **Linear** — workspace `cbow`, team
+**Athenaeus**, project **Colophon**. Identifiers look like `CBO-35`. The design
+spec is **CBO-33**, and the build tickets are its sub-issues.
 
-**Linear is the maintainer's private todo list and nothing else.** Workspace
-`cbow`, team **Athenaeus**, project **Colophon**; identifiers look like
-`CBO-36`. It is planning, not a tracker: nothing there is public, nothing is
-mirrored into GitHub, and a `CBO-*` number means nothing to a contributor. An
-agent may read it when the maintainer points at a ticket by number, and should
-never treat it as the place to file, answer or look up public work.
+GitHub is where the **code and pull requests** live (`Cbow2018/colophon`); the
+`CBO-*` tickets are not mirrored into GitHub Issues, so `gh` is for pull
+requests and CI only. If you are looking for a ticket, look in Linear.
 
 ## Conventions
 
-### GitHub — the public tracker
+Agents reach Linear through its own tools (`mcp__linear__*`), not the web UI.
 
-- **List issues**: `gh issue list`, narrowed with `--label`, `--state` or
-  `--search`.
-- **Read one**: `gh issue view <number> --comments`.
-- **Create one**: `gh issue create --title … --body-file <file>`, with the
-  triage labels that fit.
-- **Comment**: `gh issue comment <number> --body …`.
-- **Close**: `gh issue close <number>`, with a comment saying what closed it.
-- **Labels**: the five roles in `triage-labels.md`, applied as written.
-- **Pull requests as a request surface for triage: yes.** An external pull
-  request is a contribution to read and answer, and a feature request that
-  arrives as one is still a feature request. (Set this to `no` if that ever
-  changes; `/triage` reads the flag.)
+- **Read an issue**: `get_issue` with the identifier, plus
+  `includeRelations=true` when the blocking edges matter — they usually do.
+- **List issues**: `list_issues` with `team="Athenaeus"`, narrowing with
+  `state`, `label`, `project`, `assignee` or `cycle`. `query` searches title and
+  description. `limit` is capped at 250, and pages use `cursor`.
+- **Create an issue**: `save_issue` with `team="Athenaeus"`, a `title`, a
+  markdown `description`, and `project="Colophon"`. Titles in this project are
+  numbered by build order, e.g. `02 Exact ISBN match via Hardcover`.
+- **Update**: `save_issue` with the identifier in `id` and only the fields that
+  changed — `state`, `assignee="me"`, `addLabels`, `priority`, `estimate`.
+- **Comment**: `save_comment` with `issueId`.
+- **Attach the pull request**: pass `links=[{url, title}]` to `save_issue`. The
+  Linear GitHub integration attaches PRs on its own as well, once the ticket
+  identifier appears in the title or branch.
+- **Close**: `save_issue` with `state="Done"`. A ticket is finished when its PR
+  is merged, not before.
 
-### Linear — the maintainer's notes
+## Blocking, sub-issues and labels
 
-Only when the maintainer names a ticket by number. Read it with `get_issue`,
-plus `includeRelations=true` when the blocking edges matter. The states
-(`Backlog` → `Todo` → `In Progress` → `In Review` → `Done`), the parent links
-and the labels are the maintainer's own, and a hand-set state can be
-overwritten by whatever automation the maintainer runs.
+- **Blocking**: `blockedBy` and `blocks` on `save_issue` (append-only), removed
+  with `removeBlockedBy` / `removeBlocks`. A ticket is unblocked when every
+  blocker is Done. `get_issue` reports these under `relations`.
+- **Sub-issues**: `parentId`. Every build ticket names CBO-33 as its parent.
+- **Labels**: the vocabulary the skills speak is listed in
+  `docs/agents/triage-labels.md`; apply it with `labels` (which replaces the
+  set) or `addLabels` (which only adds).
+
+## States
+
+`Backlog` → `Todo` → `In Progress` → `In Review` → `Done`, plus `Duplicate` and
+`Canceled`.
+
+The GitHub integration moves issues by itself: opening a PR can push a ticket to
+**In Progress**, and marking a PR ready for review can move it to **In Review**.
+Set a state by hand only when the automation will not, and expect a hand-set
+state to be overridden moments later if a PR event disagrees with it.
 
 ## Pull requests
 
 Review happens on GitHub, in `Cbow2018/colophon`.
 
-- **Open one**: `gh pr create --base main --head <branch> --title "…"
-  --body-file <file>`. A branch for one of the maintainer's own tickets names
-  it, so the title or body says which `CBO-*` it came from; a contribution from
-  anyone else usually has no ticket at all.
+- **Open one**: `gh pr create --base main --head <branch> --title "CBO-35: …"
+  --body-file <file>`, with the ticket identifier in the title so Linear links
+  it.
 - **Read one**: `gh pr view <number> --comments`, `gh pr diff <number>`.
 - **Checks**: `gh pr checks <number> --watch`.
+- **PRs as a request surface for triage: no.** External pull requests are not
+  feature requests here; new work is filed in Linear. (Set this to `yes` if that
+  ever changes; `/triage` reads the flag.)
 
 ## When a skill says "publish to the issue tracker"
 
-`gh issue create` — a GitHub issue, with triage labels.
+Create a Linear issue: `save_issue` with `team="Athenaeus"`,
+`project="Colophon"`, a title and a markdown description.
 
 ## When a skill says "fetch the relevant ticket"
 
-A `CBO-*` identifier is a Linear note the maintainer is pointing at: `get_issue`
-with the identifier, and `includeRelations=true`. Anything else is a GitHub
-issue: `gh issue view <number>`.
+`get_issue` with the identifier, `includeRelations=true`.
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. The **map** is a single GitHub issue labelled
+Used by `/wayfinder`. The **map** is a single Linear issue labelled
 `wayfinder:map`, holding the Notes / Decisions-so-far / Fog body. Its **child
-tickets** are GitHub issues carrying the map's number in their body and a
-`wayfinder:<type>` label — `research`, `prototype`, `grilling` or `task`.
+tickets** are sub-issues (`parentId`), labelled `wayfinder:<type>` —
+`research`, `prototype`, `grilling` or `task`.
 
-- **Frontier query**: list the map's children (`gh issue list --label
-  wayfinder:<type>`), drop any blocked by an open issue or already assigned;
+- **Frontier query**: list the map's open children
+  (`list_issues` with `parentId`), drop any with an open blocker
+  (`relations.blockedBy` holding a ticket that is not Done) or an assignee;
   first in map order wins.
-- **Claim**: assign it (`gh issue edit <number> --add-assignee @me`).
-- **Resolve**: comment the answer (`gh issue comment`), close it (`gh issue
-  close`), then append a context pointer — the gist and the link — to the map's
-  Decisions-so-far.
+- **Claim**: `save_issue` with `assignee="me"` and `state="In Progress"` — the
+  session's first write.
+- **Resolve**: `save_comment` with the answer, `save_issue` with
+  `state="Done"`, then append a context pointer — the gist and the link — to the
+  map's Decisions-so-far.
