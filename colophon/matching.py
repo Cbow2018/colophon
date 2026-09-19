@@ -29,14 +29,13 @@ NO_AUTHOR = 0.0
 
 # A third signal, once the first two have been weighed. The file's title often
 # carries its series position, and that is the one fact about the book the
-# title has that the source keeps elsewhere. Agreement is a small nudge up;
-# two flatly different positions are a contradition, and worth more than a
-# nudge down. Neither can move a score across the line on its own: the
-# disagreement band (0.8) is below the 0.85 the pipeline applies and the
-# agreement band (1.0) is only reached by a title and an author that already
-# agree.
-SERIES_AGREEMENT = 0.0
-SERIES_DISAGREEMENT = -0.2
+# title has that the source keeps elsewhere. Agreement is a small nudge up; two
+# flatly different positions are a doubt, worth less than the nudge, because a
+# source's numbering against a publisher's is the weakest of the three signals
+# and must not overrule a title and an author that both agree exactly. Either
+# side saying nothing is the usual case and counts for nothing.
+SERIES_UNKNOWN = 0.0
+SERIES_DISAGREEMENT = -0.1
 SERIES_CONFIRMED = 0.05
 
 # The most a candidate can score while agreeing on only one of the two halves,
@@ -272,14 +271,15 @@ def nearest_candidate(file_book, candidates):
 def _series_adjustment(wanted, found):
     """What the file's series number says about a candidate's.
 
-    Two positions that flatly disagree are evidence against the candidate: a
-    file that says this is book 6 of a series has not been matched to book 11
-    of it, however the title is spelled. Either side saying nothing is no
-    evidence either way, which is the usual case - most files carry no series
-    bracket at all, and a source need not have a position for a book.
+    Two positions that disagree are a doubt about the candidate, not a verdict:
+    a file that says book 6 may have been matched to a record that says 11, and
+    when the title and the author both agree exactly it still is that book.
+    Either side saying nothing is no evidence either way, which is the usual
+    case - most files carry no series bracket at all, and a source need not have
+    a position for a book.
     """
     if not wanted or not found:
-        return SERIES_AGREEMENT
+        return SERIES_UNKNOWN
     return SERIES_CONFIRMED if str(wanted) == str(found) else SERIES_DISAGREEMENT
 
 

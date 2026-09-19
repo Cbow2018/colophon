@@ -280,7 +280,7 @@ author_score = 1.0   any file creator is any record author, as sorted words with
                      the spacing out: `L. J. Ross` = `L.J. Ross` = `Ross, L. J.`
              = 0.0   otherwise, including when either side names nobody
 series_adjustment = +0.05  the file's bracket number and the record's agree
-                  = -0.2   both are there and they flatly disagree
+                  = -0.1   both are there and they disagree
                   = 0      either side says nothing, which is the usual case
 ```
 
@@ -291,6 +291,15 @@ agree on both is refused outright as well (`agrees`), and its confidence is
 capped at **0.7** so that the number and the flag can never tell different
 stories — a contained title (0.9) with no author agreement would otherwise have
 reached 0.95 and cleared the threshold on the number alone.
+
+The series adjustment is a doubt rather than a veto, which is why it is −0.1
+and not −0.2. It is the third and weakest of the three signals: a source's own
+numbering against a publisher's, and the file's subtitle is often the only
+thing that states either. A perfect title and author with a disagreeing
+position still clears the threshold at 0.90, because it is still that book; a
+match that was only contained drops to 0.84 and is refused, which is the case
+it was added for. Most files carry no bracket at all, in which case it does
+nothing.
 
 The series adjustment is the third signal, and the reason the file's series
 bracket is captured rather than discarded. It cannot move anything across the
@@ -314,22 +323,27 @@ Every real candidate, scored with the recorded replies, against 0.85:
 | Cragside (messy) | Cragside, L.J. Ross #6 | 1.0 | 1.0 | +0.05 | **1.00** | accepted |
 | Berwick (messy) | Berwick, L.J. Ross #24 | 1.0 | 1.0 | +0.05 | **1.00** | accepted |
 | Belsay (`: A … Mystery` only) | Belsay, L.J. Ross #23 | 1.0 | 1.0 | 0 | **1.00** | accepted |
-| Cragside (messy) | The Infirmary, L.J. Ross #11 | 0.0 | 1.0 | −0.2 | 0.20 | rejected |
+| Cragside (messy) | The Infirmary, L.J. Ross #11 | 0.0 | 1.0 | −0.1 | 0.30 | rejected |
 | Cragside (messy) | The Infirmary, Carly Reagon | 0.0 | 0.0 | 0 | 0.00 | rejected |
 | The Infirmary (messy) | The Infirmary, Carly Reagon | 1.0 | 0.0 | 0 | 0.60 | rejected |
 | Cragside (messy), no author in the file | Cragside, L.J. Ross #6 | 1.0 | 0.0 | +0.05 | 0.65 | rejected |
-| Cragside (messy), #6 | Cragside, L.J. Ross #11 | 1.0 | 1.0 | −0.2 | 0.80 | rejected |
+| Cragside (messy), #6 | *Cragside: A DCI Ryan Mystery*, L.J. Ross #11 | 0.9 | 1.0 | −0.1 | 0.84 | rejected |
+| Cragside (messy), #6 | Cragside, L.J. Ross #11 | 1.0 | 1.0 | −0.1 | **0.90** | accepted |
 | Cragside (clean) | *Cragside: A DCI Ryan Mystery* on the record | 0.9 | 1.0 | 0 | **0.94** | accepted |
 | Cragside (clean) | *Cragside: A DCI Ryan Mystery*, M.J. Porter | 0.9 | 0.0 | 0 | 0.54 | rejected |
 
 **The three real books clear 0.85 because the candidate set is one work and the
 author then agrees** — title equality is doing no discriminating work there at
 all, which is the finding this note asked for. The score earns its keep in the
-other direction: it is what rejects *The Infirmary* by the same author (0.20 —
-right author, wrong book, and the series position says so too), what rejects the
-same title by another author (0.60), what rejects the right book at the wrong
-position in its series (0.80), and what still accepts a record that kept its
-subtitle (0.94).
+other direction: it is what rejects *The Infirmary* by the same author (0.30),
+what rejects the same title by another author (0.60), what rejects a contained
+title with a contradicting position (0.84), and what still accepts a record
+that kept its subtitle (0.94).
+
+A perfect title and author with a disagreeing series number is **accepted** at
+0.90, which is the deliberate change from the first cut: the position is the
+weakest of the three signals and does not overrule both halves agreeing
+exactly.
 
 The edit-distance decay in the proposal was dropped. With exact-title querying
 it can never fire — a candidate too differently spelt to score 1.0 is never

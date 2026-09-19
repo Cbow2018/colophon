@@ -361,7 +361,7 @@ class SeriesTests(unittest.TestCase):
     def test_a_wrong_number_still_costs_a_match_that_was_only_contained(self):
         """A weaker title cannot afford the doubt the position adds."""
         match = confidence_of(
-            "Cragside",
+            AS_DOWNLOADED,
             candidate=Candidate(
                 title="Cragside: A DCI Ryan Mystery",
                 authors=("L.J. Ross",),
@@ -371,6 +371,7 @@ class SeriesTests(unittest.TestCase):
         )
 
         self.assertEqual(match.title_score, 0.9, "contained, not equal")
+        self.assertEqual(match.confidence, 0.84, "0.94 less the doubt")
         self.assertLess(match.confidence, TITLE_CONFIDENCE)
 
     def test_the_number_picks_between_two_candidates_nothing_else_can(self):

@@ -546,27 +546,27 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
     def test_a_near_miss_says_which_book_it_was_and_what_was_wrong_with_it(self):
         """A book that was found, trusted less, but still named.
 
-        The Infirmary is the same author's other book: the title is nothing
-        like this file's, so it is not close enough to name, but its position
-        in the series is what a file's own bracket is there to catch.
+        The candidate is the right author and a title that only contains the
+        file's, with the wrong position in the series on top: 0.84, under the
+        threshold, and named rather than silently dropped.
         """
         path = self.book("Cragside.epub", CRAGSIDE)
-        wrong_position = Candidate(
+        nearly = Candidate(
             source="hardcover",
-            title="Cragside",
+            title="Cragside: A DCI Ryan Mystery",
             authors=("L.J. Ross",),
             series_number="11",
             language="en",
         )
 
         outcome = self.corrector(
-            source=FakeSource(found=None, candidates=[wrong_position])
+            source=FakeSource(found=None, candidates=[nearly])
         ).correct(path)
 
         self.assertFalse(outcome.matched)
         self.assertIn("Cragside", outcome.fragment())
-        self.assertIn("confidence 0.80", outcome.fragment())
-        self.assertIn("same title", outcome.fragment())
+        self.assertIn("confidence 0.84", outcome.fragment())
+        self.assertIn("contained", outcome.fragment())
 
     def test_a_book_the_source_has_nothing_like_is_not_named_at_all(self):
         """Nothing in the reply agrees on title or author, so there is no near miss."""
