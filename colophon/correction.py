@@ -19,7 +19,6 @@ from colophon.epub import Edits, EpubError
 from colophon.hardcover import Hardcover, SourceError
 from colophon.matching import (
     FileBook,
-    best_candidate,
     nearest_candidate,
     primary_language,
     search_titles,
@@ -187,19 +186,19 @@ class Corrector:
             return Outcome(problem=f"Hardcover could not be asked: {error}")
 
         file_book = FileBook(book.title, book.authors, language)
-        found = best_candidate(file_book, candidates, TITLE_CONFIDENCE)
-        if found is None:
-            # Nothing was near enough to write. If anything was near at all,
-            # say which book it was and what was wrong with it.
-            nearest = nearest_candidate(file_book, candidates)
-            if nearest is None or not nearest.agrees:
-                return Outcome(sought=title)
-            return Outcome(
-                sought=nearest.candidate.title or title,
-                confidence=nearest.confidence,
-                passed_over=nearest.why,
-            )
-        return self._write(path, found.candidate, found.confidence)
+        # One pass: the nearest candidate is measured once, and what was
+        # measured is what gets written or named.
+        match = nearest_candidate(file_book, candidates)
+        if match is not None and match.agrees and match.confidence >= TITLE_CONFIDENCE:
+            return self._write(path, match.candidate, match.confidence)
+        if match is None or not match.agrees:
+            # Nothing in the reply even looked like this book.
+            return Outcome(sought=title)
+        return Outcome(
+            sought=match.candidate.title or title,
+            confidence=match.confidence,
+            passed_over=match.why,
+        )
 
     def _write(self, path, found, confidence, isbn=None):
         """Back the original up, then write what the source is sure of.

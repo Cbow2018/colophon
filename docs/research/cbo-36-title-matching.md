@@ -310,11 +310,15 @@ but sits at a flatly different position in the series — the case the file's ow
 `(… Book N)` exists to catch. Most files carry no bracket at all, in which case
 it does nothing.
 
-A candidate in another language is left out entirely rather than scored down —
-non-English books are matched in their own language and nothing is translated.
-A language missing on either side is no evidence either way: the file may not
-say, and not every edition has one. The language is also the query's filter, so
-this is the second line of the same defence.
+The language is the **query's** business and nothing else. `by_title` filters
+on `code2` or `code3` according to the length of the file's tag, so every
+candidate that comes back is in the language that was asked for and the
+comparison does not re-check. An earlier cut did re-check, and it could only
+ever disagree with the filter: a file tagged `eng` is asked about on `code3`,
+and the reply carries `code2: en` as well, which the client reads — so the check
+threw away the edition the query had just found. A missing language on either
+side is no evidence either way, and a file that states none is asked about with
+no filter at all.
 
 Every real candidate, scored with the recorded replies, against 0.85:
 

@@ -495,6 +495,17 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(source.asked_titles, [["Normal People"]])
         self.assertTrue(outcome.matched)
 
+    def test_a_near_miss_is_named_from_the_same_single_pass(self):
+        """Scoring happens once: the source is not asked again for the near miss."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertEqual(len(source.asked_titles), 1, "one request, one scoring pass")
+        self.assertEqual(source.asked_titles[0], ["Cragside", "Cragside: A DCI Ryan Mystery"])
+
     def test_the_lookalike_is_not_accepted_for_any_of_them(self):
         for name, metadata in (
             ("Cragside.epub", CRAGSIDE),

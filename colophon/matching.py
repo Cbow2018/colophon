@@ -236,28 +236,19 @@ def score_candidate(file_book, candidate):
     )
 
 
-def best_candidate(file_book, candidates, threshold):
-    """The candidate that best explains this file, or None if none does.
-
-    The nearest candidate is measured against the threshold and comes back only
-    if it clears it: being the best of a bad set is not a match, and there is
-    no second place to fall back to.
-    """
-    match = nearest_candidate(file_book, candidates)
-    if match is None or not match.agrees or match.confidence < threshold:
-        return None
-    return match
-
-
 def nearest_candidate(file_book, candidates):
     """The candidate closest to this file, whether or not it is close enough.
 
-    What a book that was passed over is named by. Every candidate here is in the
-    file's language already, because that is the query's filter and not this
-    function's business: asking on `code2` or `code3` is what keeps another
-    language's edition out, and a record that comes back carrying the other code
-    for the same language is still this book. Ties go to the first candidate,
-    which is the order the source offered them in.
+    The one place a candidate is measured, so a caller that means to write a
+    book applies the threshold to what came back rather than asking again, and
+    a caller that means to name one has the same answer to name.
+
+    Every candidate here is in the file's language already, because that is the
+    query's filter and not this function's business: asking on `code2` or
+    `code3` is what keeps another language's edition out, and a record that
+    comes back carrying the other code for the same language is still this book.
+    Ties go to the first candidate, which is the order the source offered them
+    in.
     """
     nearest = None
     for candidate in candidates:

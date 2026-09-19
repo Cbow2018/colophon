@@ -15,7 +15,6 @@ from colophon.matching import (
     TITLE_WEIGHT,
     Candidate,
     FileBook,
-    best_candidate,
     clean_title,
     nearest_candidate,
     normalise,
@@ -388,16 +387,21 @@ class SeriesTests(unittest.TestCase):
         right = Candidate(title="Berwick", authors=("L.J. Ross",), series_number="24")
         wrong = Candidate(title="Berwick", authors=("L.J. Ross",), series_number="11")
 
-        found = best_candidate(
-            FileBook("Berwick (Book 24)", ("L. J. Ross",), "en"),
-            [wrong, right],
-            TITLE_CONFIDENCE,
+        found = nearest_candidate(
+            FileBook("Berwick (Book 24)", ("L. J. Ross",), "en"), [wrong, right]
         )
 
         self.assertEqual(found.candidate, right)
 
 
-class BestCandidateTests(unittest.TestCase):
+class NearestCandidateTests(unittest.TestCase):
+    """The one pass a file's candidates go through, and what it answers.
+
+    This is the only place a candidate is measured: a caller that means to write
+    a book applies the threshold to what came back, and a caller that means to
+    name one has the same answer to name.
+    """
+
     def test_the_nearest_candidate_wins(self):
         worse = Candidate(title="Cragside: A DCI Ryan Mystery", authors=("L.J. Ross",))
         best = Candidate(
@@ -408,9 +412,7 @@ class BestCandidateTests(unittest.TestCase):
             language="en",
         )
 
-        found = best_candidate(
-            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [worse, best], TITLE_CONFIDENCE
-        )
+        found = nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [worse, best])
 
         self.assertEqual(found.candidate, best)
         self.assertEqual(found.confidence, 1.0)
@@ -419,42 +421,25 @@ class BestCandidateTests(unittest.TestCase):
         someone_else = Candidate(title="Cragside", authors=("M.J. Porter",))
         wanted = Candidate(title="Cragside", authors=("L.J. Ross",))
 
-        found = best_candidate(
-            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"),
-            [someone_else, wanted],
-            TITLE_CONFIDENCE,
+        found = nearest_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [someone_else, wanted]
         )
 
         self.assertEqual(found.candidate, wanted)
 
-    def test_a_candidate_agreeing_on_neither_half_is_never_a_match(self):
+    def test_a_candidate_agreeing_on_neither_half_is_still_the_nearest(self):
+        """It comes back with a reason, and a score that cannot be written."""
         nothing_alike = Candidate(title="The Infirmary", authors=("Carly Reagon",))
 
-        self.assertIsNone(
-            best_candidate(
-                FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [nothing_alike], TITLE_CONFIDENCE
-            )
-        )
-        # It is still the nearest, and still scores nothing: the two are
-        # different questions, and the log names one and applies the other.
-        nearest = nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [nothing_alike])
-        self.assertEqual(nearest.candidate, nothing_alike)
-        self.assertFalse(nearest.agrees)
-        self.assertEqual(nearest.confidence, 0.0)
-
-    def test_no_candidates_is_no_match_rather_than_an_error(self):
-        self.assertIsNone(
-            best_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [], TITLE_CONFIDENCE)
-        )
-        self.assertIsNone(
-            nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [])
+        found = nearest_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [nothing_alike]
         )
 
+        self.assertEqual(found.candidate, nothing_alike)
+        self.assertFalse(found.agrees)
+        self.assertEqual(found.confidence, 0.0)
 
-class NearestCandidateTests(unittest.TestCase):
-    """What a book that was passed over is named by in the log."""
-
-    def test_a_near_miss_is_returned_to_be_named(self):
+    def test_a_near_miss_comes_back_to_be_named(self):
         """The caller applies the threshold; this only says which was nearest."""
         someone_elses = Candidate(title="Cragside", authors=("M.J. Porter",))
 
@@ -464,14 +449,8 @@ class NearestCandidateTests(unittest.TestCase):
         self.assertLess(found.confidence, TITLE_CONFIDENCE)
         self.assertEqual(found.why, "same title; no author agrees")
 
-    def test_the_threshold_is_what_the_match_has_to_clear(self):
-        someone_elses = Candidate(title="Cragside", authors=("M.J. Porter",))
-
-        self.assertIsNone(
-            best_candidate(
-                FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [someone_elses], TITLE_CONFIDENCE
-            )
-        )
+    def test_no_candidates_is_no_match_rather_than_an_error(self):
+        self.assertIsNone(nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), []))
 
 
 if __name__ == "__main__":
