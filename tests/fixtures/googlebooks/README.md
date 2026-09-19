@@ -42,6 +42,16 @@ against a file spelling it `LJ Ross`: the stops and the spacing do not matter.
 | `by-title-the-infirmary-reagon.json` | *The Infirmary*, Carly Reagon | 1 volume, Carly Reagon's book of the same name | recorded |
 | `by-title-poe.json` | *The Masque of the Red Death*, Edgar Allan Poe | 10 volumes, several of them Poe's | recorded |
 | `by-title-nothing.json` | a title nobody has | `totalItems: 0`, no `items` key | recorded |
+| `by-title-nothing-found.json` | *The Cragside Compendium of Nothing*, Nobody At All | `totalItems: 0`, no `items` key | recorded |
+
+`by-title-nothing.json` and `by-title-nothing-found.json` are the same answer
+recorded twice, and both are kept. The first was CBO-37's; the second is CBO-39's,
+recorded because CBO-38 widened the `fields` mask and the first predates it: a
+recording made with the old mask cannot be relied on to show what today's query
+returns. The replies are byte-identical apart from the mask, which is the finding
+rather than the point — what CBO-39 needed was to know that a title no source has
+comes back as an empty result rather than as an error, live, with today's query.
+The second is the one the relay tests read, through a real `GoogleBooks` client.
 
 The two `the-infirmary` recordings are the lookalike pair: two different books
 share a title, and only the author separates them.

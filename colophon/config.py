@@ -88,6 +88,12 @@ class Config:
     # Whether to add a cover to a book that has none. A book that already has
     # one keeps it: that is what the setting means, so there is no rule to set.
     add_cover: bool = True
+    # How sure a title-and-author match has to be before it is written, as the
+    # design spec's own 0.85. At 1.0 only a match nothing can be doubted about is
+    # accepted, which is a title and an author that both agree exactly - that
+    # scores exactly 1.0 - so the setting can turn the title path off and leave
+    # the ISBN path without being a value nothing could ever reach.
+    confidence: float = 0.85
 
 
 def load_config(env=None):
@@ -125,6 +131,9 @@ def load_config(env=None):
     values["fields"] = _to_fields(values.pop("fields", {}))
     values["add_cover"] = _to_bool(
         _setting(env, values, "add_cover", bool), "add_cover"
+    )
+    values["confidence"] = _to_confidence(
+        _setting(env, values, "confidence", (int, float))
     )
 
     return Config(**values)
@@ -195,6 +204,25 @@ def _to_positive_int(value, name):
         raise ConfigError(f"{name} should be a whole number, not {value!r}") from error
     if number < 1:
         raise ConfigError(f"{name} should be at least 1, not {number}")
+    return number
+
+
+def _to_confidence(value):
+    """A confidence threshold: a fraction above zero and no more than one.
+
+    Zero is refused because a threshold nothing can fail is not a threshold, and
+    anything above one is refused because no match can reach it - the comparison
+    caps a candidate at 1.0 - so either would silently turn matching off or on
+    rather than meaning what it says.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as error:
+        raise ConfigError(f"confidence should be a number, not {value!r}") from error
+    if not 0 < number <= 1:
+        raise ConfigError(
+            f"confidence should be above 0 and at most 1, not {number:g}"
+        )
     return number
 
 

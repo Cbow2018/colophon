@@ -64,6 +64,24 @@ skip_suffixes = [".part", ".tmp", ".!qb", ".crdownload"]
 # DEBUG, INFO, WARNING or ERROR.
 log_level = "INFO"
 
+# How sure a title-and-author match has to be before Colophon writes it, as a
+# number above 0 and at most 1. A candidate's confidence is how well its title
+# and its author agree with what the file says. 0.85 is the design's default.
+#
+# A book nothing matches that confidently is not corrected at all: it keeps the
+# metadata it came with and is marked instead - tagged `colophon:unverified`,
+# with "Metadata could not be verified by Colophon." at the end of its
+# description - so you can find it in your library without reading logs. Drop a
+# marked book in again once a source has it and the mark comes off.
+#
+# 1.0 is a coherent setting rather than a dead one: a title and an author that
+# both agree exactly score exactly 1.0, so 1.0 means "only a match nothing can be
+# doubted about" and leaves the ISBN path. The line below is the default;
+# uncomment and change it to overrule that. It is written before the [fields]
+# table on purpose: in TOML everything after a table header belongs to that
+# table.
+# confidence = 0.85
+
 # Add a cover to a book that has none, from the source that matched it. A book
 # that arrived with a cover keeps it: this setting only ever adds one. Only the
 # source that matched is asked, so a book matched from a source with no cover

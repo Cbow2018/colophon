@@ -193,9 +193,37 @@ class LoadConfigTests(unittest.TestCase):
             ("COLOPHON_LOG_LEVEL", "chatty"),
             ("COLOPHON_BACKUP_RETENTION_DAYS", "0"),
             ("COLOPHON_BACKUP_RETENTION_DAYS", "ages"),
+            ("COLOPHON_CONFIDENCE", "certain"),
+            ("COLOPHON_CONFIDENCE", "0"),
+            ("COLOPHON_CONFIDENCE", "1.5"),
+            ("COLOPHON_CONFIDENCE", "-0.1"),
         ]:
             with self.subTest(name=name, value=value), self.assertRaises(ConfigError):
                 load_config(env={name: value})
+
+    def test_the_confidence_threshold_defaults_to_the_design_spec_s_085(self):
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(config.confidence, 0.85)
+
+    def test_the_threshold_can_be_set_in_the_file_or_the_environment(self):
+        path = self.write_config("confidence = 0.9\n")
+
+        from_file = load_config(env={"COLOPHON_CONFIG": str(path)})
+        from_env = load_config(env={"COLOPHON_CONFIDENCE": "0.7"})
+
+        self.assertEqual(from_file.confidence, 0.9)
+        self.assertEqual(from_env.confidence, 0.7, "the environment wins")
+
+    def test_a_threshold_of_one_is_allowed_because_a_perfect_match_is_reachable(self):
+        """1.0 means 'only a match nothing can be doubted about', which happens.
+
+        A title and an author that both agree exactly score exactly 1.0, so 1.0 is
+        a setting rather than a threshold nothing can clear.
+        """
+        config = load_config(env={"COLOPHON_CONFIDENCE": "1.0"})
+
+        self.assertEqual(config.confidence, 1.0)
 
     def test_every_field_has_a_rule_and_the_defaults_are_the_ones_documented(self):
         """The design spec's own list, which is what a fresh install gets."""
@@ -324,8 +352,9 @@ class LoadConfigTests(unittest.TestCase):
         )
         self.assertEqual(config.sources, KNOWN_SOURCES)
         self.assertTrue(config.add_cover)
+        self.assertEqual(config.confidence, 0.85, "the example's threshold is the default")
         self.assertTrue(config.dry_run, "the example ships as a dry run")
-        for name in ("add_cover", "title", "language"):
+        for name in ("add_cover", "confidence", "title", "language"):
             with self.subTest(setting=name):
                 self.assertIn(f"# {name} = ", written, "shown, and commented out")
 

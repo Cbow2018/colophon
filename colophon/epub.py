@@ -38,6 +38,23 @@ NEW_COLLECTION_ID = "colophon-series"
 COVER_ID = "colophon-cover"
 COVER_META = "cover"
 
+# The marker a book carries when no source could be sure what it is, and the note
+# saying the same thing where a person browsing their library will read it. An
+# unverified book is not a corrected one - this is the whole of what is written
+# to it - and the tag and the note are added together and taken off together.
+# A tag is a `dc:subject`, which is what Calibre and Calibre-Web NextGen read as
+# a book's tags; the spec names the tag but not the element.
+UNVERIFIED_TAG = "colophon:unverified"
+UNVERIFIED_NOTE = "Metadata could not be verified by Colophon."
+# A blank line before the note, so it reads as a paragraph of its own rather than
+# as the end of the blurb's last sentence.
+_UNVERIFIED_PLAIN = f"\n\n{UNVERIFIED_NOTE}"
+_UNVERIFIED_HTML = f"<p>{UNVERIFIED_NOTE}</p>"
+# A tag, rather than a stray `<` in a blurb. The `<` must open a name, which is
+# what tells `<p>` from `5 < 6`, and the tag is looked for anywhere in the text
+# because a description's markup need not be a single element.
+_HTML_TAG = re.compile(r"<[a-zA-Z][^>]*>")
+
 # What a cover image can be, by the first bytes of the file. The sources do not
 # say what they are serving beyond a `Content-Type` header, and the bytes are
 # what ends up in the book, so the bytes are what the declaration is built from.
@@ -87,6 +104,11 @@ class Book:
     # the file again later, so "does it have one" and "add it if it does not"
     # cannot be answered from two different readings of the same book.
     has_cover: bool = False
+    # Whether the book carries Colophon's unverified mark already. Read here
+    # because the mark and the correction are decided together: a book that was
+    # marked and has now been matched has its mark taken off, and whether it has
+    # one is a fact about the file as it was read.
+    unverified: bool = False
 
 
 @dataclass(frozen=True)
@@ -94,7 +116,9 @@ class Edits:
     """What a source says the book is. None leaves that field as it was.
 
     There is no way to say "take this field off": no rule spells it, so nothing
-    produces it, and `None` is only ever the source having said nothing.
+    produces it, and `None` is only ever the source having said nothing - except
+    for `unverified`, which is a state rather than a value and so has to be able
+    to say "off" as well as "on".
     """
 
     title: str | None = None
@@ -110,6 +134,17 @@ class Edits:
     # `series_number=None` means the source said nothing, which is not the same
     # as a number that is now a position in the wrong series.
     drop_series_number: bool = False
+    # Whether this book is being marked unverified (True), having that mark taken
+    # off it (False), or is none of the correction's business (None). Marking
+    # writes `UNVERIFIED_TAG` and appends `UNVERIFIED_NOTE` to the description;
+    # unmarking takes both off again. It is recomputed on every pass rather than
+    # remembered, so a marked book that is corrected later comes out clean.
+    unverified: bool | None = None
+    # Which source offered these values, carried so that a log line can attribute
+    # every field it reports without being told a second time. It is None when no
+    # source matched, which is exactly when `unverified` is True: nothing was
+    # offered, so there is no source to credit - or to blame.
+    source: str | None = None
 
 
 def read(path):
@@ -117,18 +152,36 @@ def read(path):
     package = _package(path)
     metadata = _metadata(package)
     series, series_number = _read_series(metadata)
+    description = _first_text(metadata, "description")
     return Book(
         title=_first_text(metadata, "title"),
         authors=tuple(_all_text(metadata, "creator")),
         isbn=_isbn(metadata),
         language=_first_text(metadata, "language"),
-        description=_first_text(metadata, "description"),
+        description=description,
         publisher=_first_text(metadata, "publisher"),
         date=_first_text(metadata, "date"),
         series=series,
         series_number=series_number,
         has_cover=_has_cover(package, metadata),
+        unverified=_has_unverified(metadata, description),
     )
+
+
+def _has_unverified(metadata, description):
+    """Whether a book is marked unverified, by either half of the mark.
+
+    The tag or the note is enough. The two are written together, so a book
+    carrying one of them was marked by some version of this program - or by a
+    person who edited it - and a correction that matched the book should come out
+    clean rather than half-marked.
+    """
+    if any(
+        (element.text or "").strip() == UNVERIFIED_TAG
+        for element in _elements(metadata, "subject")
+    ):
+        return True
+    return _has_note((description or "").strip())
 
 
 def _read_series(metadata):
@@ -249,7 +302,13 @@ def _apply(metadata, edits):
         changed.append("title")
     if edits.authors is not None and _set_authors(metadata, edits.authors):
         changed.append("authors")
-    for name in ("description", "publisher", "date"):
+    # The unverified mark decides what the description is before it is written:
+    # marking is what appends the note, and unmarking is what takes it off, so
+    # the value written is settled first and the field is written once.
+    description = _description_of(edits) if edits.unverified is not None else edits.description
+    if _set_description(metadata, description):
+        changed.append("description")
+    for name in ("publisher", "date"):
         value = getattr(edits, name)
         if value is not None and _set_text(metadata, name, value):
             changed.append(name)
@@ -262,7 +321,33 @@ def _apply(metadata, edits):
         changed.append("series")
     if number_moved:
         changed.append("series_number")
+    if edits.unverified is not None and _set_unverified_tag(metadata, edits.unverified):
+        changed.append("tag")
     return tuple(changed)
+
+
+def _set_unverified_tag(metadata, unverified):
+    """Put the unverified tag on a book, or take it off, saying whether it moved.
+
+    One tag and no more: a book that carries it already is left exactly as it is,
+    so a re-dropped file is not rewritten and a second pass reports nothing. The
+    book's own subjects are not touched either way, because a tag says what a
+    book is about as well as what became of it, and only one of those two is
+    Colophon's to decide.
+    """
+    for element in list(_elements(metadata, "subject")):
+        if (element.text or "").strip() == UNVERIFIED_TAG:
+            if unverified:
+                return False
+            metadata.remove(element)
+            return True
+    if not unverified:
+        return False
+
+    element = ET.Element(f"{{{DC}}}subject")
+    element.text = UNVERIFIED_TAG
+    _insert_dc(metadata, element)
+    return True
 
 
 # Reading ------------------------------------------------------------------
@@ -372,6 +457,31 @@ def _as_isbn(text, scheme=None):
 # Writing ------------------------------------------------------------------
 
 
+def _set_description(metadata, value):
+    """Write the description, take it off, or leave it alone.
+
+    The description is the one field a correction can empty: marking a book
+    appends a note to whatever blurb it has, and a later match takes the note off
+    again - leaving nothing at all when the note was the whole of it. So `None`
+    here means "no rule and no mark had anything to say" and `""` means "nothing
+    is left of it", which is the difference between a book that never had a blurb
+    and one whose blurb was only ever Colophon's note.
+    """
+    if value is None:
+        return False
+    if not str(value).strip():
+        return _drop_text(metadata, "description")
+    return _set_text(metadata, "description", value)
+
+
+def _drop_text(metadata, name):
+    """Take a dc element off the book, saying whether there was one to take off."""
+    elements = _elements(metadata, name)
+    for element in elements:
+        metadata.remove(element)
+    return bool(elements)
+
+
 def _set_text(metadata, name, value):
     """Put a value on the first dc:<name>, adding the element if it is missing."""
     value = str(value).strip()
@@ -387,6 +497,74 @@ def _set_text(metadata, name, value):
         return False
     elements[0].text = value
     return True
+
+
+def _description_of(edits):
+    """The description this correction leaves behind, or None to leave it alone.
+
+    Two passes mark a book rather than correct it, and both work on whatever
+    `description` the caller settled on - the source's blurb where a rule wrote
+    one, the file's own otherwise - so nothing here has to know which rule ran:
+
+    * marking puts the note on, and only once: a description that already ends in
+      the note was marked on an earlier pass, and the note is what says so;
+    * unmarking takes the note off the end, if that is where it is, and only
+      then. A note in the middle of a blurb was not put there by Colophon.
+
+    Every other correction leaves the description alone: `description` is None
+    unless a rule wrote one, and unmarking only ever has something to take off
+    when the description ends in the note.
+    """
+    if not edits.unverified:
+        # Not a mark either way, so the description is nothing to do with this
+        # pass unless a rule wrote one - and then only to take a note off it, if
+        # the book was marked before. An empty description stays empty rather
+        # than becoming `None`, because the two mean opposite things downstream:
+        # `None` is no rule having anything to say, and empty is a description
+        # that is now nothing at all, which happens when the note was all of it.
+        if edits.description is None:
+            return None
+        return _without_note(edits.description) or ""
+    # Marking writes a description even when the file has none: the note is what
+    # tells a person browsing their library that nobody could vouch for the book,
+    # so it is the one thing that must be there.
+    return _noted(edits.description)
+
+
+def _noted(text):
+    """A description with the unverified note put on its end.
+
+    The form the note takes follows the blurb: a description carrying markup gets
+    a paragraph of its own, so the note cannot end up hanging outside the last
+    element, and a plain one gets a blank line. Which of the two it is has to be
+    looked at rather than known, because a `dc:description` may hold either and
+    the design spec never settled which.
+    """
+    text = (text or "").strip()
+    if not text:
+        return UNVERIFIED_NOTE
+    if _has_note(text):
+        return text
+    if _HTML_TAG.search(text):
+        return f"{text}{_UNVERIFIED_HTML}"
+    return f"{text}{_UNVERIFIED_PLAIN}"
+
+
+def _without_note(text):
+    """The description with the unverified note taken off its end, if it is there.
+
+    Only the end: the note may have had a blurb written after it by some other
+    tool, and that is not the note Colophon put there.
+    """
+    for note in (UNVERIFIED_NOTE, _UNVERIFIED_PLAIN, _UNVERIFIED_HTML):
+        if text and text.endswith(note):
+            return text[: -len(note)].strip() or None
+    return text
+
+
+def _has_note(text):
+    """Whether a description already carries the note at its end."""
+    return bool(text) and text.endswith((UNVERIFIED_NOTE, _UNVERIFIED_PLAIN, _UNVERIFIED_HTML))
 
 
 def _set_isbn(metadata, isbn):

@@ -12,11 +12,18 @@ from colophon.config import Config
 from colophon.correction import Corrector
 from colophon.epub import read
 from colophon.files import temp_name
+from colophon.googlebooks import GoogleBooks
+from colophon.hardcover import Hardcover
 from colophon.relay import Relay, RelayError
-from tests.opf import calibre_series, epub3_series
+from tests.opf import calibre_series, epub3_series, subjects
 from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, ISBN, write_epub
 from tests.sources import CRAGSIDE_CANDIDATE, NO_COVER_MATCH, FakeSource, no_network
 from tests.tempdir import TemporaryDirectory
+
+# The two sources' recorded replies, read by a replay just as a live one would
+# be: the empty answer each of them really gave for a title neither has.
+HARDCOVER_RECORDED = Path(__file__).parent / "fixtures" / "hardcover"
+GOOGLE_RECORDED = Path(__file__).parent / "fixtures" / "googlebooks"
 
 
 class RelayTestCase(unittest.TestCase):
@@ -449,6 +456,24 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         self.assertIn('date="2017-07-07"<-hardcover', line)
         self.assertLess(max(len(part) for part in captured.output), 1000)
 
+    def test_the_source_never_asked_is_credited_for_nothing(self):
+        """Colophon's own writes are attributed to Colophon, not to a source.
+
+        A book nobody matched is marked by Colophon, and the line says so. It
+        would be a lie of a kind the log is there to prevent if the tag and the
+        note were credited to a source that never saw the book.
+        """
+        write_epub(self.ingest / "Unknown.epub", CRAGSIDE, version="2.0")
+        self.source.candidates = []
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        line = "\n".join(captured.output)
+        self.assertIn('tag="colophon:unverified"<-colophon', line)
+        self.assertIn("marked colophon:unverified", line)
+        self.assertNotIn("<-hardcover", line.split("marked")[1].split("]")[0])
+
     def test_the_original_is_backed_up_before_it_is_changed(self):
         original = self.drop_a_book().read_bytes()
 
@@ -552,6 +577,112 @@ class CorrectingInDryRunTests(RelayTestCase):
         self.settle(times=6)
 
         self.assertEqual(len(self.source.asked), 1)
+
+
+class ABookNothingCanMatchTests(RelayTestCase):
+    """The unverified path end to end: marked, delivered, never retried.
+
+    A book no source can vouch for still reaches the library, which is the whole
+    point of the ticket - so it is the relay, not the correction, that has to be
+    shown to deliver it. Nothing here is retried because nothing here is a
+    failure: the sources answered, and all they answered was that they do not
+    have the book.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.source = FakeSource(found=None)
+        self.relay = Relay(
+            self.config,
+            corrector=Corrector(
+                sources=[self.source],
+                backups=Backups(self.backups),
+                dry_run=False,
+                fetch=no_network,
+            ),
+        )
+        self.path = write_epub(self.ingest / "Unknown.epub", CRAGSIDE, version="2.0")
+
+    def test_it_reaches_output_carrying_both_halves_of_the_mark(self):
+        self.settle()
+
+        delivered = self.output / "Unknown.epub"
+        self.assertTrue(delivered.exists(), "a book nothing matched still reaches the library")
+        self.assertIn("colophon:unverified", subjects(delivered))
+        self.assertEqual(
+            read(delivered).description,
+            "Metadata could not be verified by Colophon.",
+        )
+        self.assertFalse(self.path.exists(), "and it is not left in the ingest folder")
+
+    def test_the_original_is_kept_before_the_mark_is_written(self):
+        original = self.path.read_bytes()
+
+        self.settle()
+
+        self.assertEqual(
+            sorted(path.name for path in self.backups.iterdir()), ["Unknown.epub"]
+        )
+        self.assertEqual((self.backups / "Unknown.epub").read_bytes(), original)
+
+    def test_it_is_looked_up_once_and_not_again(self):
+        """A no-match is an answer, so it is not the thing retries are for."""
+        self.settle(times=4)
+
+        self.assertEqual(len(self.source.asked_titles), 1)
+
+    def test_the_line_says_the_book_was_marked_as_well_as_what_was_tried(self):
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        line = "\n".join(captured.output)
+        self.assertIn("moved", line)
+        self.assertIn("marked colophon:unverified", line)
+        self.assertIn("no source among hardcover has an edition called", line)
+
+
+class ARealNoMatchThroughTheRelayTests(RelayTestCase):
+    """The same, driven by the two sources' own recorded empty replies.
+
+    Nothing here is a stand-in: the recordings are what Hardcover and Google
+    Books really answered for a title neither of them has, and the client reads
+    them the way it reads a live reply.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        def replay_hardcover(url, headers, body):
+            return 200, (HARDCOVER_RECORDED / "by-title-nothing-found.json").read_bytes()
+
+        def replay_google(url, headers):
+            return 200, (GOOGLE_RECORDED / "by-title-nothing-found.json").read_bytes()
+
+        self.relay = Relay(
+            self.config,
+            corrector=Corrector(
+                sources=[
+                    Hardcover("a-token", transport=replay_hardcover),
+                    GoogleBooks("a-key", transport=replay_google),
+                ],
+                backups=Backups(self.backups),
+                dry_run=False,
+                fetch=no_network,
+            ),
+        )
+
+    def test_both_sources_answering_nothing_leaves_a_marked_book_in_output(self):
+        write_epub(self.ingest / "Unknown.epub", CRAGSIDE, version="2.0")
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        delivered = self.output / "Unknown.epub"
+        self.assertTrue(delivered.exists())
+        self.assertIn("colophon:unverified", subjects(delivered))
+        self.assertIn("metadata could not be verified", read(delivered).description.lower())
+        self.assertIn("hardcover", "\n".join(captured.output))
+        self.assertIn("google_books", "\n".join(captured.output))
 
 
 if __name__ == "__main__":

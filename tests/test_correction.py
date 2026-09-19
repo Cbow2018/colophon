@@ -37,6 +37,7 @@ from tests.opf import (
     entries_of,
     epub3_series,
     manifest_items,
+    subjects,
 )
 from tests.samplebooks import (
     AS_DOWNLOADED,
@@ -118,6 +119,12 @@ SERIES_ALREADY_ON_IT = """    <dc:title>The Masque of the Red Death</dc:title>
 # The `q` Google is asked for the Gutenberg book, which is what its recording was
 # made with and therefore what a replay has to match before handing it back.
 TITLE_ASKED = 'intitle:"The Masque of the Red Death" inauthor:"Edgar Allan Poe"'
+
+# What the unverified marker is made of, as the design spec spells it. Held here
+# rather than imported, so a test cannot agree with the code by sharing its
+# constant: the value is the spec's, not the implementation's.
+UNVERIFIED_TAG = "colophon:unverified"
+UNVERIFIED_SENTENCE = "Metadata could not be verified by Colophon."
 
 
 class RefusingBackups:
@@ -1495,6 +1502,14 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(source.asked_titles[0], ["Cragside", "Cragside: A DCI Ryan Mystery"])
 
     def test_the_lookalike_is_not_accepted_for_any_of_them(self):
+        """A different book by the same author is rejected - and the book is marked.
+
+        Rejected, not accepted: none of the lookalike's values are written. But
+        the book is no longer left completely alone, which is CBO-39: a book
+        nothing matched confidently is marked unverified, and marking it means
+        backing the original up first. So what this test holds is that the
+        metadata is untouched, not that the file is.
+        """
         for name, metadata in (
             ("Cragside.epub", CRAGSIDE),
             ("Berwick.epub", BERWICK),
@@ -1506,23 +1521,84 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     found=None,
                     candidates=[THE_INFIRMARY_CANDIDATE, ANOTHER_INFIRMARY],
                 )
-                before = path.read_bytes()
 
                 outcome = self.corrector(source=source).correct(path)
 
                 self.assertFalse(outcome.matched)
-                self.assertEqual(self.kept(), [])
-                self.assertEqual(path.read_bytes(), before)
+                self.assertTrue(outcome.unverified)
+                book = read(path)
+                self.assertIn(book.title, metadata, "the file's own title is what it says")
+                self.assertEqual(book.authors, ("L. J. Ross",), "no other book's author")
+                self.assertIsNone(book.series, "the lookalike's series is not written")
 
     def test_a_book_with_no_author_is_not_matched_on_its_title_alone(self):
-        """A title match alone never reaches the threshold."""
+        """A title match alone never reaches the threshold, so the book is marked."""
         path = self.book("Cragside.epub", WITHOUT_AUTHOR)
         source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
         outcome = self.corrector(source=source).correct(path)
 
         self.assertFalse(outcome.matched)
-        self.assertEqual(self.kept(), [])
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(read(path).title, "Cragside", "still the file's own title")
+        self.assertIsNone(read(path).series, "nothing the record said was written")
+
+    def a_near_miss(self):
+        """A candidate that agrees on both halves and still falls short.
+
+        `Cragside: A DCI Ryan Mystery` contains the file's cleaned title (0.9)
+        and L.J. Ross is the file's author (1.0), which weigh 0.94; the record
+        claims position 11 where the file's title claims 6, which takes 0.1 off.
+        """
+        return Candidate(
+            source="hardcover",
+            title="Cragside: A DCI Ryan Mystery",
+            authors=("L.J. Ross",),
+            series_number="11",
+            language="en",
+        )
+
+    def test_the_threshold_is_adjustable_and_below_it_a_near_miss_is_accepted(self):
+        """At 0.80 the 0.84 candidate is good enough; at the default 0.85 it is not."""
+        for threshold, expected in ((0.8, True), (0.85, False)):
+            with self.subTest(confidence=threshold):
+                path = self.book("Cragside.epub", CRAGSIDE)
+                source = FakeSource(found=None, candidates=[self.a_near_miss()])
+
+                outcome = self.corrector(source=source, confidence=threshold).correct(path)
+
+                self.assertEqual(outcome.matched, expected)
+                self.assertEqual(outcome.unverified, not expected)
+                self.assertEqual(
+                    read(path).title,
+                    "Cragside: A DCI Ryan Mystery"
+                    if expected
+                    else "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
+                    "accepted means the record's values are written",
+                )
+
+    def test_a_threshold_of_one_accepts_only_a_perfect_match(self):
+        """1.0 is the setting that says 'the ISBN path only', and it is coherent.
+
+        A title and author match scores exactly 1.0, so it is the one thing that
+        can still clear a threshold of 1.0 - and a candidate that agrees on both
+        halves with a disagreeing series position does not.
+        """
+        never = self.book("Cragside.epub", CRAGSIDE)
+        never_source = FakeSource(found=None, candidates=[self.a_near_miss()])
+
+        outcome = self.corrector(source=never_source, confidence=1.0).correct(never)
+
+        self.assertFalse(outcome.matched, "0.84 does not clear 1.0")
+        self.assertTrue(outcome.unverified)
+
+        perfect = self.book("Perfect.epub", CRAGSIDE)
+        perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        outcome = self.corrector(source=perfect_source, confidence=1.0).correct(perfect)
+
+        self.assertTrue(outcome.matched, "an exact title and author is exactly 1.0")
+        self.assertFalse(outcome.unverified)
 
     def test_the_best_of_several_candidates_is_the_one_accepted(self):
         """The author's other book is offered first, and the right one wins."""
@@ -1611,6 +1687,50 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(self.kept(), [])
 
+    def test_a_dry_run_says_what_the_mark_would_change_and_writes_none_of_it(self):
+        """Dry run is on in the example config, so this is what a new user sees."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        before = path.read_bytes()
+
+        outcome = self.corrector(source=FakeSource(found=None), dry_run=True).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(
+            sorted(change.field for change in outcome.changed), ["description", "tag"]
+        )
+        self.assertEqual(path.read_bytes(), before, "nothing is written")
+        self.assertEqual(self.kept(), [])
+        self.assertIn("would mark", outcome.fragment(), "a dry run says it would, not that it did")
+
+    def test_the_log_line_says_the_book_was_marked(self):
+        path = self.book("Cragside.epub", CRAGSIDE)
+
+        outcome = self.corrector(source=FakeSource(found=None)).correct(path)
+
+        line = outcome.fragment()
+        self.assertIn("no source among hardcover has an edition called Cragside", line)
+        self.assertIn(f"marked {UNVERIFIED_TAG}", line)
+
+    def test_the_near_miss_line_says_the_book_was_marked_too(self):
+        """A near miss is still a miss, so the book is marked and the line says so."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        nearly = Candidate(
+            source="hardcover",
+            title="Cragside: A DCI Ryan Mystery",
+            authors=("L.J. Ross",),
+            series_number="11",
+            language="en",
+        )
+
+        outcome = self.corrector(
+            source=FakeSource(found=None, candidates=[nearly])
+        ).correct(path)
+
+        line = outcome.fragment()
+        self.assertIn("confidence 0.84", line)
+        self.assertIn(f"marked {UNVERIFIED_TAG}", line)
+
     def test_a_title_the_source_does_not_know_is_not_a_match(self):
         path = self.book("Cragside.epub", CRAGSIDE)
         source = FakeSource(found=None)
@@ -1619,6 +1739,138 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertFalse(outcome.matched)
         self.assertIn("Cragside", outcome.fragment())
+
+    def test_a_book_no_source_can_match_is_marked_as_unverified(self):
+        """The unverified path: not matched, but not left unmarked either."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None)
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified)
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+
+    def test_a_book_the_source_offers_nothing_like_gets_the_marker_too(self):
+        """Nothing agreed on title or author, so nothing can be named - still unverified."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified)
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+
+    def test_a_book_is_told_it_is_unverified_in_its_own_description(self):
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None)
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(
+            read(path).description,
+            UNVERIFIED_SENTENCE,
+            "the file had no blurb, so the note is the whole description",
+        )
+
+    def test_an_html_blurb_gets_the_note_as_its_own_paragraph(self):
+        """A description carrying markup takes the note as a <p>, not a bare line.
+
+        Appended plain, the note would sit outside the last element and some
+        readers would drop it - which is the one thing it may not do, since it is
+        there to be read.
+        """
+        path = self.book(
+            "Cragside.epub", self.with_description("<p>A house full of secrets.</p>")
+        )
+
+        self.corrector(source=FakeSource(found=None)).correct(path)
+
+        self.assertEqual(
+            read(path).description,
+            f"<p>A house full of secrets.</p><p>{UNVERIFIED_SENTENCE}</p>",
+        )
+
+    def test_a_stray_angle_bracket_is_not_html(self):
+        """`5 < 6` in a blurb is not markup, so the note goes on after a blank line.
+
+        The test is whether a name follows the bracket, not whether one appears
+        anywhere in the text: a blurb is prose, and prose uses `<`.
+        """
+        blurb = "Two brothers, and 5 < 6 of them left."
+        path = self.book("Cragside.epub", self.with_description(blurb))
+
+        self.corrector(source=FakeSource(found=None)).correct(path)
+
+        self.assertEqual(read(path).description, f"{blurb}\n\n{UNVERIFIED_SENTENCE}")
+
+    def test_an_empty_description_counts_as_having_none(self):
+        """A `<dc:description></dc:description>` is not a blurb to append after."""
+        path = self.book("Cragside.epub", self.with_description(""))
+
+        self.corrector(source=FakeSource(found=None)).correct(path)
+
+        self.assertEqual(read(path).description, UNVERIFIED_SENTENCE)
+
+    def with_description(self, blurb):
+        """The same book, with this blurb on it.
+
+        Added after the language rather than in a fixture per case, because every
+        one of these books is otherwise identical and the blurb is the only thing
+        under test. The blurb is escaped where it is markup, because a real
+        `dc:description` holds a blurb that is already HTML as text - the angle
+        brackets of the blurb's own tags are `&lt;` and `&gt;` in the file - and
+        writing them raw would make the fixture an unreadable package document
+        rather than a book with an HTML blurb.
+        """
+        held = (
+            blurb.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        )
+        return CRAGSIDE.replace(
+            "<dc:language>en</dc:language>",
+            f"<dc:language>en</dc:language>\n    <dc:description>{held}</dc:description>",
+        )
+
+    def test_the_blurb_the_file_came_with_is_left_at_the_top(self):
+        """A file's own blurb is not replaced - the note goes after it."""
+        path = self.book(
+            "Cragside.epub",
+            self.with_description("A house full of secrets."),
+        )
+        source = FakeSource(found=None)
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(
+            read(path).description,
+            f"A house full of secrets.\n\n{UNVERIFIED_SENTENCE}",
+        )
+
+    def test_the_unverified_book_is_backed_up_before_it_is_marked(self):
+        path = self.book("Cragside.epub", CRAGSIDE)
+        before = path.read_bytes()
+
+        self.corrector(source=FakeSource(found=None)).correct(path)
+
+        self.assertEqual(self.kept(), ["Cragside.epub"])
+        self.assertEqual((self.folder / "backups" / "Cragside.epub").read_bytes(), before)
+
+    def test_marking_an_unverified_book_twice_changes_nothing_the_second_time(self):
+        """A re-drop is looked up again, so the marker must not stack up."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None)
+
+        self.corrector(source=source).correct(path)
+        marked = path.read_bytes()
+        second = self.corrector(source=source).correct(path)
+
+        self.assertEqual(subjects(path).count(UNVERIFIED_TAG), 1, "one tag, not two")
+        self.assertEqual(
+            read(path).description.count(UNVERIFIED_SENTENCE), 1, "one sentence, not two"
+        )
+        self.assertEqual(second.changed, ())
+        self.assertEqual(path.read_bytes(), marked, "nothing left to change")
 
     def test_a_book_with_no_title_is_not_asked_about(self):
         path = self.book("Cragside.epub", "    <dc:creator>L. J. Ross</dc:creator>")
@@ -1694,6 +1946,101 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(outcome.changed, ())
         self.assertEqual(self.kept(), [])
         self.assertEqual(path.read_bytes(), before)
+
+
+class TheMarkComingOffAgainTests(CorrectionTestCase):
+    """A marked book that is matched later comes out clean.
+
+    The mark is a statement about a book nobody could vouch for, so it is a
+    statement about the last pass rather than a fact about the book. A re-dropped
+    file is looked up again, and when a source has it after all the mark goes -
+    otherwise a corrected book would go on telling the reader it was unverified.
+    Both halves come off: the tag, and the note at the end of the description.
+    """
+
+    def an_unverified_book(self, blurb=None):
+        """A book marked the way the unverified path marks one.
+
+        Written straight from the no-ISBN fixture rather than through `book()`,
+        which builds the ISBN-carrying one: a book with an ISBN takes the ISBN
+        path, and the unverified path is the title path's.
+        """
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            CRAGSIDE if blurb is None else self.with_description(blurb),
+            version="2.0",
+        )
+        outcome = self.corrector(source=FakeSource(found=None)).correct(path)
+        self.assertTrue(outcome.unverified, "the fixture starts out marked")
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        return path
+
+    def with_description(self, blurb):
+        """The same book with this blurb, its markup escaped as a real file has it."""
+        held = blurb.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return CRAGSIDE.replace(
+            "<dc:language>en</dc:language>",
+            f"<dc:language>en</dc:language>\n    <dc:description>{held}</dc:description>",
+        )
+
+    def test_a_matched_book_has_the_tag_and_the_note_taken_off(self):
+        path = self.an_unverified_book()
+        source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertFalse(outcome.unverified)
+        self.assertNotIn(UNVERIFIED_TAG, subjects(path))
+        self.assertIsNone(
+            read(path).description,
+            "the note was the whole description, so the whole of it goes",
+        )
+        self.assertEqual(read(path).title, "Cragside", "and the book is corrected")
+
+    def test_the_blurb_a_marked_book_came_with_is_left_behind_the_note(self):
+        """Only the note comes off; the file's own blurb is not Colophon's to lose."""
+        path = self.an_unverified_book("A house full of secrets.")
+        source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        self.corrector(source=source).correct(path)
+
+        self.assertNotIn(UNVERIFIED_TAG, subjects(path))
+        self.assertEqual(
+            read(path).description,
+            "A house full of secrets.",
+            "the note went, the blurb it was appended to stayed",
+        )
+
+    def test_a_matched_blurb_replaces_a_marked_description_whole(self):
+        """`overwrite` on the description wins, and takes the stale note with it."""
+        path = self.an_unverified_book("A house full of secrets.")
+        # A candidate carrying the recorded blurb, because whether a source's
+        # blurb replaces a marked description is the whole question here.
+        source = FakeSource(found=None, candidates=[NO_COVER_MATCH])
+
+        outcome = self.corrector(source=source, fields=self.rules(description="overwrite")).correct(
+            path
+        )
+
+        self.assertTrue(outcome.matched)
+        self.assertNotIn(UNVERIFIED_TAG, subjects(path))
+        self.assertEqual(read(path).description, CRAGSIDE_BLURB, "the source's blurb")
+        self.assertNotIn(UNVERIFIED_SENTENCE, read(path).description)
+
+    def test_an_html_note_comes_off_an_html_blurb(self):
+        path = self.an_unverified_book("<p>A house full of secrets.</p>")
+        source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(read(path).description, "<p>A house full of secrets.</p>")
+
+    def rules(self, **rules):
+        """Every field's rule, with the ones a test cares about overridden."""
+        settings = {name: "fill" for name in KNOWN_FIELDS}
+        settings.update(rules)
+        return settings
 
 
 class TheSourcePriorityListTests(CorrectionTestCase):
@@ -1822,7 +2169,6 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         named rather than silently dropped.
         """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
-        before = path.read_bytes()
         nearly = Candidate(
             source="google_books",
             title="Cragside: A DCI Ryan Mystery",
@@ -1841,8 +2187,14 @@ class TheSourcePriorityListTests(CorrectionTestCase):
             outcome.fragment(),
         )
         self.assertIn("confidence 0.84", outcome.fragment())
-        self.assertEqual(path.read_bytes(), before, "a book nothing matches is not touched")
-        self.assertEqual(self.kept(), [])
+        # A near miss is still a miss: none of the candidate's values are written,
+        # and the book is marked rather than corrected - which is what CBO-39 adds
+        # to this case. The fields it came with are the fields it keeps.
+        self.assertIn("marked colophon:unverified", outcome.fragment())
+        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)")
+        self.assertIsNone(read(path).series_number, "the record's position is not written")
+        self.assertEqual(subjects(path), ["colophon:unverified"], "the only thing written")
+        self.assertEqual(self.kept(), ["Cragside.epub"], "backed up before it was marked")
 
     def test_a_source_that_offers_nothing_at_all_does_not_name_a_book(self):
         """A reply that agrees on neither title nor author is not an explanation."""

@@ -55,6 +55,16 @@ because it is the one that must be *rejected*.
 | `by-title-berwick.json` | `Berwick` | work 2379453, *Berwick*, L.J. Ross, #24 | recorded |
 | `by-title-belsay.json` | `Belsay` | work 1647114, *Belsay*, L.J. Ross, #23 | recorded |
 | `by-title-the-infirmary.json` | `The Infirmary` | work 1198266 (*The Infirmary*, L.J. Ross, #11) **and** work 2284109 (*The Infirmary*, Carly Reagon) | recorded |
+| `by-title-nothing-found.json` | `The Cragside Compendium of Nothing` | `{"data": {"editions": []}}` — the empty answer | recorded |
+
+`by-title-nothing-found.json` is CBO-39's. The unverified path begins when no
+source has the book, and Hardcover's answer to a title it does not have is an
+empty `editions` list rather than an error. The title is one no book carries, on
+purpose, so what is recorded is the API's own emptiness. The title filter is
+`book: {title: {_in: […]}}`, an exact match, so Hardcover never returns a title it
+does not spell exactly — which is why a *near miss* cannot be recorded from it at
+all, and why CBO-39's below-threshold test builds a `Candidate` instead of
+reading a reply.
 
 `by-title-the-infirmary.json` is the important one: two different books share the
 title, and only the author tells them apart. It is the reply that proves a title
