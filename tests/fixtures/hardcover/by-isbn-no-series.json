@@ -1,0 +1,19 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9780000000002",
+        "isbn_10": null,
+        "title": "A Standalone Novel",
+        "language": null,
+        "book": {
+          "title": "A Standalone Novel",
+          "contributions": [
+            { "contribution": "Author", "author": { "name": "Someone Else" } }
+          ],
+          "book_series": []
+        }
+      }
+    ]
+  }
+}

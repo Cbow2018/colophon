@@ -1,0 +1,22 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9781786813891",
+        "isbn_10": "1786813895",
+        "title": "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries)",
+        "language": { "language": "English", "code2": "en", "code3": "eng" },
+        "book": {
+          "title": "Cragside",
+          "contributions": [
+            { "contribution": "Author", "author": { "name": "LJ Ross" } },
+            { "contribution": "Translator", "author": { "name": "A Translator" } }
+          ],
+          "book_series": [
+            { "position": 6, "details": "6", "series": { "name": "DCI Ryan" } }
+          ]
+        }
+      }
+    ]
+  }
+}

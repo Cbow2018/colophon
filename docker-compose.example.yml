@@ -24,6 +24,17 @@ services:
       - /srv/books/output:/output
       - /srv/books/backups:/backups
 
+    # The Hardcover API token. Create ./secrets/hardcover_token (one line, the
+    # token) and leave it readable only by you; it is mounted at
+    # /run/secrets/hardcover_token, where the config expects it. Secrets never
+    # go in the environment or the image.
+    secrets:
+      - hardcover_token
+
     environment:
       # Overrides config.toml. Remove this once you trust the log.
       - COLOPHON_DRY_RUN=true
+
+secrets:
+  hardcover_token:
+    file: ./secrets/hardcover_token

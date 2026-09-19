@@ -36,6 +36,11 @@ class Config:
     stable_checks: int = 2
     log_level: str = "INFO"
     skip_suffixes: tuple = DEFAULT_SKIP_SUFFIXES
+    # Originals are kept this long before the backups folder is cleared out.
+    backup_retention_days: int = 30
+    # Where the Docker secret holding the Hardcover token is mounted. A file
+    # that is not there means no ISBN lookups happen at all, which is fine.
+    hardcover_token_file: Path = Path("/run/secrets/hardcover_token")
 
 
 def load_config(env=None):
@@ -59,6 +64,12 @@ def load_config(env=None):
     values["log_level"] = _to_log_level(_setting(env, values, "log_level", str))
     values["skip_suffixes"] = _to_suffixes(
         _setting(env, values, "skip_suffixes", list), "skip_suffixes"
+    )
+    values["backup_retention_days"] = _to_positive_int(
+        _setting(env, values, "backup_retention_days", int), "backup_retention_days"
+    )
+    values["hardcover_token_file"] = Path(
+        _setting(env, values, "hardcover_token_file", str)
     )
 
     return Config(**values)

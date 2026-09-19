@@ -1,39 +1,32 @@
-"""The pass-through relay: ingest -> output, one file at a time.
+"""The relay: ingest -> output, one file at a time.
 
-Nothing here reads or changes a book's metadata; that arrives in later work.
-The job is only to notice a finished file and put it where the library app
-will find it, without ever overwriting or losing anything.
+Every file that has finished arriving is handed to the correction pass, which
+may rewrite a book's metadata, and is then put where the library app will find
+it - without ever overwriting anything, and without losing a file it could not
+finish with.
 """
 
 import hashlib
 import logging
 import os
-import shutil
 from pathlib import Path
 
+from colophon.backups import Backups, free_name
+from colophon.correction import Corrector
+from colophon.files import READ_SIZE, copy_into_place
+
 LOG = logging.getLogger("colophon")
-
-TEMP_SUFFIX = ".colophon-tmp"
-
-_READ_SIZE = 1024 * 1024
 
 
 class RelayError(Exception):
     """The relay cannot run at all (usually a folder it cannot use)."""
 
 
-def temp_name(name):
-    """The half-written name for a file.
-
-    Hidden, and it never ends in the book's own extension, so a library app
-    watching the output folder cannot import a file that is still copying.
-    """
-    return f".{name}{TEMP_SUFFIX}"
-
-
 class Relay:
-    def __init__(self, config):
+    def __init__(self, config, corrector=None):
         self.config = config
+        self.backups = Backups(config.backup_dir, config.backup_retention_days)
+        self.correction = corrector or Corrector.from_config(config, self.backups)
         # path -> ((size, mtime), how many scans it has looked like that)
         self._seen = {}
         # files already reported in dry-run mode, so each is logged once
@@ -43,16 +36,16 @@ class Relay:
         self._stuck = {}
 
     def prepare(self):
-        """Make sure the three folders exist before the first scan."""
-        for folder in (
-            self.config.ingest_dir,
-            self.config.output_dir,
-            self.config.backup_dir,
-        ):
+        """Make sure the folders exist before the first scan."""
+        for folder in (self.config.ingest_dir, self.config.output_dir):
             try:
                 folder.mkdir(parents=True, exist_ok=True)
             except OSError as error:
                 raise RelayError(f"cannot use {folder}: {error}") from error
+        try:
+            self.backups.prepare()
+        except OSError as error:
+            raise RelayError(f"cannot use {self.config.backup_dir}: {error}") from error
 
         # The original is deleted once it has been copied out, so read-only
         # access to the ingest folder would leave every book to arrive twice.
@@ -64,6 +57,7 @@ class Relay:
 
     def scan_once(self):
         """Look at the ingest folder once and deliver whatever has settled."""
+        self._clear_out_old_backups()
         still_settling = {}
         present = set()
         for path in self._candidates():
@@ -105,26 +99,69 @@ class Relay:
             return None
         return (details.st_size, details.st_mtime_ns)
 
+    def _clear_out_old_backups(self):
+        """Originals are kept for a while, then cleared out without being asked."""
+        deleted = self.backups.expire()
+        if deleted:
+            LOG.info(
+                "deleted %d backup%s older than %d days: %s",
+                len(deleted),
+                "" if len(deleted) == 1 else "s",
+                self.backups.retention_days,
+                ", ".join(path.name for path in deleted),
+            )
+
     def _deliver(self, path, mark):
+        if self.config.dry_run and (str(path), mark) in self._announced:
+            # This exact version of the book has been reported already, and a
+            # dry run leaves it where it is: asking the source again on every
+            # scan would say the same thing, and be rude about it.
+            return
+
+        outcome = self.correction.correct(path)
+        correction = outcome.fragment()
+        # Correcting a book rewrites it, so what it looked like a moment ago
+        # is not what is about to be copied out.
+        mark = self._mark(path) or mark
+
         destination, kind, note = self._destination_for(path)
         if destination is None:
             return
+
+        # A book we have just corrected is already backed up, so a duplicate of
+        # it does not need filing in the backups folder a second time.
+        already_kept = kind == "duplicate" and outcome.kept is not None
+        if already_kept:
+            destination = Path(outcome.kept)
+            note = f"{note}; the original was already kept as a backup"
 
         if self.config.dry_run:
             announcement = (str(path), mark)
             if announcement not in self._announced:
                 self._announced.add(announcement)
                 LOG.info(
-                    'dry run: would move "%s" -> %s (%s)', path.name, destination, note
+                    'dry run: would move "%s" -> %s (%s)%s',
+                    path.name,
+                    destination,
+                    note,
+                    _attached(correction),
                 )
             return
 
-        try:
-            _copy_into_place(path, destination)
-        except OSError as error:
-            LOG.error('could not move "%s": %s', path.name, error)
-            return
-        LOG.info('%s "%s" -> %s (%s)', kind, path.name, destination, note)
+        if not already_kept:
+            try:
+                copy_into_place(path, destination)
+            except OSError as error:
+                LOG.error('could not move "%s": %s', path.name, error)
+                return
+        LOG.info(
+            '%s "%s" -> %s (%s)%s',
+            kind,
+            path.name,
+            destination,
+            note,
+            _attached(correction),
+        )
 
         try:
             path.unlink()
@@ -149,12 +186,12 @@ class Relay:
 
             if _same_contents(path, taken):
                 return (
-                    _free_name(self.config.backup_dir, path.name),
+                    self.backups.free_name(path.name),
                     "duplicate",
                     f"identical to {taken}",
                 )
             return (
-                _free_name(self.config.output_dir, path.name),
+                free_name(self.config.output_dir, path.name),
                 "collision",
                 f"a different file is already at {taken}",
             )
@@ -163,24 +200,9 @@ class Relay:
             return None, None, None
 
 
-def _copy_into_place(source, destination):
-    """Copy under a hidden name, then rename it, leaving the original alone.
-
-    Copying rather than renaming is deliberate: a rename keeps the original
-    owner, while a copy is created by this process and so comes out owned by
-    the user the container runs as. Removing the original is the caller's job,
-    because it can fail on its own.
-    """
-    half_written = destination.parent / temp_name(destination.name)
-    try:
-        with open(source, "rb") as reading, open(half_written, "wb") as writing:
-            shutil.copyfileobj(reading, writing, _READ_SIZE)
-            writing.flush()
-            os.fsync(writing.fileno())
-        os.replace(half_written, destination)
-    except OSError:
-        half_written.unlink(missing_ok=True)
-        raise
+def _attached(fragment):
+    """The metadata note for the end of a log line, space and all."""
+    return f" {fragment}" if fragment else ""
 
 
 def _same_contents(one, other):
@@ -192,25 +214,9 @@ def _same_contents(one, other):
 def _digest(path):
     running = hashlib.sha256()
     with open(path, "rb") as handle:
-        while chunk := handle.read(_READ_SIZE):
+        while chunk := handle.read(READ_SIZE):
             running.update(chunk)
     return running.digest()
-
-
-def _free_name(folder, name):
-    """folder/name, or folder/'name (2)', 'name (3)'... if that is taken."""
-    candidate = folder / name
-    if not candidate.exists():
-        return candidate
-
-    stem, dot, extension = name.rpartition(".")
-    number = 2
-    while True:
-        numbered = f"{stem} ({number}).{extension}" if dot else f"{name} ({number})"
-        candidate = folder / numbered
-        if not candidate.exists():
-            return candidate
-        number += 1
 
 
 def _human_size(count):

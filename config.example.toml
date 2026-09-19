@@ -11,10 +11,19 @@ ingest_dir = "/ingest"
 # Where your library app (CWA, Grimmory, ...) imports from.
 output_dir = "/output"
 
-# Kept copies of originals. For now only identical duplicates land here; from
-# v0.2 the file's original is backed up here before its metadata is changed,
-# and anything older than 30 days is cleared out automatically.
+# Kept copies of originals. A book's original is put here before its metadata
+# is changed, and an identical duplicate the library already has is moved here
+# rather than deleted. Nothing here is ever overwritten.
 backup_dir = "/backups"
+
+# How long those kept copies last, in days. Anything older is deleted on the
+# next scan. This covers duplicates filed here by the relay too.
+backup_retention_days = 30
+
+# Where the Docker secret holding your Hardcover API token is mounted. This is
+# a path, never the token itself. If the file is not there, Colophon says so at
+# startup and passes books through with their metadata as it is.
+hardcover_token_file = "/run/secrets/hardcover_token"
 
 # On by default, so a fresh install cannot surprise you: Colophon logs what it
 # would do and moves nothing. Set this to false once the log looks right.

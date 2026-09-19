@@ -29,6 +29,22 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.stable_checks, 2)
         self.assertEqual(config.log_level, "INFO")
         self.assertIn(".part", config.skip_suffixes)
+        self.assertEqual(config.backup_retention_days, 30)
+        self.assertEqual(
+            config.hardcover_token_file, Path("/run/secrets/hardcover_token")
+        )
+
+    def test_the_hardcover_token_comes_from_a_secret_file_path(self):
+        config = load_config(
+            env={
+                "COLOPHON_CONFIG": str(self.tmp / "missing.toml"),
+                "COLOPHON_HARDCOVER_TOKEN_FILE": "/run/secrets/hardcover",
+                "COLOPHON_BACKUP_RETENTION_DAYS": "7",
+            }
+        )
+
+        self.assertEqual(config.hardcover_token_file, Path("/run/secrets/hardcover"))
+        self.assertEqual(config.backup_retention_days, 7)
 
     def test_file_values_replace_defaults(self):
         path = self.write_config(
@@ -99,6 +115,8 @@ class LoadConfigTests(unittest.TestCase):
             ("COLOPHON_STABLE_CHECKS", "0"),
             ("COLOPHON_STABLE_CHECKS", "lots"),
             ("COLOPHON_LOG_LEVEL", "chatty"),
+            ("COLOPHON_BACKUP_RETENTION_DAYS", "0"),
+            ("COLOPHON_BACKUP_RETENTION_DAYS", "ages"),
         ]:
             with self.subTest(name=name, value=value), self.assertRaises(ConfigError):
                 load_config(env={name: value})
