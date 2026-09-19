@@ -2,7 +2,7 @@
 
 Each metadata field now follows its own rule, set in `config.toml`: skip, fill
 if empty, or overwrite. A cover is added to a book that has none, from the
-source that matched it. Test-first throughout; the suite is 402 tests, `ruff`
+source that matched it. Test-first throughout; the suite is 403 tests, `ruff`
 is clean.
 
 ## What changed, per acceptance criterion
