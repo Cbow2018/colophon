@@ -6,8 +6,10 @@ document, reading what it says, and changing as little of the rest of the file
 as possible: the text, the images and the licence all come out untouched.
 """
 
+import hashlib
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -34,6 +36,18 @@ COLLECTION_TYPE = "collection-type"
 GROUP_POSITION = "group-position"
 SERIES = "series"
 NEW_COLLECTION_ID = "colophon-series"
+COVER_ID = "colophon-cover"
+COVER_META = "cover"
+
+# What a cover image can be, by the first bytes of the file. The sources do not
+# say what they are serving beyond a `Content-Type` header, and the bytes are
+# what ends up in the book, so the bytes are what the declaration is built from.
+COVER_TYPES = (
+    (b"\xff\xd8\xff", "image/jpeg", ".jpg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png", ".png"),
+    (b"GIF87a", "image/gif", ".gif"),
+    (b"GIF89a", "image/gif", ".gif"),
+)
 
 _XMLNS = re.compile(rb'xmlns(?::([A-Za-z_][\w.-]*))?="([^"]*)"')
 
@@ -50,37 +64,105 @@ class Book:
     authors: tuple
     isbn: str | None
     language: str | None
+    description: str | None = None
+    publisher: str | None = None
+    date: str | None = None
+    # The series the book already says it is in, and the number it claims, as
+    # Calibre records them. Read here because the two are judged together: a
+    # series number that is being left alone is only stale if the series around
+    # it is changing.
+    series: str | None = None
+    series_number: str | None = None
+    # Whether the book has a cover of its own. Read here rather than asked of
+    # the file again later, so "does it have one" and "add it if it does not"
+    # cannot be answered from two different readings of the same book.
+    has_cover: bool = False
 
 
 @dataclass(frozen=True)
 class Edits:
-    """What a source says the book is. None leaves that field as it was."""
+    """What a source says the book is. None leaves that field as it was.
+
+    An empty string is not the same as None: it means the field is to be taken
+    off the book. Nothing in the field rules spells that, but the two have to be
+    distinguishable or a field could never be removed at all.
+    """
 
     title: str | None = None
     authors: tuple | None = None
     series: str | None = None
     series_number: str | None = None
+    description: str | None = None
+    publisher: str | None = None
+    date: str | None = None
+    isbn: str | None = None
+    language: str | None = None
+    # Set to take a series number off a book whose series is being replaced:
+    # `series_number=None` means the source said nothing, which is not the same
+    # as a number that is now a position in the wrong series.
+    drop_series_number: bool = False
 
 
 def read(path):
     """Read the metadata out of the package document."""
     package = _package(path)
     metadata = _metadata(package)
+    series, series_number = _read_series(metadata)
     return Book(
         title=_first_text(metadata, "title"),
         authors=tuple(_all_text(metadata, "creator")),
         isbn=_isbn(metadata),
         language=_first_text(metadata, "language"),
+        description=_first_text(metadata, "description"),
+        publisher=_first_text(metadata, "publisher"),
+        date=_first_text(metadata, "date"),
+        series=series,
+        series_number=series_number,
+        has_cover=_has_cover(package, metadata),
     )
 
 
-def correct(path, edits, write=True):
+def _read_series(metadata):
+    """The series the book is already in, as Calibre records it.
+
+    Calibre's two tags are read rather than EPUB 3's collection, because they
+    are the pair the writing side already keeps together: whichever a book came
+    with, this is what "the file's series" means to the comparison.
+    """
+    found = {}
+    for element in metadata.findall(f"{{{OPF}}}meta"):
+        if element.get("name") in (CALIBRE_SERIES, CALIBRE_SERIES_INDEX):
+            found[element.get("name")] = (element.get("content") or "").strip() or None
+    return found.get(CALIBRE_SERIES), found.get(CALIBRE_SERIES_INDEX)
+
+
+def _has_cover(package, metadata):
+    """Whether a book has a cover, by both of the ways a book can say so.
+
+    EPUB 2 declares one with `<meta name="cover" content="id"/>` pointing at a
+    manifest item; EPUB 3 puts `properties="cover-image"` on the item itself. A
+    book may say it either way, or both, and any of them means the cover it came
+    with is its own and is not to be replaced.
+    """
+    for element in metadata.findall(f"{{{OPF}}}meta"):
+        if element.get("name") == COVER_META and (element.get("content") or "").strip():
+            return True
+    return _declared_cover(package)
+
+
+def correct(path, edits, write=True, cover=None):
     """Overwrite the fields a source provides, and say which ones moved.
 
     Nothing else in the file changes: the text, the images and any licence left
     inside it survive byte for byte. A book with nothing to change is not
     written at all, so not even its timestamp moves - and with `write=False`
     the answers are what *would* change, which is what a dry run wants.
+
+    `cover` is the image a source offers, and it is added only when the book has
+    none: a book with a cover keeps it, whatever it was offered. `None` means no
+    cover was offered, which is why a caller adding one hands over bytes and not
+    a truthy value; the bytes are never inspected here beyond their first few.
+    A book with nothing to change and no cover to add is still not written at all.
     """
     try:
         with zipfile.ZipFile(path) as book:
@@ -98,11 +180,14 @@ def correct(path, edits, write=True):
     if metadata is None:
         raise EpubError(f"{path} has no metadata section to correct")
 
-    changed = _apply(metadata, edits)
+    changed = list(_apply(metadata, edits))
+    image = _set_cover(path, package, metadata, cover)
+    if image is not None:
+        changed.append("cover")
     if changed and write:
         document = ET.tostring(package, encoding="utf-8", xml_declaration=True)
-        _rewrite(path, opf_path, document)
-    return changed
+        _rewrite(path, opf_path, document, image)
+    return tuple(changed)
 
 
 def _apply(metadata, edits):
@@ -112,6 +197,14 @@ def _apply(metadata, edits):
         changed.append("title")
     if edits.authors is not None and _set_authors(metadata, edits.authors):
         changed.append("authors")
+    for name in ("description", "publisher", "date"):
+        value = getattr(edits, name)
+        if value is not None and _set_text(metadata, name, value):
+            changed.append(name)
+    if edits.language is not None and _set_text(metadata, "language", edits.language):
+        changed.append("language")
+    if edits.isbn is not None and _set_isbn(metadata, edits.isbn):
+        changed.append("isbn")
     series_moved, number_moved = _set_series(metadata, edits)
     if series_moved:
         changed.append("series")
@@ -228,9 +321,17 @@ def _as_isbn(text, scheme=None):
 
 
 def _set_text(metadata, name, value):
-    """Put a value on the first dc:<name>, adding the element if it is missing."""
+    """Put a value on the first dc:<name>, adding the element if it is missing.
+
+    An empty value takes the element off the book, which is the one way a field
+    the design spec never asks to clear can still be cleared.
+    """
     value = str(value).strip()
     elements = _elements(metadata, name)
+    if not value:
+        for element in elements:
+            metadata.remove(element)
+        return bool(elements)
     if not elements:
         element = ET.Element(f"{{{DC}}}{name}")
         element.text = value
@@ -239,6 +340,31 @@ def _set_text(metadata, name, value):
     if (elements[0].text or "").strip() == value:
         return False
     elements[0].text = value
+    return True
+
+
+def _set_isbn(metadata, isbn):
+    """Write the ISBN as EPUB 3's URN, on whichever identifier is an ISBN.
+
+    A book's other identifiers - a UUID, a Gutenberg URL - are not touched: they
+    identify the file, and the ISBN identifies the edition. An identifier that
+    already says it is an ISBN is rewritten in place rather than added to, so a
+    book corrected twice does not end up claiming two ISBNs.
+    """
+    wanted = f"urn:isbn:{str(isbn).strip()}"
+    for element in _elements(metadata, "identifier"):
+        text = (element.text or "").strip()
+        scheme = (element.get(f"{{{OPF}}}scheme") or "").lower()
+        if "isbn" in scheme or text.lower().startswith("urn:isbn:"):
+            if text.lower() == wanted.lower():
+                return False
+            element.text = wanted
+            element.attrib.pop(f"{{{OPF}}}scheme", None)
+            return True
+
+    element = ET.Element(f"{{{DC}}}identifier")
+    element.text = wanted
+    _insert_dc(metadata, element)
     return True
 
 
@@ -299,6 +425,15 @@ def _set_series(metadata, edits):
             metadata, collection, GROUP_POSITION, position
         ):
             number_moved = True
+    elif edits.drop_series_number:
+        # The series this number belonged to is gone, so a number left behind
+        # would be a position in a series the book is no longer in. A reader
+        # cannot tell that from a number that is still true, which is why it is
+        # taken off rather than left.
+        if _drop_meta(metadata, CALIBRE_SERIES_INDEX):
+            number_moved = True
+        if collection is not None and _drop_refined(metadata, collection, GROUP_POSITION):
+            number_moved = True
 
     return series_moved, number_moved
 
@@ -336,6 +471,29 @@ def _set_meta(metadata, name, value):
     element.set("name", name)
     element.set("content", value)
     return True
+
+
+def _drop_meta(metadata, name):
+    """Take one of those tags off the book, saying whether there was one."""
+    found = False
+    for element in list(metadata.findall(f"{{{OPF}}}meta")):
+        if element.get("name") == name:
+            metadata.remove(element)
+            found = True
+    return found
+
+
+def _drop_refined(metadata, element, name):
+    """Take off the meta refining this element, saying whether there was one."""
+    identifier = element.get("id")
+    if not identifier:
+        return False
+    found = False
+    for other in list(metadata.findall(f"{{{OPF}}}meta")):
+        if other.get("refines") == f"#{identifier}" and other.get("property") == name:
+            metadata.remove(other)
+            found = True
+    return found
 
 
 def _refined(metadata, element, name):
@@ -408,6 +566,113 @@ def _position(value):
     return f"{number:g}"
 
 
+# The cover -----------------------------------------------------------------
+
+
+def _cover_id(metadata):
+    """The manifest id EPUB 2's cover meta points at, if the book says one."""
+    for element in metadata.findall(f"{{{OPF}}}meta"):
+        if element.get("name") == COVER_META:
+            found = (element.get("content") or "").strip()
+            if found:
+                return found
+    return None
+
+def _declared_cover(package):
+    """Whether an EPUB 3 manifest item claims to be the cover image."""
+    manifest = package.find(f"{{{OPF}}}manifest")
+    if manifest is None:
+        return False
+    for item in manifest.findall(f"{{{OPF}}}item"):
+        properties = (item.get("properties") or "").split()
+        if "cover-image" in properties:
+            return True
+    return False
+
+
+def _set_cover(path, package, metadata, cover):
+    """Add an image as the book's cover, or None when there is nothing to do.
+
+    A book that already has a cover keeps it: the setting says a cover is added
+    to a book that has none, so being offered one is not a reason to replace
+    what a person chose. Either way of declaring a cover counts - EPUB 2's
+    `<meta name="cover">` and EPUB 3's `properties="cover-image"` - because a
+    book that says it has one either way has one.
+
+    The image goes in beside the package document, which is where a relative
+    manifest href is resolved from, under a name built from its own bytes, so
+    the same image added twice is the same entry rather than a second copy. With
+    no bytes at all the declaration is still made and no entry is named for
+    them, which is what a dry run is: what the book would say, without fetching
+    or storing the image it would say it about.
+    """
+    if cover is None:
+        return None
+    if _cover_id(metadata) is not None or _declared_cover(package):
+        return None
+
+    package_folder = _package_folder(path)
+    identifier = _free_id(metadata, COVER_ID)
+    media_type = "image/jpeg"
+    name = None
+    href = None
+    if cover:
+        media_type, extension = _image_type(cover)
+        if media_type is None:
+            raise EpubError(
+                f"{path}: the offered cover is not an image Colophon recognises"
+            )
+        with zipfile.ZipFile(path) as book:
+            taken = {entry.filename for entry in book.infolist()}
+        digest = hashlib.md5(cover).hexdigest()[:8]
+        name = f"{package_folder}cover-{digest}{extension}"
+        number = 2
+        while name in taken:
+            # The same image under a name the book already uses: not ours to
+            # overwrite, so it goes beside it. Re-running on an unchanged book
+            # never reaches here, because it already says it has a cover.
+            name = f"{package_folder}cover-{digest}-{number}{extension}"
+            number += 1
+        href = _relative_href(name, package_folder)
+
+    manifest = package.find(f"{{{OPF}}}manifest")
+    item = ET.SubElement(manifest, f"{{{OPF}}}item")
+    item.set("id", identifier)
+    item.set("media-type", media_type)
+    if href is not None:
+        item.set("href", href)
+    if _is_epub3(package):
+        item.set("properties", "cover-image")
+    _set_meta(metadata, COVER_META, identifier)
+    return name, cover
+
+
+def _image_type(cover):
+    """What an image is, from its own first bytes, or (None, None) if it is not one."""
+    for signature, media_type, extension in COVER_TYPES:
+        if cover.startswith(signature):
+            return media_type, extension
+    return None, None
+
+
+def _is_epub3(package):
+    """Which of the two layout versions this package document declares."""
+    return str(package.get("version", "3.0")).startswith("3")
+
+
+def _package_folder(path):
+    """The folder the package document lives in, as a zip-name prefix."""
+    with zipfile.ZipFile(path) as book:
+        full_path = _package_path(book)
+    folder, _, _ = full_path.rpartition("/")
+    return f"{folder}/" if folder else ""
+
+
+def _relative_href(name, package_folder):
+    """A manifest href, which is resolved from the package document, not the zip root."""
+    return name.removeprefix(package_folder)
+
+
 # The zip itself -----------------------------------------------------------
 
 
@@ -422,12 +687,17 @@ def _keep_namespace_prefixes(declared):
             ET.register_namespace(prefix.decode() if prefix else "", uri.decode())
 
 
-def _rewrite(path, opf_path, document):
+def _rewrite(path, opf_path, document, image=None):
     """Rewrite the zip with the new package document and nothing else disturbed.
 
     Both handles are closed before the swap: Windows refuses to replace a file
     that anything still has open, so the book is read, closed, and only then
     replaced by the rewritten copy.
+
+    `image` is a cover to add, as (name, bytes). It goes in after every entry
+    the book already had, so the order the book was written in is left as it
+    was. A cover with no bytes is one that was only ever declared, which a dry
+    run does and a write never does.
     """
     half_written = path.parent / f".{path.name}.colophon-new"
     try:
@@ -435,10 +705,25 @@ def _rewrite(path, opf_path, document):
             for entry in book.infolist():
                 body = document if entry.filename == opf_path else book.read(entry.filename)
                 _copy_entry(rewritten, entry, body)
+            if image is not None and image[0] is not None:
+                name, cover = image
+                added = zipfile.ZipInfo(name, _now())
+                added.compress_type = zipfile.ZIP_DEFLATED
+                rewritten.writestr(added, cover)
         os.replace(half_written, path)
     except OSError:
         half_written.unlink(missing_ok=True)
         raise
+
+
+def _now():
+    """A timestamp for a new entry, in the tuple a zip entry wants.
+
+    An image needs a date and time and has none of its own, and the zip format
+    cannot store one before 1980. The book's own entries keep theirs.
+    """
+    found = time.localtime()
+    return (max(found.tm_year, 1980), found.tm_mon, found.tm_mday, found.tm_hour, found.tm_min, found.tm_sec)
 
 
 def _copy_entry(rewritten, entry, body):

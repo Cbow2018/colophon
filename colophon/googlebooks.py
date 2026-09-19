@@ -41,12 +41,21 @@ TIMEOUT_SECONDS = 30
 USER_AGENT = "Colophon (+https://github.com/Cbow2018/colophon)"
 REDACTED = "[key]"
 
-# Only the parts a Candidate is built from: `description` alone is 500-1800
-# characters per volume, and none of it is read here.
+# What a candidate is built from. The four fields at the end are the ones
+# CBO-38's rules can write; the rest are CBO-37's. Asking for them costs
+# nothing, since the response is masked to exactly this list either way.
 FIELDS = (
     "totalItems,items/id,items/volumeInfo/title,items/volumeInfo/authors,"
-    "items/volumeInfo/language,items/volumeInfo/industryIdentifiers"
+    "items/volumeInfo/language,items/volumeInfo/industryIdentifiers,"
+    "items/volumeInfo/description,items/volumeInfo/publishedDate,"
+    "items/volumeInfo/publisher,items/volumeInfo/imageLinks"
 )
+
+# Which of the two sizes Google offers to use as the cover. It labels one
+# `thumbnail` and the other `smallThumbnail`, and both turned out to be the same
+# image when measured; the larger name is asked for first anyway, so a volume
+# that ever does offer two sizes gets the bigger one.
+COVER_SIZES = ("thumbnail", "smallThumbnail")
 
 # How many volumes to ask for. Google's ceiling is 40 and it answers 400 above
 # that; the default is 10, and a title-and-author search returns one or two.
@@ -243,6 +252,10 @@ def _candidate(volume):
     so nothing may be invented for it. The subtitle is left off the title
     because the work's title is what a file is matched on, and a source keeping
     its subtitle on the record is the case the comparison already handles.
+
+    Google has no blurb on some volumes and no publisher on many, and none of
+    those absences is filled in from anywhere: a field Google did not answer is
+    left as None, which is how the rules tell "nothing to write" from a value.
     """
     info = volume.get("volumeInfo") or {}
     return Candidate(
@@ -255,7 +268,25 @@ def _candidate(volume):
         ),
         language=_text(info.get("language")),
         isbn=_preferred_isbn(_identifiers(volume)),
+        description=_text(info.get("description")),
+        publisher=_text(info.get("publisher")),
+        date=_text(info.get("publishedDate")),
+        cover=_cover(info),
     )
+
+
+def _cover(info):
+    """The cover URL Google offers for this volume, if it offers one.
+
+    `imageLinks` is absent from some volumes and an empty object on others;
+    both mean the same thing, which is that Google has no cover for this one.
+    """
+    links = info.get("imageLinks") or {}
+    for size in COVER_SIZES:
+        found = _text(links.get(size))
+        if found:
+            return found
+    return None
 
 
 def _identifiers(volume):

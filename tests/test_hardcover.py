@@ -424,5 +424,72 @@ class SecretFileTests(unittest.TestCase):
             Hardcover.from_secret_file(unreadable)
 
 
+class TheOtherFieldsTests(unittest.TestCase):
+    """What CBO-38's rules write, from the fields Hardcover really keeps.
+
+    The blurb and the release date live on the work; the publisher, the language
+    and the ISBN live on the edition. A candidate is built from both, so it has
+    to reach across. The reply is the real one for the Cragside edition.
+    """
+
+    def source(self, name="by-isbn-cragside-edition.json"):
+        return Hardcover(TOKEN, transport=Replay(name))
+
+    def test_it_asks_for_the_fields_the_rules_can_write(self):
+        replay = Replay()
+
+        Hardcover(TOKEN, transport=replay).by_isbn(CRAGSIDE)
+
+        query = replay.sent["body"]["query"]
+        for wanted in ("description", "publisher", "release_date", "image"):
+            with self.subTest(field=wanted):
+                self.assertIn(wanted, query)
+
+    def test_a_candidate_carries_the_blurb_the_work_has(self):
+        book = self.source().by_isbn(CRAGSIDE)
+
+        self.assertTrue(book.description.startswith("FROM THE #1 INTERNATIONAL"))
+        self.assertIn("Cragside", book.description)
+
+    def test_the_description_is_the_source_s_own_words_character_for_character(self):
+        recorded = json.loads(
+            (RECORDED / "by-isbn-cragside-edition.json").read_text(encoding="utf-8")
+        )
+        expected = recorded["data"]["editions"][0]["book"]["description"]
+
+        self.assertEqual(self.source().by_isbn(CRAGSIDE).description, expected)
+
+    def test_a_candidate_carries_the_publisher_and_the_date(self):
+        book = self.source().by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.publisher, "Independently Published")
+        self.assertEqual(book.date, "2017-07-07")
+
+    def test_a_candidate_carries_the_cover_the_source_offers(self):
+        book = self.source().by_isbn(CRAGSIDE)
+
+        self.assertEqual(
+            book.cover,
+            "https://assets.hardcover.app/external_data/40810017/"
+            "88c4da5caf5a76472600888c8c4ada978965ebdd.jpeg",
+        )
+
+    def test_a_book_with_no_publisher_or_cover_carries_neither(self):
+        """Hardcover has neither for Normal People, and neither is invented."""
+        book = self.source("by-isbn-no-series.json").by_isbn(NORMAL_PEOPLE)
+
+        self.assertIsNone(book.publisher)
+        self.assertIsNone(book.cover)
+
+    def test_the_title_path_carries_them_too(self):
+        candidates = self.source("by-title-cragside-other-fields.json").by_title(
+            [CRAGSIDE_TITLE], "en"
+        )
+
+        self.assertTrue(candidates[0].description.startswith("FROM THE #1 INTERNATIONAL"))
+        self.assertEqual(candidates[0].publisher, "Independently Published")
+        self.assertTrue(candidates[0].cover.startswith("https://assets.hardcover.app/"))
+
+
 if __name__ == "__main__":
     unittest.main()

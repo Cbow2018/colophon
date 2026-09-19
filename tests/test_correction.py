@@ -1,19 +1,33 @@
 """Tests for the correction pass: what it changes, when it backs up, and dry run."""
 
 import inspect
+import json
 import shutil
 import unittest
 from pathlib import Path
 
 from colophon.backups import Backups
-from colophon.config import KNOWN_SOURCES, Config
-from colophon.correction import SOURCE_SETUP, Corrector
+from colophon.config import FIELD_DEFAULTS, KNOWN_FIELDS, KNOWN_SOURCES, Config
+from colophon.correction import _WRITTEN, SOURCE_SETUP, Corrector
 from colophon.epub import read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.matching import Candidate
 from colophon.sources import SourceError
-from tests.opf import calibre_series, collections, entries_of, epub3_series
+from tests.coverimage import COVER as COVER_FIXTURE
+
+# The cover Google really serves for the Cragside edition the recording below
+# describes, recorded at the same time as the reply itself.
+GOOGLE_COVER = Path(__file__).parent / "fixtures" / "covers" / "google-cragside.jpg"
+GOOGLE_RECORDED = Path(__file__).parent / "fixtures" / "googlebooks"
+from tests.opf import (
+    calibre_series,
+    collections,
+    cover_meta,
+    entries_of,
+    epub3_series,
+    manifest_items,
+)
 from tests.samplebooks import (
     AS_DOWNLOADED,
     BELSAY,
@@ -36,7 +50,10 @@ from tests.sources import (
     ANOTHER_INFIRMARY,
     BELSAY_CANDIDATE,
     BERWICK_CANDIDATE,
+    CRAGSIDE_BLURB,
     CRAGSIDE_CANDIDATE,
+    MATCH,
+    NO_COVER_MATCH,
     SAPIENS_CANDIDATE,
     THE_INFIRMARY_CANDIDATE,
     FakeSource,
@@ -46,17 +63,36 @@ from tests.test_googlebooks import Replay as GoogleReplay
 from tests.test_googlebooks import ReplayByQuery
 from tests.test_hardcover import Replay
 
-# A book that already says everything the source says, in both series formats,
-# so there is genuinely nothing left to change.
+# A book that already says everything the source says - every field the rules
+# write, in both series formats, with a cover of its own - so there is genuinely
+# nothing left to change under the default rules.
 ALREADY_MATCHES = f"""    <dc:title>Cragside</dc:title>
     <dc:creator>L.J. Ross</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:language>en</dc:language>
+    <dc:description>{CRAGSIDE_BLURB}</dc:description>
+    <dc:publisher>Independently Published</dc:publisher>
+    <dc:date>2017-07-07</dc:date>
+    <meta name="cover" content="local-cover"/>
     <meta name="calibre:series" content="DCI Ryan Mysteries"/>
     <meta name="calibre:series_index" content="6"/>
     <meta property="belongs-to-collection" id="colophon-series">DCI Ryan Mysteries</meta>
     <meta property="collection-type" refines="#colophon-series">series</meta>
     <meta property="group-position" refines="#colophon-series">6</meta>
+"""
+
+# Everything the source says, on a book whose own values all differ, so an
+# overwrite has something to overwrite.
+WRONG_THROUGHOUT = f"""    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)</dc:title>
+    <dc:creator>LJ Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+    <dc:description>Whatever a download site made up.</dc:description>
+    <dc:publisher>Somewhere Else</dc:publisher>
+    <dc:date>1999-01-01</dc:date>
+    <meta name="cover" content="local-cover"/>
+    <meta name="calibre:series" content="An Old Series"/>
+    <meta name="calibre:series_index" content="3"/>
 """
 
 
@@ -79,12 +115,36 @@ class RefusingBackups:
         raise OSError("no space left on device")
 
 
+class TheFieldListTests(unittest.TestCase):
+    """The fields the config has rules for are the fields the pass can write.
+
+    A field in one list and not the other is invisible either way: a rule the
+    user sets that nothing applies, or a field the pass writes that cannot be
+    turned off. `KNOWN_FIELDS` is what `config.toml` accepts and `_WRITTEN` is
+    what the corrector walks, so this is the test that keeps them one list.
+    """
+
+    def test_the_config_and_the_corrector_agree_on_which_fields_there_are(self):
+        self.assertEqual(
+            tuple(name for name, _ in FIELD_DEFAULTS),
+            KNOWN_FIELDS,
+            "the defaults are keyed by the field list",
+        )
+        self.assertEqual(set(_WRITTEN), set(KNOWN_FIELDS))
+        self.assertEqual(_WRITTEN, KNOWN_FIELDS, "and in the same order")
+
+    def test_a_field_the_rules_do_not_name_is_not_written(self):
+        """`_WRITTEN` is what is walked, so a rule for anything else does nothing."""
+        self.assertNotIn("genre", KNOWN_FIELDS)
+        self.assertNotIn("cover", KNOWN_FIELDS, "a cover is a setting, not a rule")
+
+
 class CorrectionTestCase(unittest.TestCase):
     def setUp(self):
         self._tmp = TemporaryDirectory()
         self.folder = Path(self._tmp.name)
         self.backups = Backups(self.folder / "backups")
-        self.source = FakeSource()
+        self.source = FakeSource(found=NO_COVER_MATCH)
         self.addCleanup(self._tmp.cleanup)
 
     def book(self, name="Cragside.epub", content=CHAPTER):
@@ -111,6 +171,400 @@ class CorrectionTestCase(unittest.TestCase):
         return sorted(path.name for path in folder.iterdir()) if folder.is_dir() else []
 
 
+class FieldRuleTests(CorrectionTestCase):
+    """Each field follows its own rule: skip, fill if empty, or overwrite.
+
+    The rules are the ones CBO-38's acceptance criteria name, set here through
+    the corrector the way the config sets them. Every book in this class carries
+    a value for every field already, so a rule that writes has something to
+    overwrite and a rule that does not has something to leave alone.
+    """
+
+    # A cover the fake fetcher hands back, so a test about covers never reaches
+    # the network. A real PNG, because the media type is read off the bytes.
+    COVER = COVER_FIXTURE.read_bytes()
+
+    def rules(self, **rules):
+        """Every field's rule, with the ones a test cares about overridden."""
+        settings = {name: "fill" for name in KNOWN_FIELDS}
+        settings.update(rules)
+        return settings
+
+    def a_cover(self, url):
+        """The cover the source offers, without a network to fetch it from."""
+        if url == MATCH.cover:
+            return self.COVER
+        raise SourceError(f"a test tried to fetch {url} from the network")
+
+    def corrector(self, rules=None, source=None, found=None, **kwargs):
+        if source is None:
+            source = self.source if found is None else FakeSource(found=found)
+        if rules is None:
+            # No rules at all, which is how a caller gets the ones the config
+            # ships: a test about the defaults has to leave them alone.
+            settings = {}
+        else:
+            settings = {"fields": rules}
+        settings.setdefault("fetch", self.a_cover)
+        settings.update(kwargs)
+        return Corrector(sources=[source], backups=self.backups, **settings)
+
+    def book(self, name="Cragside.epub", metadata=WRONG_THROUGHOUT):
+        return write_epub(
+            self.folder / name,
+            metadata,
+            version="2.0",
+            extra_entries=[("OEBPS/local-cover.png", self.COVER)],
+        )
+
+    def test_the_default_rules_are_the_ones_the_ticket_names(self):
+        """A bare book, so every field is one the rules have something to say about."""
+        path = write_epub(
+            self.folder / "Bare.epub",
+            f"""    <dc:title>Something Else Entirely</dc:title>
+    <dc:creator>Nobody</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:description>The file's own blurb, which fill must leave alone.</dc:description>
+""",
+            version="2.0",
+        )
+
+        outcome = self.corrector(found=MATCH).correct(path)
+
+        written = {change.field for change in outcome.changed}
+        self.assertEqual(
+            written,
+            {
+                "title",
+                "authors",
+                "series",
+                "series_number",
+                "publisher",
+                "date",
+                "language",
+                "cover",
+            },
+            "the overwrite fields and the empty fill fields, and the cover",
+        )
+        self.assertNotIn(
+            "description",
+            written,
+            "the file's blurb is what `fill` means by leaving it alone",
+        )
+        self.assertNotIn(
+            "isbn",
+            written,
+            "the file already carries the ISBN, so `fill` writes nothing",
+        )
+
+    def test_fill_writes_a_field_the_file_has_not_got(self):
+        path = self.book(
+            metadata=f"""    <dc:title>Cragside</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+"""
+        )
+
+        self.corrector(rules=self.rules(description="fill")).correct(path)
+
+        self.assertEqual(read(path).description, CRAGSIDE_BLURB)
+
+    def test_fill_leaves_a_field_the_file_already_has(self):
+        """The whole point of the rule: the file's own blurb is the one kept."""
+        path = self.book()
+
+        self.corrector(rules=self.rules(description="fill")).correct(path)
+
+        self.assertEqual(read(path).description, "Whatever a download site made up.")
+
+    def test_fill_writes_nothing_when_the_source_has_nothing(self):
+        """A source with no publisher has not offered a blank one."""
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                isbn=ISBN,
+            )
+        )
+        path = self.book(
+            metadata=f"""    <dc:title>Something Else</dc:title>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+"""
+        )
+
+        self.corrector(source=source, rules=self.rules(title="overwrite")).correct(path)
+
+        self.assertIsNone(read(path).publisher)
+        self.assertIsNone(read(path).description)
+
+    def test_overwrite_replaces_what_the_file_has(self):
+        path = self.book()
+
+        self.corrector(rules=self.rules(description="overwrite")).correct(path)
+
+        self.assertEqual(read(path).description, CRAGSIDE_BLURB)
+
+    def test_skip_never_writes_the_field(self):
+        path = self.book()
+
+        outcome = self.corrector(rules=self.rules(description="skip")).correct(path)
+
+        self.assertEqual(read(path).description, "Whatever a download site made up.")
+        self.assertNotIn("description", {change.field for change in outcome.changed})
+
+    def test_skip_on_every_field_writes_nothing_at_all(self):
+        path = self.book()
+        before = path.read_bytes()
+
+        outcome = self.corrector(rules=self.rules(**{name: "skip" for name in KNOWN_FIELDS})).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(outcome.changed, ())
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_one_field_can_be_kept_while_another_is_overwritten(self):
+        """The rules are per field, which is the whole of CBO-38."""
+        path = self.book()
+
+        self.corrector(
+            rules=self.rules(title="overwrite", description="skip", publisher="skip", date="skip")
+        ).correct(path)
+
+        book = read(path)
+        self.assertEqual(book.title, "Cragside", "the bad title is replaced")
+        self.assertEqual(
+            book.description, "Whatever a download site made up.", "the blurb is kept"
+        )
+        self.assertEqual(book.publisher, "Somewhere Else", "and so is the publisher")
+        self.assertEqual(book.date, "1999-01-01")
+
+    def test_filling_the_isbn_puts_the_source_s_isbn_into_a_book_with_none(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            """    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+""",
+            version="2.0",
+        )
+        source = FakeSource(found=None, candidates=[Candidate(
+            source="hardcover", title="Cragside", authors=("L.J. Ross",), isbn=ISBN
+        )])
+
+        self.corrector(source=source, rules=self.rules(isbn="fill")).correct(path)
+
+        self.assertEqual(read(path).isbn, ISBN)
+
+    def test_filling_the_isbn_leaves_the_one_the_file_already_has(self):
+        path = self.book(
+            metadata=f"""    <dc:title>Something Else</dc:title>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+"""
+        )
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                isbn="9781786813891",
+            )
+        )
+
+        self.corrector(source=source, rules=self.rules(isbn="fill")).correct(path)
+
+        self.assertEqual(read(path).isbn, ISBN, "the file's own ISBN is kept")
+
+    def test_filling_the_language_puts_the_source_s_language_in(self):
+        path = self.book(
+            metadata=f"""    <dc:title>Cragside</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+"""
+        )
+
+        self.corrector(rules=self.rules(language="fill")).correct(path)
+
+        self.assertEqual(read(path).language, "en")
+
+    def test_a_series_number_is_dropped_when_the_series_around_it_changes(self):
+        """A skipped number is not stale on its own; it is stale about a series.
+
+        The file says `An Old Series` #3 and the source says `DCI Ryan
+        Mysteries`, with the number left alone. Keeping the 3 would record a
+        position in the wrong series, so it comes off - and the log says so.
+        """
+        path = self.book()
+
+        outcome = self.corrector(
+            rules=self.rules(series="overwrite", series_number="skip")
+        ).correct(path)
+
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", None))
+        self.assertEqual(read(path).series_number, None)
+        self.assertIn("series_number", {change.field for change in outcome.changed})
+
+    def test_a_series_number_is_kept_when_the_series_does_not_change(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <meta name="calibre:series" content="DCI Ryan Mysteries"/>
+    <meta name="calibre:series_index" content="3"/>
+""",
+            version="2.0",
+        )
+
+        self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(path)
+
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "3"))
+
+    def test_the_number_is_written_normally_when_its_own_rule_says_so(self):
+        path = self.book()
+
+        self.corrector(rules=self.rules(series="overwrite", series_number="overwrite")).correct(path)
+
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_a_cover_is_added_to_a_book_that_has_none(self):
+        path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        outcome = self.corrector(found=MATCH).correct(path)
+
+        self.assertIn("cover", {change.field for change in outcome.changed})
+        identifier = cover_meta(path)
+        self.assertIsNotNone(identifier, "EPUB 2's own declaration, too")
+        declared = manifest_items(path)[identifier]
+        self.assertEqual(declared["media-type"], "image/png")
+        self.assertEqual(entries_of(path)[f"OEBPS/{declared['href']}"], self.COVER)
+
+    def test_the_added_cover_is_declared_for_epub_3_as_well(self):
+        """The same as the series: both formats, so any library app reads it."""
+        path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="3.0")
+
+        self.corrector(found=MATCH).correct(path)
+
+        declared = [
+            item
+            for item in manifest_items(path).values()
+            if item.get("properties") == "cover-image"
+        ]
+        self.assertEqual(len(declared), 1)
+        self.assertEqual(declared[0]["media-type"], "image/png")
+
+    def test_a_cover_is_not_added_to_a_book_that_has_one(self):
+        """The ticket's own criterion: the cover is added only if there is none."""
+        path = self.book()
+        before = entries_of(path)
+
+        outcome = self.corrector().correct(path)
+
+        self.assertNotIn("cover", {change.field for change in outcome.changed})
+        self.assertEqual(
+            [item for item in manifest_items(path).values() if item.get("media-type") == "image/png"],
+            [
+                item
+                for item in manifest_items(path).values()
+                if item.get("media-type") == "image/png"
+            ],
+            "the book's own cover entry is left as it was",
+        )
+        self.assertEqual(entries_of(path)["OEBPS/local-cover.png"], before["OEBPS/local-cover.png"])
+
+    def test_the_cover_setting_can_be_turned_off(self):
+        path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        outcome = self.corrector(found=MATCH, add_cover=False).correct(path)
+
+        self.assertNotIn("cover", {change.field for change in outcome.changed})
+        self.assertEqual(cover_meta(path), None)
+
+    def test_a_cover_is_not_fetched_for_a_book_nothing_would_change(self):
+        """No point downloading an image for a book about to be left alone."""
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            return self.COVER
+
+        path = write_epub(self.folder / "Already.epub", ALREADY_MATCHES, version="2.0")
+
+        self.corrector(found=MATCH, fetch=fetch).correct(path)
+
+        self.assertEqual(asked, [])
+
+    def test_a_cover_is_fetched_from_the_source_that_matched(self):
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            return self.COVER
+
+        path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        self.corrector(found=MATCH, fetch=fetch).correct(path)
+
+        self.assertEqual(asked, [MATCH.cover])
+
+    def test_a_cover_that_cannot_be_fetched_does_not_stop_the_metadata(self):
+        """A blurb and a right title are worth having without the image."""
+        def fetch(url):
+            raise SourceError("could not fetch the cover: it answered HTTP 500")
+
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Something Else Entirely</dc:title>
+    <dc:creator>Nobody</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+""",
+            version="2.0",
+        )
+
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            outcome = self.corrector(found=MATCH, fetch=fetch).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(read(path).description, CRAGSIDE_BLURB)
+        self.assertNotIn("cover", {change.field for change in outcome.changed})
+        self.assertIn("cover", "\n".join(captured.output))
+
+    def test_a_dry_run_changes_nothing_and_still_says_what_it_would_do(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Something Else Entirely</dc:title>
+    <dc:creator>Nobody</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+""",
+            version="2.0",
+        )
+        before = path.read_bytes()
+        asked = []
+
+        outcome = self.corrector(
+            found=MATCH,
+            dry_run=True,
+            fetch=lambda url: (asked.append(url), self.COVER)[1],
+        ).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertFalse(outcome.applied)
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertIn("would change", outcome.fragment())
+        self.assertIn(
+            "cover",
+            {change.field for change in outcome.changed},
+            "a dry run says the cover would be added",
+        )
+        self.assertEqual(asked, [], "and fetches nothing to say so")
+
+
 class MatchingTests(CorrectionTestCase):
     def test_a_matched_book_is_rewritten_with_what_the_source_says(self):
         path = self.book()
@@ -134,6 +588,22 @@ class MatchingTests(CorrectionTestCase):
         self.corrector().correct(self.book())
 
         self.assertEqual(self.source.asked, [ISBN])
+
+    def test_correcting_the_same_book_twice_gives_the_same_bytes(self):
+        """Which the relay depends on: a re-dropped book has to compare equal.
+
+        A book dropped twice is the same book corrected twice, and the relay
+        decides it is a duplicate by comparing the bytes. A cover's name being
+        built from its own bytes is what keeps this true; a timestamp in it
+        would make every re-drop a "different file".
+        """
+        first = write_epub(self.folder / "First.epub", AS_DOWNLOADED, version="2.0")
+        second = write_epub(self.folder / "Second.epub", AS_DOWNLOADED, version="2.0")
+
+        self.corrector(source=FakeSource(found=MATCH)).correct(first)
+        self.corrector(source=FakeSource(found=MATCH)).correct(second)
+
+        self.assertEqual(first.read_bytes(), second.read_bytes())
 
     def test_the_original_is_backed_up_before_it_is_changed(self):
         path = self.book()
@@ -165,15 +635,21 @@ class MatchingTests(CorrectionTestCase):
     def test_the_outcome_lists_the_fields_and_where_each_value_came_from(self):
         path = self.book()
 
-        outcome = self.corrector().correct(path)
+        outcome = self.corrector(source=FakeSource(found=MATCH)).correct(path)
 
         self.assertEqual(
             [(change.field, change.value, change.source) for change in outcome.changed],
             [
                 ("title", "Cragside", "hardcover"),
                 ("authors", "L.J. Ross", "hardcover"),
+                ("description", CRAGSIDE_BLURB, "hardcover"),
+                ("publisher", "Independently Published", "hardcover"),
+                ("date", "2017-07-07", "hardcover"),
                 ("series", "DCI Ryan Mysteries", "hardcover"),
                 ("series_number", "6", "hardcover"),
+                # The cover is the one change that is bytes rather than a value,
+                # so the source is named and the image itself is in the book.
+                ("cover", "", "hardcover"),
             ],
         )
 
@@ -777,11 +1253,42 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(self.kept(), [])
 
     def test_a_book_that_already_says_what_the_source_says_is_not_rewritten(self):
-        """A source with nothing but a title and an author has nothing to write."""
+        """A source with nothing but a title, an author and a language.
+
+        The file carries the first two and not the third, so `fill` has one
+        thing it could write - the language - and the test is what that looks
+        like when it does.
+        """
         path = self.book(
             "Already.epub",
             """    <dc:title>Cragside</dc:title>
     <dc:creator>L.J. Ross</dc:creator>
+""",
+        )
+        source = FakeSource(
+            found=None,
+            candidates=[Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(
+            [(change.field, change.value) for change in outcome.changed],
+            [("language", "en")],
+            "nothing is overwritten and only the missing language is filled",
+        )
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(read(path).authors, ("L.J. Ross",))
+        self.assertEqual(read(path).language, "en")
+
+    def test_a_book_the_source_has_nothing_to_add_to_is_left_exactly_as_it_was(self):
+        """Everything the source knows, the file already says, so nothing moves."""
+        path = self.book(
+            "Already.epub",
+            """    <dc:title>Cragside</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:language>en</dc:language>
 """,
         )
         source = FakeSource(
@@ -1040,6 +1547,80 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         outcome = self.corrector_over(FakeSource(found=None), second).correct(self.book())
 
         self.assertIn("google_books matched ISBN", outcome.fragment())
+
+
+class ARealGoogleRecordingThroughTheCorrectorTests(CorrectionTestCase):
+    """The new fields end to end: a real client, a real recording, a real book.
+
+    No stand-in for the source and none for the cover fetch either: the client
+    parses Google's own reply with the mask CBO-38 widened, and the cover comes
+    from `fixtures/covers/google-cragside.jpg`, the image Google really serves
+    for the Cragside edition that recording describes.
+    """
+
+    def google(self, replay=None):
+        return GoogleBooks(
+            "a-key",
+            transport=replay
+            or GoogleReplay("by-title-cragside-other-fields.json"),
+        )
+
+    def book(self):
+        """A book with no cover of its own, and nothing the rules need to keep."""
+        return write_epub(
+            self.folder / "Cragside.epub",
+            CRAGSIDE,
+            version="3.0",
+        )
+
+    def test_the_blurb_the_date_and_the_cover_all_arrive_from_the_recording(self):
+        """Whichever of the two editions the comparison chose, the values are its.
+
+        The recording holds two editions of Cragside - the Ulverscroft large
+        print and the original - and they disagree about the blurb, the date and
+        the cover. Which one wins is the comparison's business; what this is
+        about is that whatever the file ends up saying, it is what that edition
+        said, and the others' values are nowhere in it.
+        """
+        path = self.book()
+        recorded = json.loads(
+            (GOOGLE_RECORDED / "by-title-cragside-other-fields.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        self.corrector(
+            source=self.google(),
+            fetch=lambda url: GOOGLE_COVER.read_bytes(),
+        ).correct(path)
+
+        book = read(path)
+        written = [
+            item["volumeInfo"]
+            for item in recorded["items"]
+            if item["volumeInfo"].get("description") == book.description
+            and item["volumeInfo"].get("publishedDate") == book.date
+        ]
+        self.assertEqual(len(written), 1, "the values all come from one edition")
+        self.assertTrue(
+            book.description.startswith(("FROM THE", "After his climactic")),
+            "the source's own words, unedited",
+        )
+        self.assertTrue(book.has_cover, "the book arrived with none and now has one")
+        self.assertEqual(
+            entries_of(path)[f"OEBPS/{manifest_items(path)[cover_meta(path)]['href']}"],
+            GOOGLE_COVER.read_bytes(),
+        )
+
+    def test_no_series_is_written_and_none_is_removed(self):
+        """Google's reply has no series in it, so the file's own is left alone."""
+        path = write_epub(self.folder / "Cragside.epub", SERIES_ALREADY_ON_IT, version="3.0")
+
+        self.corrector(
+            source=self.google(), fetch=lambda url: GOOGLE_COVER.read_bytes()
+        ).correct(path)
+
+        self.assertEqual(calibre_series(path), ("An Old Series", "3"))
 
 
 class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):

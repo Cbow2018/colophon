@@ -5,6 +5,7 @@ needs no key and never touches the network. See
 `fixtures/googlebooks/README.md` for what each one is and which query made it.
 """
 
+import json
 import unittest
 import urllib.parse
 from pathlib import Path
@@ -332,6 +333,91 @@ class WhenGoogleRefusesTests(unittest.TestCase):
 
         self.assertNotIn(KEY, str(caught.exception))
         self.assertIn("[key]", str(caught.exception))
+
+
+class TheOtherFieldsTests(unittest.TestCase):
+    """What CBO-38's rules write, as far as Google Books has it.
+
+    The reply is the Cragside title search recorded with the mask the client
+    sends today: CBO-37's fields plus `description`, `publishedDate`,
+    `publisher` and `imageLinks`. It holds two editions of the book, and one of
+    them carries a blurb and a cover while the other does not - which is what
+    Google actually answers, and the reason a rule cannot assume a field is
+    there.
+    """
+
+    def source(self, name="by-title-cragside-other-fields.json"):
+        return GoogleBooks(KEY, transport=Replay(name))
+
+    def candidates(self):
+        """Both editions the recording holds, so a test does not depend on order."""
+        return self.source().by_title(["Cragside"], "en", "L. J. Ross")
+
+    def one(self, isbn):
+        """The candidate carrying this ISBN, whichever order Google sent them in."""
+        return next(book for book in self.candidates() if book.isbn == isbn)
+
+    def test_it_asks_google_for_the_fields_the_rules_can_write(self):
+        replay = Replay("by-title-cragside-other-fields.json")
+
+        GoogleBooks(KEY, transport=replay).by_title(["Cragside"], "en", "L. J. Ross")
+        asked = urllib.parse.parse_qs(urllib.parse.urlparse(replay.sent["url"]).query)["fields"][0]
+
+        for field in ("description", "publishedDate", "publisher", "imageLinks"):
+            with self.subTest(field=field):
+                self.assertIn(field, asked)
+
+    def test_a_candidate_carries_the_blurb_the_source_gave(self):
+        blurb = self.one("9781521748831")
+
+        self.assertTrue(blurb.description.startswith("FROM THE #1 INTERNATIONAL"))
+        self.assertIn("Cragside", blurb.description)
+
+    def test_the_description_is_the_source_s_own_words_character_for_character(self):
+        """Never rewritten, never generated: the recording's own string."""
+        recorded = json.loads(
+            (RECORDED / "by-title-cragside-other-fields.json").read_text(encoding="utf-8")
+        )
+        expected = next(
+            item["volumeInfo"]["description"]
+            for item in recorded["items"]
+            if (item["volumeInfo"].get("description") or "").startswith("FROM THE")
+        )
+
+        self.assertEqual(self.one("9781521748831").description, expected)
+
+    def test_a_candidate_carries_the_publication_date(self):
+        self.assertEqual(self.one("9781521748831").date, "2017-07-07")
+        self.assertEqual(self.one("9781444846577").date, "2021-03")
+
+    def test_a_candidate_carries_the_publisher_when_the_source_has_one(self):
+        self.assertEqual(
+            self.one("9781444846577").publisher, "Ulverscroft Special Collection"
+        )
+        self.assertIsNone(
+            self.one("9781521748831").publisher,
+            "Google has none for this edition, and none is invented",
+        )
+
+    def test_a_candidate_carries_the_cover_the_source_offers(self):
+        self.assertEqual(
+            self.one("9781444846577").cover,
+            "http://books.google.com/books/content?id=7kMMzgEACAAJ"
+            "&printsec=frontcover&img=1&zoom=1&source=gbs_api",
+        )
+
+    def test_a_volume_with_no_cover_offers_none(self):
+        self.assertIsNone(self.one("9781521748831").cover)
+
+    def test_the_isbn_lookup_carries_the_same_fields(self):
+        """The ISBN path reads the same reply shape, so it fills the same values."""
+        source = GoogleBooks(KEY, transport=Replay("by-isbn-cragside-other-fields.json"))
+
+        book = source.by_isbn(CRAGSIDE)
+
+        self.assertTrue(book.description.startswith("FROM THE #1 INTERNATIONAL"))
+        self.assertEqual(book.date, "2017-07-07")
+        self.assertIsNone(book.cover)
 
 
 if __name__ == "__main__":

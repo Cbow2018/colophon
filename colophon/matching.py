@@ -90,7 +90,10 @@ class Candidate:
     """One book a source offered, as the source describes it.
 
     `source` names where it came from, so a candidate can be written into a
-    file without anything else having to remember who offered it.
+    file without anything else having to remember who offered it. Every field a
+    rule can write is here and defaults to None, which is how a source spells
+    "I have nothing for this one" - a source with no publisher has not offered a
+    blank one, and the two must not be written the same way.
     """
 
     title: str | None
@@ -100,6 +103,10 @@ class Candidate:
     language: str | None = None
     isbn: str | None = None
     source: str | None = None
+    description: str | None = None
+    publisher: str | None = None
+    date: str | None = None
+    cover: str | None = None
 
 
 @dataclass(frozen=True)

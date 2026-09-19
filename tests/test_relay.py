@@ -14,13 +14,14 @@ from colophon.epub import read
 from colophon.files import temp_name
 from colophon.relay import Relay, RelayError
 from tests.opf import calibre_series, epub3_series
-from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, write_epub
-from tests.sources import CRAGSIDE_CANDIDATE, FakeSource
+from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, ISBN, write_epub
+from tests.sources import CRAGSIDE_CANDIDATE, NO_COVER_MATCH, FakeSource, no_network
 from tests.tempdir import TemporaryDirectory
 
 
 class RelayTestCase(unittest.TestCase):
     def setUp(self):
+        self._refuse_the_network()
         self._tmp = TemporaryDirectory()
         root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
@@ -38,6 +39,28 @@ class RelayTestCase(unittest.TestCase):
         self.relay = Relay(self.config)
         self.relay.prepare()
 
+    def _refuse_the_network(self):
+        """Make an outbound HTTP request fail, so no test can quietly make one.
+
+        The relay is the pass that fetches covers, so this is where an
+        accidental fetch would show up: a test that reaches the network is a
+        test that passes or fails depending on whether the network is there.
+        Nothing here means to fetch anything, and the one place that could is
+        given a cover by hand.
+        """
+        import urllib.error
+        import urllib.request
+
+        def refuse(request, *args, **kwargs):
+            target = getattr(request, "full_url", request)
+            raise urllib.error.URLError(
+                f"a test tried to reach {target} over the network"
+            )
+
+        for module in (urllib.request,):
+            patcher = mock.patch.object(module, "urlopen", refuse)
+            patcher.start()
+            self.addCleanup(patcher.stop)
     def drop(self, name, text="a book", into=None):
         path = (into or self.ingest) / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -374,6 +397,10 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
                 sources=[self.source],
                 backups=Backups(self.backups),
                 dry_run=False,
+                # Nothing in this class is about covers, and a relay test that
+                # fetched one over the network would be a relay test that fails
+                # when the network does.
+                fetch=no_network,
             ),
         )
 
@@ -394,6 +421,33 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         self.assertEqual(book.authors, ("L.J. Ross",))
         self.assertEqual(calibre_series(delivered), ("DCI Ryan Mysteries", "6"))
         self.assertEqual(epub3_series(delivered), ("DCI Ryan Mysteries", "series", "6"))
+
+    def test_the_line_names_the_long_fields_without_writing_their_values_out(self):
+        """The blurb is a thousand characters; the line stays one line.
+
+        The line's job is which fields moved and who supplied them. A blurb
+        written into it in full would bury the match and the confidence it is
+        there to report.
+        """
+        write_epub(
+            self.ingest / "Cragside.epub",
+            f"""    <dc:title>Something Else Entirely</dc:title>
+    <dc:creator>Nobody</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+""",
+            version="2.0",
+        )
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            self.settle()
+
+        line = "\n".join(captured.output)
+        self.assertIn("description<-hardcover", line)
+        self.assertNotIn("FROM THE #1", line, "the blurb itself is in the book, not the log")
+        self.assertIn('publisher="Independently Published"<-hardcover', line)
+        self.assertIn('date="2017-07-07"<-hardcover', line)
+        self.assertLess(max(len(part) for part in captured.output), 1000)
 
     def test_the_original_is_backed_up_before_it_is_changed(self):
         original = self.drop_a_book().read_bytes()
@@ -462,7 +516,7 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
 class CorrectingInDryRunTests(RelayTestCase):
     def setUp(self):
         super().setUp()
-        self.source = FakeSource()
+        self.source = FakeSource(found=NO_COVER_MATCH)
         self.relay = Relay(
             Config(
                 ingest_dir=self.ingest,

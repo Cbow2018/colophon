@@ -1,5 +1,6 @@
 """Tests for reading and correcting the metadata inside an EPUB or KEPUB."""
 
+import re
 import shutil
 import unittest
 import zipfile
@@ -9,9 +10,12 @@ from colophon.epub import Edits, EpubError, correct, read
 from tests.opf import (
     calibre_series,
     collections,
+    cover_meta,
     entries_of,
     epub3_series,
+    manifest_items,
     refining_metas,
+    text_of,
 )
 from tests.samplebooks import (
     A_BOXED_SET,
@@ -19,10 +23,13 @@ from tests.samplebooks import (
     DRM,
     EXISTING_SERIES_COLLECTION,
     GUTENBERG_DIR,
+    JPEG,
     KEPUB_CHAPTER,
     OBFUSCATED_FONT,
+    PNG,
     SIMPLE,
     TWO_CREATORS,
+    WITH_THE_OTHER_FIELDS,
     write_epub,
 )
 from tests.tempdir import TemporaryDirectory
@@ -412,6 +419,239 @@ class LeavingABookAloneTests(EpubTestCase):
             correct(path, Edits(title="Something Else"))
 
         self.assertEqual(path.read_bytes(), before)
+
+
+class CoverTests(EpubTestCase):
+    """Adding a cover, which is the only thing here that writes a new file into the zip."""
+
+    def test_it_adds_a_cover_image_and_declares_it_for_epub_3(self):
+        path = self.gutenberg("the-masque-of-the-red-death-epub3.epub")
+        # A book that has none: the declaration is taken out first, so the test
+        # is not also a test of the book it was copied from.
+        _without_its_cover(path)
+
+        changed = correct(path, Edits(), cover=PNG)
+
+        self.assertEqual(changed, ("cover",))
+        items = manifest_items(path)
+        declared = [item for item in items.values() if item.get("properties") == "cover-image"]
+        self.assertEqual(len(declared), 1)
+        self.assertEqual(declared[0]["media-type"], "image/png")
+        self.assertEqual(entries_of(path)[f"OEBPS/{declared[0]['href']}"], PNG)
+
+    def test_it_declares_the_cover_the_way_epub_2_readers_look_for_it(self):
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE, version="2.0")
+
+        correct(path, Edits(), cover=PNG)
+
+        identifier = cover_meta(path)
+        self.assertIsNotNone(identifier, "EPUB 2 knows a cover by its meta tag")
+        self.assertEqual(manifest_items(path)[identifier]["media-type"], "image/png")
+
+    def test_the_media_type_is_read_off_the_image_itself(self):
+        """Both sources serve JPEGs, and a book may have had nothing to go on."""
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+
+        correct(path, Edits(), cover=JPEG)
+
+        declared = next(
+            item
+            for item in manifest_items(path).values()
+            if (item.get("properties") or "").startswith("cover-image")
+        )
+        self.assertEqual(declared["media-type"], "image/jpeg")
+        self.assertTrue(declared["href"].endswith(".jpg"))
+
+    def test_it_leaves_the_cover_the_book_already_has(self):
+        path = self.gutenberg("the-masque-of-the-red-death-epub3.epub")
+        before = path.read_bytes()
+        existing = next(
+            name
+            for name, item in manifest_items(path).items()
+            if item.get("properties") == "cover-image"
+        )
+
+        changed = correct(path, Edits(), cover=PNG)
+
+        self.assertEqual(changed, ())
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(manifest_items(path)[existing]["properties"], "cover-image")
+
+    def test_no_cover_bytes_means_no_cover_is_added(self):
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+        before = path.read_bytes()
+
+        changed = correct(path, Edits(), cover=None)
+
+        self.assertEqual(changed, ())
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_a_cover_is_added_alongside_the_metadata_in_one_write(self):
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+
+        changed = correct(path, Edits(title="Cragside: A DCI Ryan Mystery"), cover=JPEG)
+
+        self.assertEqual(changed, ("title", "cover"))
+        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery")
+        self.assertTrue(
+            any(
+                (item.get("properties") or "") == "cover-image"
+                for item in manifest_items(path).values()
+            )
+        )
+
+    def test_the_text_of_the_book_is_untouched_by_adding_a_cover(self):
+        path = self.gutenberg("the-masque-of-the-red-death-epub3.epub")
+        _without_its_cover(path)
+        before = entries_of(path)
+
+        correct(path, Edits(), cover=PNG)
+
+        after = entries_of(path)
+        for name, body in before.items():
+            if not name.endswith(".opf"):
+                self.assertEqual(after[name], body, f"{name} was rewritten")
+
+    def test_a_written_cover_is_declared_once_however_the_book_is_read(self):
+        """EPUB 2's meta tag and EPUB 3's property are both written, as the
+        series is: any library app reads at least one of them."""
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+
+        correct(path, Edits(), cover=PNG)
+
+        items = manifest_items(path)
+        self.assertIsNotNone(cover_meta(path))
+        self.assertIn("cover-image", [item.get("properties") for item in items.values()])
+        self.assertEqual(len([i for i in items.values() if i["media-type"] == "image/png"]), 1)
+
+
+def _without_its_cover(path):
+    """Take the cover declaration and image out of a real book, by hand.
+
+    Gutenberg's EPUB 3 declares one twice over - the manifest item and EPUB 2's
+    legacy meta tag - and both go, so the book really does arrive with none. The
+    image is removed by name, so the book's other files are left where they are.
+    """
+    declared = next(
+        item
+        for item in manifest_items(path).values()
+        if item.get("properties") == "cover-image"
+    )
+    cover_names = {
+        f"OEBPS/{declared['href']}",
+        f"OEBPS/{declared['href']}".replace("OEBPS/", ""),
+    }
+
+    with zipfile.ZipFile(path) as book:
+        entries = [(entry, book.read(entry.filename)) for entry in book.infolist()]
+    with zipfile.ZipFile(path, "w") as book:
+        for entry, body in entries:
+            if entry.filename in cover_names:
+                continue
+            if entry.filename.endswith(".opf"):
+                text = body.decode("utf-8")
+                text = text.replace(' properties="cover-image"', "")
+                text = re.sub(
+                    r'[ \t]*<meta name="cover" content="[^"]*"/>[ \t]*\n?', "", text
+                )
+                # The manifest item pointing at the image that was just removed.
+                text = "\n".join(
+                    line for line in text.splitlines() if declared["href"] not in line
+                )
+                body = text.encode("utf-8")
+            written = zipfile.ZipInfo(entry.filename, entry.date_time)
+            written.compress_type = entry.compress_type
+            book.writestr(written, body)
+    return path
+
+
+class OtherFieldTests(EpubTestCase):
+    """The three fields CBO-38 adds: read, written, and left alone."""
+
+    def test_it_reads_the_description_the_publisher_and_the_date(self):
+        path = write_epub(self.folder / "Cragside.epub", WITH_THE_OTHER_FIELDS)
+
+        book = read(path)
+
+        self.assertEqual(book.description, "A house full of secrets.")
+        self.assertEqual(book.publisher, "Ulverscroft")
+        self.assertEqual(book.date, "2019-01-01")
+
+    def test_a_book_without_them_says_nothing_rather_than_an_empty_string(self):
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+
+        book = read(path)
+
+        self.assertIsNone(book.description)
+        self.assertIsNone(book.publisher)
+        self.assertIsNone(book.date)
+
+    def test_it_writes_them_onto_a_book_that_had_none(self):
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+
+        changed = correct(
+            path,
+            Edits(
+                description="A house full of secrets.",
+                publisher="Ulverscroft",
+                date="2017-07-07",
+            ),
+        )
+
+        self.assertEqual(set(changed), {"description", "publisher", "date"})
+        self.assertEqual(text_of(path, "description"), "A house full of secrets.")
+        self.assertEqual(text_of(path, "publisher"), "Ulverscroft")
+        self.assertEqual(text_of(path, "date"), "2017-07-07")
+
+    def test_it_overwrites_what_the_book_already_had(self):
+        path = write_epub(self.folder / "Cragside.epub", WITH_THE_OTHER_FIELDS)
+
+        changed = correct(path, Edits(description="A different blurb.", publisher="Independently Published"))
+
+        self.assertEqual(set(changed), {"description", "publisher"})
+        self.assertEqual(text_of(path, "description"), "A different blurb.")
+        self.assertEqual(text_of(path, "publisher"), "Independently Published")
+
+    def test_a_value_the_book_already_carries_is_not_a_change(self):
+        path = write_epub(self.folder / "Cragside.epub", WITH_THE_OTHER_FIELDS)
+        before = path.read_bytes()
+
+        changed = correct(path, Edits(description="A house full of secrets."))
+
+        self.assertEqual(changed, ())
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_clearing_a_field_is_not_the_same_as_leaving_it_alone(self):
+        """`None` means the source said nothing; `""` means take it off.
+
+        Nothing in CBO-38's rules spells the second one, but the two must not be
+        the same thing, or a field could never be removed at all.
+        """
+        path = write_epub(self.folder / "Cragside.epub", WITH_THE_OTHER_FIELDS)
+
+        changed = correct(path, Edits(description=""))
+
+        self.assertEqual(changed, ("description",))
+        self.assertIsNone(read(path).description)
+
+    def test_the_isbn_and_the_language_can_be_written_too(self):
+        path = write_epub(self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>")
+
+        changed = correct(
+            path, Edits(isbn="9781521748831", language="en")
+        )
+
+        self.assertEqual(set(changed), {"isbn", "language"})
+        self.assertEqual(read(path).isbn, "9781521748831")
+        self.assertEqual(read(path).language, "en")
+
+    def test_an_isbn_is_written_in_the_epub_3_urn_form(self):
+        """The form a reader that checks the identifier understands."""
+        path = write_epub(self.folder / "Cragside.epub", SIMPLE)
+
+        correct(path, Edits(isbn="9781521748831"))
+
+        self.assertEqual(text_of(path, "identifier"), "urn:isbn:9781521748831")
 
 
 if __name__ == "__main__":

@@ -63,3 +63,35 @@ skip_suffixes = [".part", ".tmp", ".!qb", ".crdownload"]
 
 # DEBUG, INFO, WARNING or ERROR.
 log_level = "INFO"
+
+# Add a cover to a book that has none, from the source that matched it. A book
+# that arrived with a cover keeps it: this setting only ever adds one. Only the
+# source that matched is asked, so a book matched from a source with no cover
+# for it is left without one rather than reaching down the priority list.
+#
+# This one comes before the [fields] table below on purpose: in TOML everything
+# after a table header belongs to that table.
+add_cover = true
+
+# What to do with each metadata field when a source has the book. One rule each:
+#
+#   "overwrite" - write the source's value, whatever the file already says
+#   "fill"      - write it only when the file has nothing for that field
+#   "skip"      - never write it; the file keeps what it came with
+#
+# Every value written comes from the matched source's own record. Nothing here
+# is generated, and a field the source does not have is never written at all -
+# "fill" on a field a source is silent about is not a blank.
+#
+# The description is the book's blurb, taken from the matched source. Colophon
+# never writes one of its own.
+[fields]
+title = "overwrite"
+authors = "overwrite"
+series = "overwrite"
+series_number = "overwrite"
+description = "fill"
+publisher = "fill"
+date = "fill"
+isbn = "fill"
+language = "fill"

@@ -31,6 +31,12 @@ REDACTED = "[token]"
 
 # `books` has no ISBN column at all; the ISBNs are on the editions. Both forms
 # are tried in one query so the caller need not know which one the file carried.
+#
+# Which fields live where is the schema's, not a choice: the blurb and the
+# release date are on the work, the publisher, the ISBN, the language and the
+# cover's own image are on the edition, and `image` is on both. Every one of
+# them is asked for here, and `_candidate` is the one place that decides what
+# the pair of them means.
 QUERY = """
 query BookByIsbn($isbn: String!) {
   editions(
@@ -40,9 +46,15 @@ query BookByIsbn($isbn: String!) {
     isbn_13
     isbn_10
     title
+    publisher { name }
+    release_date
+    image { url }
     language { language code2 code3 }
     book {
       title
+      description
+      release_date
+      image { url }
       contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
         contribution
         author { name }
@@ -79,10 +91,16 @@ query BooksByTitle($titles: [String!]!%s) {
     }
   ) {
     title
+    publisher { name }
+    release_date
+    image { url }
     language { language code2 code3 }
     book {
       id
       title
+      description
+      release_date
+      image { url }
       contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
         contribution
         author { name }
@@ -242,9 +260,10 @@ class Hardcover:
 def _candidate(edition, isbn=None):
     """Turn one edition from the reply into a candidate for the work behind it.
 
-    The work is where the title, the authors and the series live; the edition
-    only carries the language and, sometimes, an ISBN. Both lookups read a
-    reply through here, so there is one place that decides what a reply means.
+    The work is where the title, the authors, the series and the blurb live; the
+    edition only carries the language, the publisher, its own release date and,
+    sometimes, an ISBN. Both lookups read a reply through here, so there is one
+    place that decides what a reply means.
     """
     book = edition.get("book") or {}
     language = edition.get("language") or {}
@@ -260,7 +279,20 @@ def _candidate(edition, isbn=None):
         # A code is what an EPUB wants to be given back; the English name is a fallback.
         language=_text(language.get("code2")) or _text(language.get("language")),
         isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")) or isbn,
+        # The blurb belongs to the work, so every edition of it carries the same
+        # one. The publisher and the date of the edition are the edition's, and
+        # the work's date is only used when the edition does not give one.
+        description=_text(book.get("description")),
+        publisher=_text((edition.get("publisher") or {}).get("name")),
+        date=_text(edition.get("release_date")) or _text(book.get("release_date")),
+        # The edition's own cover, and the work's only when the edition has none.
+        cover=_image(edition) or _image(book),
     )
+
+
+def _image(item):
+    """The cover URL an edition or a work carries, if it carries one."""
+    return _text((item.get("image") or {}).get("url"))
 
 
 def _candidates(editions):

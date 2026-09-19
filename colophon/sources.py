@@ -19,6 +19,22 @@ same name in two modules would not be caught by one `except` clause - a mistake
 that is invisible until the moment a source actually fails.
 """
 
+import urllib.error
+import urllib.request
+
+USER_AGENT = "Colophon (+https://github.com/Cbow2018/colophon)"
+IMAGE_TIMEOUT_SECONDS = 30
+
+# A cover is a few tens of kilobytes. This is far above any real one and far
+# below the point where holding it in memory matters, so it only ever catches a
+# reply that is not a cover at all - an error page, or a redirect to a film.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+# What an image starts with. A server is free to describe a cover as something
+# else, or as nothing at all, so a reply that is not recognised is only refused
+# when the server said it was not an image either.
+IMAGE_SIGNATURES = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF87a", b"GIF89a", b"RIFF")
+
 
 class SourceError(Exception):
     """A source could not answer: a bad key, an outage, or an unreadable reply.
@@ -47,3 +63,53 @@ def text(value):
         return None
     found = str(value).strip()
     return found or None
+
+
+def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):
+    """The image at this URL, or None when there is no URL to fetch.
+
+    A source offers a cover as a URL, and this is the one place Colophon follows
+    one. A cover that cannot be fetched is a `SourceError` rather than a
+    `None`, because the two mean different things to a book: no URL at all is a
+    source that has no cover for this book, while a URL that does not answer is
+    a source that could not be asked - and the second one is worth saying out
+    loud rather than passing over in silence.
+
+    `transport` is the seam the tests replay recorded covers through; left out,
+    this fetches over HTTP.
+    """
+    if not url:
+        return None
+    fetch = transport or _fetch
+    try:
+        status, body, content_type = fetch(str(url), {"User-Agent": USER_AGENT})
+    except SourceError:
+        raise
+    except Exception as error:
+        raise SourceError(f"could not fetch the cover: {error}") from error
+
+    if not 200 <= status < 300:
+        raise SourceError(f"could not fetch the cover: it answered HTTP {status}")
+    if not body:
+        return None
+    if len(body) > MAX_IMAGE_BYTES:
+        raise SourceError(
+            f"the cover is too large to be one ({len(body)} bytes); leaving the book alone"
+        )
+    if not _looks_like_an_image(body) and not str(content_type or "").startswith("image/"):
+        raise SourceError("the cover was not an image")
+    return body
+
+
+def _fetch(url, headers, timeout=IMAGE_TIMEOUT_SECONDS):
+    """The real fetch: one GET, with whatever status, bytes and type came back."""
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, response.read(), response.headers.get("Content-Type")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read(), error.headers.get("Content-Type")
+
+
+def _looks_like_an_image(body):
+    return any(body.startswith(signature) for signature in IMAGE_SIGNATURES)

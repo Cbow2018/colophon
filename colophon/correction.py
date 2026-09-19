@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from colophon import epub
+from colophon.config import FIELD_DEFAULTS
 from colophon.epub import Edits, EpubError
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -25,6 +26,7 @@ from colophon.matching import (
     search_titles,
 )
 from colophon.sources import SourceError
+from colophon.sources import image as fetch_image
 
 LOG = logging.getLogger("colophon")
 
@@ -55,6 +57,32 @@ MATCHED_BY = "exact ISBN"
 # A title and author match is never certain, so it has to clear this.
 TITLE_CONFIDENCE = 0.85
 TITLE_MATCHED_BY = "title and author"
+
+# Every field a rule can decide, in the order the log line names them. The
+# mapping in `Config.fields` is keyed by exactly these names, and a test holds
+# the two lists together.
+_WRITTEN = (
+    "title",
+    "authors",
+    "series",
+    "series_number",
+    "description",
+    "publisher",
+    "date",
+    "isbn",
+    "language",
+)
+
+# A field whose value is too long to put in a log line is named there without
+# it: the line's job is which fields moved and who supplied them, and the blurb
+# itself is in the book. A description runs to a thousand characters.
+_NAME_ONLY = ("description",)
+
+# A cover a dry run stands in for the real one with. A dry run reports that a
+# cover would be added and fetches nothing to say so: the bytes are not what it
+# is reporting, and it writes nothing to put them in. Empty, because the bytes
+# are never looked at - a cover is treated as present or not, never inspected.
+COVER_IF_ADDED = b""
 
 # The formats whose metadata Colophon understands. Everything else - PDFs,
 # comics, MOBI - passes straight through, untouched and unread. Kobo writes
@@ -132,7 +160,10 @@ class Outcome:
             return f"[{head}; nothing to change]"
 
         fields = ", ".join(
-            f'{change.field}="{change.value}"<-{change.source}' for change in self.changed
+            f"{change.field}<-{change.source}"
+            if change.field in _NAME_ONLY
+            else f'{change.field}="{change.value}"<-{change.source}'
+            for change in self.changed
         )
         return f"[{head}; {'changed' if self.applied else 'would change'} {fields}]"
 
@@ -173,10 +204,25 @@ class Corrector:
     backup.
     """
 
-    def __init__(self, sources=None, backups=None, dry_run=False):
+    def __init__(
+        self,
+        sources=None,
+        backups=None,
+        dry_run=False,
+        fields=None,
+        add_cover=True,
+        fetch=None,
+    ):
         self.sources = tuple(sources or ())
         self.backups = backups
         self.dry_run = dry_run
+        # What to do with each field, as a mapping: `skip`, `fill` or
+        # `overwrite`. A field the mapping leaves out is one nothing has an
+        # opinion about, so it is simply not written.
+        self.fields = dict(fields or FIELD_DEFAULTS)
+        self.add_cover = add_cover
+        # How a cover is fetched, injected so no test reaches the network.
+        self.fetch = fetch or fetch_image
 
     @classmethod
     def from_config(cls, config, backups):
@@ -186,7 +232,13 @@ class Corrector:
             source = _build(name, config)
             if source is not None:
                 sources.append(source)
-        return cls(sources=sources, backups=backups, dry_run=config.dry_run)
+        return cls(
+            sources=sources,
+            backups=backups,
+            dry_run=config.dry_run,
+            fields=config.fields,
+            add_cover=config.add_cover,
+        )
 
     def correct(self, path):
         path = Path(path)
@@ -208,7 +260,8 @@ class Corrector:
 
         The walk stops at the first source that has the edition. An ISBN
         identifies one, so the first source to know it is as good as any other,
-        and the ISBN is not written into the file: it is already there.
+        and the ISBN itself is only ever written by its own rule - usually
+        nothing, since the file already carries it.
         """
         tried = []
         for source in self.sources:
@@ -218,7 +271,7 @@ class Corrector:
             except SourceError as error:
                 return self._failed(source, error, f"ISBN {book.isbn}")
             if found is not None:
-                return self._write(path, found, CONFIDENCE, book.isbn)
+                return self._write(path, found, CONFIDENCE, book.isbn, book)
         return Outcome(isbn=book.isbn, tried=tuple(tried))
 
     def _by_title(self, path, book):
@@ -262,7 +315,7 @@ class Corrector:
                 # explanation of this book, and is not named as one.
                 continue
             if match.confidence >= TITLE_CONFIDENCE:
-                return self._write(path, match.candidate, match.confidence)
+                return self._write(path, match.candidate, match.confidence, book=book)
             # A near miss: remembered rather than written, so a book no source
             # can match still names the closest thing to it.
             if nearest is None or match.confidence > nearest.confidence:
@@ -302,14 +355,18 @@ class Corrector:
         )
         return Outcome(problem=f"{blamed} could not be asked: {error}")
 
-    def _write(self, path, found, confidence, isbn=None):
+    def _write(self, path, found, confidence, isbn=None, book=None):
         """Back the original up, then write what the source is sure of.
 
         `found` carries the source it came from, so nothing here has to be told
         where the values are from. `isbn` is set only when an ISBN is what
         recognised the book, because that is what the log line then reports.
+
+        `book` is the file as it was read, which is what each rule is judged
+        against: `fill` only writes a field the file is empty of, so the file has
+        to be in hand before anything can be decided.
         """
-        edits = _edits(found)
+        edits = self._edits(found, book)
         matched = {
             "isbn": isbn,
             "sought": None if isbn else found.title,
@@ -319,8 +376,20 @@ class Corrector:
         }
 
         # Ask the file what would move before touching it: a book that already
-        # matches is not backed up, and not rewritten either.
-        planned = epub.correct(path, edits, write=False)
+        # matches is not backed up, and not rewritten either. The cover is asked
+        # for only once there is something to write, because fetching an image
+        # for a book about to be left alone is work done for nothing.
+        #
+        # The cover counts as one of the moves, so the plan is taken over what
+        # the book is about to be written rather than what would be written
+        # without it: a book whose only change is a cover still has a change.
+        cover = self._cover(path, found, book)
+        planned = epub.correct(
+            path,
+            edits,
+            write=False,
+            cover=COVER_IF_ADDED if cover is not None else None,
+        )
         if not planned:
             return Outcome(**matched)
         if self.dry_run:
@@ -335,13 +404,83 @@ class Corrector:
                 problem=f"could not back the original up: {error}",
             )
 
-        written = epub.correct(path, edits)
+        written = epub.correct(path, edits, cover=cover)
         return Outcome(
             **matched,
             changed=_changes(written, edits, found.source),
             applied=True,
             kept=str(kept),
         )
+
+    def _edits(self, found, book):
+        """The fields this source's record is allowed to write, and no others.
+
+        Each field is decided on its own, which is what the config is for: a book
+        can take its title from the source and keep its description, and another
+        the other way round. `fill` is judged against the file, so a field the
+        file already carries is left as it is; `overwrite` writes the source's
+        value whenever the source has one.
+
+        A field the source said nothing about is written by no rule at all: `fill`
+        on a field a source is silent about is not a blank, and a source with no
+        publisher has not offered an empty one.
+        """
+        wanted = {}
+        for name in _WRITTEN:
+            rule = self.fields.get(name, "skip")
+            value = getattr(found, name, None)
+            if name == "authors":
+                value = tuple(value or ()) or None
+            if rule == "skip" or not value:
+                continue
+            current = getattr(book, name, None)
+            if name == "authors":
+                current = tuple(current or ())
+            if rule == "fill" and current:
+                continue
+            wanted[name] = value
+
+        # The series number is the one field that cannot be decided on its own:
+        # it is a position in a named series, so a number left behind by a series
+        # being replaced is not an old number, it is a claim about the wrong
+        # series. It goes, and the move is reported like any other.
+        if (
+            wanted.get("series") is not None
+            and wanted["series"] != book.series
+            and "series_number" not in wanted
+            and book.series_number
+        ):
+            wanted["drop_series_number"] = True
+        return Edits(**wanted)
+
+    def _cover(self, path, found, book):
+        """The cover to add to this book, or None when there is none to add.
+
+        Only the source that matched is asked for one: the priority list is a
+        trust order for every field alike, so a cover may not come from a source
+        the user ranked below the one that recognised the book. A source with no
+        cover for this book is the ordinary case rather than a failure.
+
+        Fetching can fail, and a cover is the least important thing about a book:
+        a blurb and a right title are worth having whether or not the image
+        arrives. So a failure here is a line in the log rather than a reason to
+        leave the metadata alone.
+        """
+        if not self.add_cover or not found.cover or book.has_cover:
+            return None
+        if self.dry_run:
+            return COVER_IF_ADDED
+        try:
+            return self.fetch(found.cover)
+        except SourceError as error:
+            LOG.warning(
+                "%s offered a cover for %s that could not be fetched, so the book "
+                "is corrected without it: %s",
+                _label(found.source),
+                path.name,
+                error,
+            )
+            return None
 
 
 def _edits(found):
@@ -384,7 +523,12 @@ def _build(name, config):
 
 
 def _blamed(source):
-    """What to call a source in a sentence, as opposed to in a log field.
+    """What to call a source in a sentence, as opposed to in a log field."""
+    return _label(source.name)
+
+
+def _label(name):
+    """The label of a source, by name.
 
     A source names itself the way a log field wants it - `hardcover` - and a
     sentence wants it the way a person writes it, which is the label in
@@ -394,7 +538,7 @@ def _blamed(source):
     than something a user can cause: it is worth an exception, not a fallback.
     `test_every_configured_source_has_a_label` is what keeps that true.
     """
-    return SOURCE_SETUP[source.name]["label"]
+    return SOURCE_SETUP[name]["label"]
 
 
 def _changes(fields, edits, source):
@@ -402,5 +546,12 @@ def _changes(fields, edits, source):
 
 
 def _value(edits, field):
-    value = getattr(edits, field)
-    return ", ".join(value) if field == "authors" else str(value)
+    """What a change's value is, for the log line and the outcome alike.
+
+    A field the edits do not carry is one that was written by being taken off -
+    a stale series number - or a cover, which is bytes rather than a value.
+    """
+    value = getattr(edits, field, None)
+    if field == "authors":
+        return ", ".join(value or ())
+    return "" if value is None else str(value)

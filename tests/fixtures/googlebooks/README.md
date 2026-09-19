@@ -78,6 +78,30 @@ because there is no series to write. See
 `{"kind": "books#volumes", "totalItems": 0}`. Reading `items` without a default
 would crash on the most ordinary outcome there is.
 
+## The fields CBO-38's rules write
+
+CBO-37's client asked Google for six things and none of them was a blurb, a
+date, a publisher or a cover. CBO-38 widened the mask, so the same queries now
+ask for all four; these two recordings are the same questions asked with the
+widened mask, which is why the values in them are not in the older files.
+
+| File | Query | What came back | How |
+| --- | --- | --- | --- |
+| `by-title-cragside-other-fields.json` | the same Cragside title search as `by-title-cragside.json` | 2 volumes, both with a `description` and a `publishedDate`; one with a `publisher` and `imageLinks`, one with neither | recorded |
+| `by-isbn-cragside-other-fields.json` | `isbn:9781521748831` | 1 volume, with a `description` and a `publishedDate`, and **no** `publisher` and no `imageLinks` | recorded |
+
+The two Cragside volumes disagree, which is the point of keeping both: the
+Ulverscroft large-print edition has a publisher (`Ulverscroft Special
+Collection`), a date of `2021-03` and a cover, and the original has no
+publisher, a date of `2017-07-07` and no cover. `imageLinks` being absent is
+therefore the ordinary case rather than a failure, and `by-isbn-cragside-other-fields.json`
+is the one that proves it: the ISB volume carries a blurb and a date and
+nothing else, because that is what Google answered.
+
+`description` is the one new field Google has reliably: all four volumes across
+the two files carry a blurb, and the 1084-character one is byte-for-byte what
+Hardcover has for the same book.
+
 ## Failures
 
 | File | Status | What it is |
