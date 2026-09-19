@@ -95,13 +95,14 @@ class Config:
     # Whether to add a cover to a book that has none. A book that already has
     # one keeps it: that is what the setting means, so there is no rule to set.
     add_cover: bool = True
-    # How sure a title-and-author match has to be before it is written. At 1.0
-    # only an exact match is accepted - a title and an author that both agree
-    # exactly, which is the one thing that scores 1.0 - and every near miss is
-    # left marked unverified instead: a record whose title only contains the
-    # file's, one that kept a subtitle, one whose series position disagrees. It
-    # is not a way to ignore titles: an exact match is still a title match, and
-    # still clears it.
+    # How sure a title-and-author match has to be before it is written. At 1.0 a
+    # title and an author that both agree exactly are accepted, and every near
+    # miss is left marked unverified instead: a record whose title only contains
+    # the file's, one that kept a subtitle, one whose series position disagrees.
+    # One exact match falls short too - a file whose title carries a series
+    # position, matched to a record carrying a different one, scores 0.9 - and
+    # that is intended rather than a gap. It is not a way to ignore titles: an
+    # exact title-and-author match is a title match, and it clears 1.0.
     confidence: float = DEFAULT_CONFIDENCE
 
 

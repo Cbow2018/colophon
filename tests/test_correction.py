@@ -1728,6 +1728,56 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     "marked means nothing of the record was written",
                 )
 
+    def test_an_exact_match_whose_series_position_disagrees_scores_below_a_perfect_one(self):
+        """The one exact match that is not a 1.0, and the line it sits under.
+
+        A title and an author can both agree exactly and the comparison still not
+        be certain: when the file's title carries a series position and the record
+        carries a different one, that disagreement takes 0.1 off, leaving 0.9. So
+        at a threshold of 1.0 this book is marked unverified - which is the
+        intended reading of that setting, not a gap in it. It is also the case
+        that shows what 1.0 does *not* exclude: the same book with the position
+        agreeing, or with no position on one side, is a 1.0 and is written.
+        """
+        file_title = "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)"
+
+        for position, expected_confidence in (
+            ("11", 0.9),
+            ("6", 1.0),
+            (None, 1.0),
+        ):
+            with self.subTest(position=position):
+                path = self.book(f"Series-{position}.epub", CRAGSIDE)
+                candidate = Candidate(
+                    source="hardcover",
+                    title="Cragside",
+                    authors=("L.J. Ross",),
+                    series_number=position,
+                    language="en",
+                )
+
+                outcome = self.corrector(
+                    source=FakeSource(found=None, candidates=[candidate]), confidence=1.0
+                ).correct(path)
+
+                self.assertEqual(
+                    outcome.confidence,
+                    expected_confidence,
+                    "an exact title and author weigh 1.0, and a disagreeing "
+                    "position takes 0.1 off it",
+                )
+                self.assertEqual(
+                    outcome.matched,
+                    expected_confidence >= 1.0,
+                    f"a {position} position against the file's 6 "
+                    f"{'clears' if expected_confidence >= 1.0 else 'does not clear'} 1.0",
+                )
+                self.assertEqual(
+                    read(path).title,
+                    "Cragside" if expected_confidence >= 1.0 else file_title,
+                    "a 0.9 is marked, so nothing of the record is written",
+                )
+
     def test_a_threshold_of_one_refuses_a_near_miss_too(self):
         """The 0.84 near miss is nowhere near the top of the range."""
         path = self.book("Cragside.epub", CRAGSIDE)

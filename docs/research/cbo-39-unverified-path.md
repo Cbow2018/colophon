@@ -166,15 +166,22 @@ Settled with the maintainer before any code was written:
    Valid range `(0, 1]`: 0 is not a threshold, and 1.0 *is* reachable - the
    question was checked rather than assumed, and a title and an author that both
    agree exactly score exactly 1.0 (`0.6 + 0.4`, series absent on one side or
-   agreeing). So 1.0 means **only an exact match is written**: every near miss
-   the comparison can produce is under it - a contained title (0.94 with the
-   series agreeing, 0.84 with it disagreeing), an author on their own (0.4), a
-   title on its own (0.6) - and each is marked unverified instead. It is **not**
-   "ISBN matches only", which is what an earlier cut of this note said and what
-   the log line for a title match at `confidence 1.00` disproves: an exact
-   title-and-author match is a title match, and it clears 1.0. Anything above
-   1.0 is refused rather than read as "match nothing": no candidate can score
-   there, so it is a typo rather than an intention.
+   agreeing). So 1.0 writes an exact title-and-author match and marks the rest:
+   every near miss is under it - a contained title (0.99 with the author and the
+   series both agreeing, 0.84 with the series disagreeing), a title on its own
+   (0.6), an author on their own (0.4). It is **not** "ISBN matches only", which
+   is what an earlier cut of this note said and what the log line for a title
+   match at `confidence 1.00` disproves: an exact title-and-author match is a
+   title match, and it clears 1.0. Anything above 1.0 is refused rather than read
+   as "match nothing": no candidate can score there, so it is a typo rather than
+   an intention.
+
+   One exact match does *not* clear 1.0, and it is worth writing down because it
+   is the only one: a file whose title carries a series position, matched to a
+   record carrying a different one, scores **0.9** - the disagreement takes 0.1
+   off a perfect title and author. Either side saying nothing about the position
+   is no evidence either way, so most files, which carry no position in the
+   title, score 1.0 on an exact match.
 4. **A book with no description gets one,** containing the sentence alone. The
    ticket's point is finding the book in the library, and a tag is easy to miss.
 5. **Marking is idempotent:** the sentence is appended once, in whichever of the
