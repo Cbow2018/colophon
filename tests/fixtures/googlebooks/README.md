@@ -42,16 +42,15 @@ against a file spelling it `LJ Ross`: the stops and the spacing do not matter.
 | `by-title-the-infirmary-reagon.json` | *The Infirmary*, Carly Reagon | 1 volume, Carly Reagon's book of the same name | recorded |
 | `by-title-poe.json` | *The Masque of the Red Death*, Edgar Allan Poe | 10 volumes, several of them Poe's | recorded |
 | `by-title-nothing.json` | a title nobody has | `totalItems: 0`, no `items` key | recorded |
-| `by-title-nothing-found.json` | *The Cragside Compendium of Nothing*, Nobody At All | `totalItems: 0`, no `items` key | recorded |
 
-`by-title-nothing.json` and `by-title-nothing-found.json` are the same answer
-recorded twice, and both are kept. The first was CBO-37's; the second is CBO-39's,
-recorded because CBO-38 widened the `fields` mask and the first predates it: a
-recording made with the old mask cannot be relied on to show what today's query
-returns. The replies are byte-identical apart from the mask, which is the finding
-rather than the point — what CBO-39 needed was to know that a title no source has
-comes back as an empty result rather than as an error, live, with today's query.
-The second is the one the relay tests read, through a real `GoogleBooks` client.
+`by-title-nothing.json` is CBO-39's as well as CBO-37's: the unverified path
+begins when no source has the book, so the branch that reads this was asked of
+the live API again with the widened `fields` mask and answered byte-identical
+bytes. Since the reply *is* the empty answer, a second recording of it would be
+the same file twice, so the one CBO-37 made is the one CBO-39's relay test reads,
+through a real `GoogleBooks` client. What the probe established is that the empty
+answer is what a title Google does not have comes back as - not an error - and
+that is now pinned by a test rather than by a second copy of the same 53 bytes.
 
 The two `the-infirmary` recordings are the lookalike pair: two different books
 share a title, and only the author separates them.

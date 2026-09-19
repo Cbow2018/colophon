@@ -15,8 +15,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from colophon import epub
-from colophon.config import FIELD_DEFAULTS, KNOWN_FIELDS
-from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, _without_note
+from colophon.config import DEFAULT_CONFIDENCE, FIELD_DEFAULTS, KNOWN_FIELDS
+from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.matching import (
@@ -53,8 +53,10 @@ SOURCE_SETUP = {
 # An exact ISBN match is as certain as metadata matching gets.
 CONFIDENCE = 1.0
 MATCHED_BY = "exact ISBN"
-# A title and author match is never certain, so it has to clear this.
-TITLE_CONFIDENCE = 0.85
+# A title and author match is never certain, so it has to clear this. The number
+# itself lives in `config`, which is where a user sets it, so that a Corrector
+# built by hand and one built from a config cannot disagree about the default.
+TITLE_CONFIDENCE = DEFAULT_CONFIDENCE
 TITLE_MATCHED_BY = "title and author"
 
 # What a change is attributed to when Colophon itself made it rather than a
@@ -350,14 +352,15 @@ class Corrector:
         return replace(
             outcome,
             # A near miss is named as it always was; the title the book was
-            # sought under is the fallback when nothing can be named at all.
-            sought=nearest.candidate.title if nearest is not None else title,
+            # sought under is the fallback when nothing can be named at all, and
+            # also when the candidate a source offered has no title to name it by.
+            sought=(nearest.candidate.title or title) if nearest is not None else title,
             confidence=nearest.confidence if nearest is not None else None,
             passed_over=nearest.why if nearest is not None else None,
             tried=tuple(tried),
         )
 
-    def _failed(self, source, error, sought, unverified=False):
+    def _failed(self, source, error, sought):
         """A source that could not answer stops the walk, and is said out loud.
 
         The walk does not carry on to a lower-priority source: the list is a
@@ -377,9 +380,7 @@ class Corrector:
             sought,
             error,
         )
-        return Outcome(
-            problem=f"{blamed} could not be asked: {error}", unverified=unverified
-        )
+        return Outcome(problem=f"{blamed} could not be asked: {error}")
 
     def _write(self, path, found, confidence=None, isbn=None, book=None):
         """Back the original up, then write what the source is sure of.
@@ -399,9 +400,9 @@ class Corrector:
         whether the book already has a cover is a fact about the file.
         """
         unverified = found is None
-        # What the log line credits for the fields that moved: Colophon when it
-        # marked the book rather than corrected it, the source when it corrected
-        # it. Decided here because this is the one place that knows which.
+        # What the log line credits the fields that are not Colophon's own: the
+        # source that matched the book. A book nothing matched has no source, and
+        # the only thing written to it is the mark, which is Colophon's.
         credited = COLOPHON if unverified else found.source
         edits = self._edits(found, book, unverified=unverified)
         matched = {
@@ -409,7 +410,7 @@ class Corrector:
             "sought": None if isbn or unverified else found.title,
             "matched": not unverified,
             "confidence": confidence,
-            "source": found.source if found is not None else None,
+            "source": None if unverified else found.source,
             "unverified": unverified,
         }
 
@@ -498,10 +499,10 @@ class Corrector:
         # A book that was marked has the note taken off its description before
         # anything is decided: the note is not part of the blurb, and a rule must
         # not be told the book has a blurb when the note is all it has. Stripping
-        # it is also half of taking the mark off - `_without_note` of a
-        # description that was only the note is None - so `fill` then writes the
-        # source's blurb, and `overwrite` writes one over the marked text as it
-        # would over any other. The other half, the tag, is `unverified` below.
+        # it is also half of taking the mark off - `unmarked` of a description
+        # that was only the note is None - so `fill` then writes the source's
+        # blurb, and `overwrite` writes one over the marked text as it would over
+        # any other. The other half, the tag, is `unverified` below.
         marked = book.description if book.unverified else None
 
         wanted = {}
@@ -514,7 +515,7 @@ class Corrector:
                 continue
             current = getattr(book, name, None)
             if name == "description" and marked:
-                current = _without_note(marked)
+                current = unmarked(marked)
             if name == "authors":
                 current = tuple(current or ())
             if rule == "fill" and current:
@@ -523,15 +524,15 @@ class Corrector:
 
         if marked and "description" not in wanted:
             # No rule is writing a description, so the one the book has is left
-            # in place - with the note off it, which is what this is for. `""` is
-            # how the file is told to leave none at all, for the book whose
-            # description was nothing but the note.
-            wanted["description"] = _without_note(marked) or ""
+            # in place - with the note off it, which is what this is for; and
+            # taken off altogether when that was all it had.
+            wanted["description"] = unmarked(marked)
+            if wanted["description"] is None:
+                wanted["drop_description"] = True
 
-        # These two are not fields and no rule decides them: they say what this
-        # correction is, so that the file - and the log line - can tell a matched
-        # book from a marked one without being told twice.
-        wanted["source"] = found.source
+        # What this correction is, rather than a value a rule decided: the file
+        # and the log line both need to tell a matched book from a marked one
+        # without being told twice.
         wanted["unverified"] = False
         return _series_consistent(Edits(**wanted), found, book)
 
@@ -694,25 +695,44 @@ def _names_and_values(changes):
 def _changes(fields, edits, source):
     """The fields that moved, and who moved them.
 
-    Almost every value comes from the source that matched the book. The two that
-    do not are the unverified tag and the note in the description, which come
-    from Colophon itself: nothing else writes those, so a log line crediting them
-    to `hardcover` would name a source that never saw the book. The caller that
-    marked the book is what says which of the two this is.
+    Most values come from the source that matched the book. Three do not: the
+    tag, the note, and the file's own blurb with the note taken off it when a
+    marked book is matched. None of those is anything a source offered, so
+    crediting them to `hardcover` would name a source that never saw them - and
+    the description is read from the edits, not from `source`, to tell the two
+    apart: `Edits.description` is set only when a rule wrote one.
     """
-    return tuple(Change(field, _value(edits, field), source) for field in fields)
+    return tuple(
+        Change(field, _value(field, edits), _credited(field, edits, source))
+        for field in fields
+    )
 
 
-def _value(edits, field):
+def _credited(field, edits, source):
+    """Who to credit for one field that moved.
+
+    Colophon's own are the tag, and a description it only took the note off.
+    Telling the second from a source's blurb is what `description is None` is
+    for: it is set only when a rule wrote one, so an unmarked book whose
+    description is still unset is one where nothing but the note was removed.
+    """
+    ours = field == "tag" or (
+        field == "description" and edits.unverified is False and edits.description is None
+    )
+    return COLOPHON if ours else source
+
+
+def _value(field, edits):
     """What a change's value is, for the log line and the outcome alike.
 
     A field the edits do not carry is one that was written by being taken off -
-    a stale series number - or a cover, which is bytes rather than a value. The
-    unverified tag is the same: `Edits.unverified` says whether it moved, and the
-    tag itself is a constant rather than a value carried alongside.
+    a stale series number, a description whose blurb was only ever the note - or
+    a cover, which is bytes rather than a value. The tag is the same: it is a
+    constant rather than a value carried alongside, and a tag being taken off a
+    matched book has no value to report at all.
     """
     if field == "tag":
-        return UNVERIFIED_TAG
+        return UNVERIFIED_TAG if edits.unverified else ""
     value = getattr(edits, field, None)
     if field == "authors":
         return ", ".join(value or ())

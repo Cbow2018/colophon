@@ -75,16 +75,17 @@ a source with no such edition is a normal answer, which is why `by_isbn` already
 treats it that way and `by_title` returns `[]`.
 
 Google Books already had a fixture with this shape
-(`googlebooks/by-title-nothing.json`, recorded for *a title nobody has*). The
-probe was still asked live, because the query the client sends today carries
-CBO-38's widened `fields` mask and that recording predates it. The two replies
-are byte-identical apart from the mask, so the recording was sound.
+(`googlebooks/by-title-nothing.json`, recorded for *a title nobody has*), and the
+probe was still asked live because the query the client sends today carries
+CBO-38's widened `fields` mask, which that recording predates. The two replies
+were byte-identical, so the finding is that the mask changes nothing about an
+empty answer, and the existing recording stands: a second copy of the same bytes
+would have been a fixture with no reader and no new information. The relay test
+that needs it reads that one through a real `GoogleBooks` client.
 
 Hardcover had no recording of an empty title reply at all; the closest was
-`by-isbn-not-found.json`, which is the ISBN path. Two recordings are therefore
-new: `hardcover/by-title-nothing-found.json` and
-`googlebooks/by-title-nothing-found.json`, both recorded with the queries the
-client ships.
+`by-isbn-not-found.json`, which is the ISBN path. One recording is therefore new:
+`hardcover/by-title-nothing-found.json`.
 
 ## 3. What the probe changed about the ticket's shape
 
@@ -92,7 +93,6 @@ client ships.
 both cases need a recorded response. They do not: the near miss is a real
 candidate scored against the file, and the suite already holds one. The
 no-match case is the recording above.
-
 **A no-match book is not only one thing.** Two different outcomes reach the
 unverified path, and the pipeline can already tell them apart:
 
@@ -147,7 +147,9 @@ Settled with the maintainer before any code was written:
    book's tags. `belongs-to-collection` was considered and rejected: no reader
    reads "unverified" as a collection, and it would surface in series UI.
 3. **`confidence = 0.85`,** a top-level key so `COLOPHON_CONFIDENCE` works like
-   every other setting, replacing the hardcoded `TITLE_CONFIDENCE`.
+   every other setting. The number itself lives once, in
+   `config.DEFAULT_CONFIDENCE`, which the corrector imports; the hardcoded
+   `TITLE_CONFIDENCE = 0.85` it replaced is now that same constant.
    Valid range `(0, 1]`: 0 is not a threshold, and 1.0 *is* reachable - the
    question was checked rather than assumed, and a title and an author that both
    agree exactly score exactly 1.0 (`0.6 + 0.4`, series absent on one side or
@@ -157,15 +159,18 @@ Settled with the maintainer before any code was written:
 5. **Marking is idempotent:** the sentence is appended once, in whichever of the
    two forms fits the blurb. Plain text gets a blank line then the sentence;
    text carrying markup gets it as its own `<p>`. Whether it is markup is decided
-   by looking for a tag (`<[a-zA-Z][^>]*>`), so a blurb containing `5 < 6` is
-   still plain text. An empty `dc:description` counts as having none.
+   by looking for a tag, and a tag is a name - letters, digits and hyphens -
+   followed by attributes or nothing, so `5 < 6` and a bare `<https://…>` are
+   both plain text. An empty `dc:description` counts as having none.
 6. **A dry run reports the mark and writes nothing,** like every other change:
    the line says `would mark colophon:unverified` rather than `marked`, because a
    marked book has no `changed`-list to sit behind. A real run backs the original
    up and the book is delivered to output like any other.
 7. **The log line keeps the near-miss detail** - which candidate, why, what
-   confidence - and both non-match lines add the mark, attributed to `colophon`
-   rather than to a source that never saw the book.
+   confidence - and both non-match lines add the mark. The tag and the note are
+   attributed to `colophon`, not to the source that matched the book: crediting
+   `hardcover` with writing or removing a tag it never saw is the same lie either
+   way, and a removal reports no value rather than claiming the tag was written.
 8. **The mark is recomputed every pass, not remembered.** A book that is matched
    later comes out clean: the tag goes, and the note comes off the end of the
    description - the note is removed from the text *before* the `[fields]` rules
@@ -177,15 +182,20 @@ Two things the building turned up that the probe could not:
 * **The removal cannot be a rewrite of the marked text backwards.** Taking the
   note off is easy; knowing whether the remaining text was the file's blurb or
   `fill`'s business is not, and a description that was only the note has to be
-  *removed* rather than left empty. So `Edits.description` grew a third meaning -
-  `None` for "no rule said anything", `""` for "nothing is left of it" - and
-  `epub` grew `_set_description` to honour it. The description is now the one
-  field a correction can empty.
+  *removed* rather than left empty. The first cut spelled that with `""` as a
+  third meaning for `Edits.description`, which the review called out as a
+  primitive standing in for a domain concept - the repo already has the pattern
+  it wanted in `drop_series_number`. So `Edits` grew `drop_description: bool`
+  and an honest `description: str | None`, `epub` grew `_drop_description`, and
+  the description is now the one field a correction can take off.
 * **The rule has to be judged against the un-noted blurb.** Judging `fill`
   against the marked description would leave a stale note on any book whose
   description was only the note, because the file "already has a description".
   Stripping first is both what the maintainer asked for ("trim, then apply the
-  normal rule") and what makes the two cases one code path.
+  normal rule") and what makes the two cases one code path. The strip lives in
+  `epub.unmarked`, public because the pipeline asks the same question - "does
+  this book have a blurb?" - and one answer is what keeps the two from
+  disagreeing.
 
 FB2 was **deferred to CBO-45** by decision, not silently dropped: CBO-45 already
 owns reading and writing FB2, this ticket stays EPUB/KEPUB, and CBO-45's

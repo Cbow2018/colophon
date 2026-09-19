@@ -625,11 +625,26 @@ class ABookNothingCanMatchTests(RelayTestCase):
         )
         self.assertEqual((self.backups / "Unknown.epub").read_bytes(), original)
 
-    def test_it_is_looked_up_once_and_not_again(self):
-        """A no-match is an answer, so it is not the thing retries are for."""
-        self.settle(times=4)
+    def test_it_is_delivered_rather_than_held_for_another_attempt(self):
+        """A no-match is an answer, so the book goes out on the first quiet scan.
 
+        This is the half of "not retried; this is a final state" the relay can
+        show today: the book is delivered and not sat on. There is no retry
+        machinery to *not* use yet - CBO-43 builds it - so this cannot pin a
+        marked book out of a window that does not exist. What it pins is that a
+        marked book is not treated as unfinished.
+        """
+        self.settle()
+
+        self.assertFalse(self.path.exists(), "delivered on the first stable scan")
+        self.assertTrue((self.output / "Unknown.epub").exists())
         self.assertEqual(len(self.source.asked_titles), 1)
+
+        self.settle(times=3)
+
+        self.assertEqual(
+            len(self.source.asked_titles), 1, "and never asked again once it has gone"
+        )
 
     def test_the_line_says_the_book_was_marked_as_well_as_what_was_tried(self):
         with self.assertLogs("colophon", level="INFO") as captured:
@@ -656,7 +671,10 @@ class ARealNoMatchThroughTheRelayTests(RelayTestCase):
             return 200, (HARDCOVER_RECORDED / "by-title-nothing-found.json").read_bytes()
 
         def replay_google(url, headers):
-            return 200, (GOOGLE_RECORDED / "by-title-nothing-found.json").read_bytes()
+            # The recording CBO-37 made for a title nobody has. CBO-39 was
+            # recorded for the same question and answered the same bytes, so the
+            # older one is read rather than a second copy kept beside it.
+            return 200, (GOOGLE_RECORDED / "by-title-nothing.json").read_bytes()
 
         self.relay = Relay(
             self.config,

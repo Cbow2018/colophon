@@ -29,6 +29,13 @@ KNOWN_SOURCES = ("hardcover", "google_books")
 # value only when the file has none, or write it whatever the file has.
 FIELD_RULES = ("skip", "fill", "overwrite")
 
+# How sure a title-and-author match has to be before it is written, unless the
+# user says otherwise. The design spec's own number, decided once here and
+# imported by the corrector so the two cannot drift: 1.0 is reachable - a title
+# and an author that both agree exactly score exactly 1.0 - so this is a
+# threshold rather than a value nothing could clear.
+DEFAULT_CONFIDENCE = 0.85
+
 # Every field Colophon can write, and the rule it gets unless the user says
 # otherwise. The defaults are the design spec's own list, with one deliberate
 # reading of it: `fill` is judged against the file, so a book that already
@@ -88,12 +95,12 @@ class Config:
     # Whether to add a cover to a book that has none. A book that already has
     # one keeps it: that is what the setting means, so there is no rule to set.
     add_cover: bool = True
-    # How sure a title-and-author match has to be before it is written, as the
-    # design spec's own 0.85. At 1.0 only a match nothing can be doubted about is
-    # accepted, which is a title and an author that both agree exactly - that
-    # scores exactly 1.0 - so the setting can turn the title path off and leave
-    # the ISBN path without being a value nothing could ever reach.
-    confidence: float = 0.85
+    # How sure a title-and-author match has to be before it is written. At 1.0
+    # only a match nothing can be doubted about is accepted, which is a title and
+    # an author that both agree exactly - that scores exactly 1.0 - so the setting
+    # can turn the title path off and leave the ISBN path without being a value
+    # nothing could ever reach.
+    confidence: float = DEFAULT_CONFIDENCE
 
 
 def load_config(env=None):
