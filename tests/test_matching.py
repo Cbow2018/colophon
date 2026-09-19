@@ -337,11 +337,14 @@ class SeriesTests(unittest.TestCase):
 
         self.assertEqual(match.confidence, 1.0)
 
-    def test_a_number_the_record_contradicts_is_evidence_against_it(self):
-        """A file that says book 6 has not been matched to book 11 of the series.
+    def test_a_number_the_record_contradicts_costs_but_does_not_veto(self):
+        """A wrong position is evidence, but a perfect title and author win.
 
-        Everything else agrees, so the position is the only thing left to go on
-        - which is exactly the case the file's own series bracket is for.
+        The file says book 6 and the record says 11. Both halves of the
+        comparison agree exactly, so the position is a doubt rather than a
+        contradiction - it is the file's subtitle talking, and a source's own
+        numbering is allowed to disagree with a publisher's without the book
+        becoming a different book.
         """
         match = confidence_of(
             AS_DOWNLOADED,
@@ -350,9 +353,25 @@ class SeriesTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(match.title_score, 1.0, "same title, so the title is no help")
-        self.assertEqual(match.author_score, 1.0, "and the author is the same person")
-        self.assertLess(match.confidence, 0.85, "so the position is all there is to go on")
+        self.assertEqual(match.title_score, 1.0, "same title")
+        self.assertEqual(match.author_score, 1.0, "and the same person")
+        self.assertEqual(match.confidence, 0.9, "0.05 of doubt, under the threshold")
+        self.assertGreaterEqual(match.confidence, TITLE_CONFIDENCE)
+
+    def test_a_wrong_number_still_costs_a_match_that_was_only_contained(self):
+        """A weaker title cannot afford the doubt the position adds."""
+        match = confidence_of(
+            "Cragside",
+            candidate=Candidate(
+                title="Cragside: A DCI Ryan Mystery",
+                authors=("L.J. Ross",),
+                series_number="11",
+                language="en",
+            ),
+        )
+
+        self.assertEqual(match.title_score, 0.9, "contained, not equal")
+        self.assertLess(match.confidence, TITLE_CONFIDENCE)
 
     def test_the_number_picks_between_two_candidates_nothing_else_can(self):
         right = Candidate(title="Berwick", authors=("L.J. Ross",), series_number="24")
