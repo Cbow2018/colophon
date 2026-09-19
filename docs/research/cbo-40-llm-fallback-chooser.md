@@ -214,10 +214,10 @@ down before anyone writes a join helper:
 | --- | --- | --- | --- | --- |
 | DeepSeek | `https://api.deepseek.com` — no version segment | `deepseek-flash` (**probed**) | Yes | Yes |
 | Anthropic | `https://api.anthropic.com/v1/` | `claude-haiku-4-5` | **No — docs list `response_format` as "Ignored"** | Yes |
-| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` — **not `/v1`** | `gemini-3.8-flash` — **risk: reasons first, and cannot be told not to** | **unconfirmed**; only `json_schema` is documented | Yes |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` — **not `/v1`** | `gemini-3.8-flash` — **risk: reasons first**; cannot be told not to | **unconfirmed**; only `json_schema` is documented | Yes |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4.1-nano` | Yes | Yes |
 | OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4.1-nano` | Yes | Yes |
-| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` — **risk: reasons first** | Yes | Yes |
+| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` — **risk: reasons first**; no request asks it not to | Yes | Yes |
 | Ollama | `http://localhost:11434/v1/` | `llama3.1` | Yes | Client must send one; Ollama ignores it |
 
 **A naive `base + "/v1/"` template is wrong for two of the seven.** Gemini's
@@ -235,26 +235,32 @@ that does not reason before it answers, which OpenRouter mirrors under
 the library, still its most-pulled model.
 
 **The 256-token cap, and the two presets that reason first.** `MAX_TOKENS` is
-256, which is sized for the pick object and nothing else. Two of the models above
-think before they answer, and neither the request nor the client can switch that
-off: the OpenAI-compatible documentation says plainly that *"Reasoning cannot be
-turned off for Gemini 2.5 Pro or 3 models"*, and Gemini's own usage reports
-thinking as a separate figure (`total_thought_tokens`), which leaves open the
-question this note cannot answer - whether those tokens sit inside the output
+256, sized for the pick object and nothing else, and two of the rows above name a
+model that thinks before it answers: Gemini's `gemini-3.8-flash` and Groq's
+`openai/gpt-oss-120b`. **Both carry the same known risk, and neither is
+measured.** Gemini's compatibility documentation says plainly that *"Reasoning
+cannot be turned off for Gemini 2.5 Pro or 3 models"*; Groq's model could be
+asked to reason less, but only by sending `reasoning_effort: "none"`, and
+`include_reasoning: false` would not do it either - that shapes the response
+rather than the work behind it. **This client sends neither**, so the request is
+not changed for either provider, and that is a decision rather than an oversight.
+Gemini reports its thinking as a separate figure (`total_thought_tokens`), which
+is what leaves the question open: whether those tokens sit inside the output
 budget `max_tokens` sets. If they do, a 256-token reply is spent thinking, every
-call comes back `finish_reason: "length"`, Q3 makes that a `null`, and a Gemini
-book takes the unverified path for ever while spending the day's calls.
+call comes back `finish_reason: "length"`, Q3 reads that as a `null`, and the
+book takes the unverified path for ever while spending the day's calls - on
+either provider, on every book.
 
-**This is a recorded risk, not a finding: nobody probed it.** No Gemini key was
-available to probe with - `C:\Users\Callum\secrets\` held `deepseek.txt`,
-`google_books_key` and `hardcover_token` on 2026-09-19 and nothing else. One call
-to the real prompt with a real key settles it either way, and the same call
-should be made before anyone adopts an OpenAI model above 4.1 (the whole GPT-5.6
-and 6 families reason) or Groq's `gpt-oss-120b`: Groq does document
-`reasoning_effort: "none"` and `include_reasoning: false`, but this request sends
-neither. Raising `MAX_TOKENS` is the cheaper fix and is **not** made here - a
-bigger cap is paid for on every call, and 256 was chosen for one small object, so
-the decision belongs to whoever owns the ticket.
+**Recorded, not fixed: nobody probed it.** No Gemini key was available to probe
+with - `C:\Users\Callum\secrets\` held `deepseek.txt`, `google_books_key` and
+`hardcover_token` on 2026-09-19 and nothing else - so both rows stay as they are
+and the risk stays written down. One call to the real prompt with a real key
+settles it either way, and that is the call to make before either preset is
+trusted. The same goes for an OpenAI model above 4.1: the whole GPT-5.6 and 6
+families reason, which is why this preset names `gpt-4.1-nano` instead. Raising
+`MAX_TOKENS` and sending a reasoning field are both **not done here** - a bigger
+cap is paid for on every call, and 256 was chosen for one small object - so that
+decision belongs to whoever owns the ticket.
 
 Anthropic's row is what it is: the provider documents the OpenAI-compatible layer
 and says it is "not considered a long-term or production-ready solution", and it

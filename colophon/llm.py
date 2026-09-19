@@ -97,9 +97,10 @@ class Provider:
 
 # Seven presets, from the providers' own documentation on 2026-09-19. Only
 # DeepSeek was probed; the rest are what their docs say. Two of the seven name
-# models that reason before they answer, which the 256-token cap below may not
-# leave room for - Gemini's cannot even be switched off - so that is written up
-# as a risk in `docs/research/cbo-40-llm-fallback-chooser.md` rather than here.
+# models that reason before they answer - Gemini's and Groq's - and the
+# 256-token cap below may not leave room for that on either, so both are written
+# up as the same recorded risk in `docs/research/cbo-40-llm-fallback-chooser.md`
+# rather than guessed at here.
 PROVIDERS = {
     # No version segment, and its documented model names
     # (`deepseek-chat`, `deepseek-reasoner`) are aliases it rewrites silently:
@@ -128,8 +129,8 @@ PROVIDERS = {
     # own id.
     "openrouter": Provider("https://openrouter.ai/api/v1", "openai/gpt-4.1-nano"),
     # The Llama this preset named was shut down on 2026-08-16, and this is the
-    # replacement Groq's own deprecation page names. It is a reasoning model,
-    # which is the other half of the risk below.
+    # replacement Groq's own deprecation page names. It is a reasoning model, so
+    # it carries the same recorded risk as the Gemini row - see the note.
     "groq": Provider("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),
     # Local, so no key at all. Ollama ignores an `Authorization` header, which
     # is why none is sent to it: a secret that buys nothing is a secret leaked.
