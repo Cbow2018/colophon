@@ -259,19 +259,34 @@ class ConfidenceTests(unittest.TestCase):
     def test_a_language_nobody_stated_is_no_evidence_either_way(self):
         self.assertTrue(confidence_of(AS_DOWNLOADED, language=None).agrees)
         self.assertIsNotNone(
-            best_candidate(
+            nearest_candidate(
                 FileBook(AS_DOWNLOADED, ("L. J. Ross",), None),
                 [Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
-                TITLE_CONFIDENCE,
             )
         )
         self.assertIsNotNone(
-            best_candidate(
+            nearest_candidate(
                 FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"),
                 [Candidate(title="Cragside", authors=("L.J. Ross",), language=None)],
-                TITLE_CONFIDENCE,
             )
         )
+
+    def test_a_three_letter_file_still_finds_a_record_that_says_en(self):
+        """`eng` and `en` are one language, so the comparison must not refuse it.
+
+        The query is what keeps other languages out: a file tagged `eng` is
+        asked about on `code3`, and the reply carries `code2` as well, which is
+        what the client reads. Comparing the two codes again here would reject
+        the book the query just went to the trouble of finding.
+        """
+        found = nearest_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "eng"),
+            [Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
+        )
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.confidence, 1.0)
+        self.assertTrue(found.agrees)
 
     def test_a_regional_language_agrees_with_its_primary_one(self):
         """`en-GB` in the file is `en` on the record, and the same book."""

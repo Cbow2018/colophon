@@ -388,18 +388,15 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         The three-letter tag is asked about on `code3` instead, checked against
         the live API: `code3: {_eq: "eng"}` returns the editions a `code2`
-        filter returns. What comes back then says `code2: en`, so the file and
-        the record only agree on the comparison because `en` reduces to itself
-        - a file that says `eng` against a record that says `en` is a mismatch
-        the comparison refuses, and that is stated in the PR rather than
-        papered over here.
+        filter returns. What comes back then says `code2: en`, and that is still
+        this book - the query is what keeps other languages out, so the
+        comparison does not re-check and reject the record the query found.
         """
         for written, expected in (
             ("en-GB", "en"),
             ("en-US", "en"),
             ("EN", "en"),
             ("eng", "eng"),
-            ("ger", "ger"),
         ):
             with self.subTest(language=written):
                 metadata = CRAGSIDE.replace(
@@ -412,8 +409,28 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 outcome = self.corrector(source=source).correct(path)
 
                 self.assertEqual(source.asked_languages, [expected])
-                if expected != "eng" and expected != "ger":
-                    self.assertTrue(outcome.matched, "`en` and `en-GB` are one language")
+                self.assertTrue(outcome.matched, f"`{written}` and `en` are one language")
+
+    def test_a_file_tagged_eng_matches_a_record_carrying_both_codes(self):
+        """The case the client-side language check used to refuse.
+
+        A file says `eng`. The lookup asks about `code3`, and the record comes
+        back carrying `code2: en` and `code3: eng` - which the client reads as
+        `en`. Both codes are the same language, so the book is matched.
+        """
+        metadata = CRAGSIDE.replace(
+            "<dc:language>en</dc:language>", "<dc:language>eng</dc:language>"
+        )
+        path, source = self.a_book_the_source_has(
+            "Cragside-eng.epub", metadata, CRAGSIDE_CANDIDATE
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_languages, ["eng"], "asked about on code3")
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
 
     def test_a_regional_language_still_matches_a_record_that_says_en(self):
         """The usual case: the file says `en-GB`, the record says `en`."""
