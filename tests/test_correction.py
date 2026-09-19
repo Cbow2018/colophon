@@ -555,6 +555,23 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertNotIn("cover", {change.field for change in outcome.changed})
         self.assertEqual(cover_meta(path), None)
 
+    def test_the_log_line_names_the_cover_without_its_value(self):
+        """A cover's value is an image, so the line says only that it moved.
+
+        The blurb and the cover are the two fields whose values have no business
+        in a log line: one is a thousand characters of prose and the other is
+        bytes. Both are named there, and neither is written out.
+        """
+        path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        outcome = self.corrector(found=MATCH).correct(path)
+        line = outcome.fragment()
+
+        self.assertIn("cover<-hardcover", line)
+        self.assertIn("description<-hardcover", line)
+        self.assertNotIn('cover="', line)
+        self.assertNotIn('description="', line)
+
     def test_a_cover_is_not_fetched_for_a_book_nothing_would_change(self):
         """No point downloading an image for a book about to be left alone."""
         asked = []
