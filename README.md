@@ -215,15 +215,16 @@ keeps the metadata it came with and is marked instead:
 It then goes to the output folder like any other book, and is logged like one:
 
 ```
-moved "Berwick.epub" -> /output/Berwick.epub (1.5 MB) [no source among hardcover, google_books has an edition called Berwick confidently enough: the record's title is contained in the file's; an author agrees, confidence 0.84; marked colophon:unverified: description<-colophon, tag="colophon:unverified"<-colophon]
+[no source among hardcover has an edition called Cragside confidently enough: file's title is contained in the record's; an author agrees, confidence 0.84; marked colophon:unverified: description<-colophon, tag<-colophon]
 ```
 
 The near-miss line names the closest thing to the book and what was wrong with
 it, so "we looked and found nothing" and "we nearly had it" read differently in
 the log. A book with nothing close at all says only what it was looked for as.
 
-The mark takes the file's own blurb as it is - nothing is rewritten - and the
-sentence goes after it, so a book that came with a description keeps it.
+The mark leaves the blurb alone and puts the sentence after it, so a book that
+came with a description keeps it. The last part of the line is which fields moved
+and who moved them - here Colophon, since no source had anything to do with them.
 
 **This is a final state, not a failure.** The sources answered; they simply do
 not have the book, so there is nothing to wait for and nothing to retry. When a
