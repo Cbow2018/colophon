@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from colophon import epub
-from colophon.config import FIELD_DEFAULTS
+from colophon.config import FIELD_DEFAULTS, KNOWN_FIELDS
 from colophon.epub import Edits, EpubError
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -58,31 +58,11 @@ MATCHED_BY = "exact ISBN"
 TITLE_CONFIDENCE = 0.85
 TITLE_MATCHED_BY = "title and author"
 
-# Every field a rule can decide, in the order the log line names them. The
-# mapping in `Config.fields` is keyed by exactly these names, and a test holds
-# the two lists together.
-_WRITTEN = (
-    "title",
-    "authors",
-    "series",
-    "series_number",
-    "description",
-    "publisher",
-    "date",
-    "isbn",
-    "language",
-)
-
-# A field whose value is too long to put in a log line is named there without
-# it: the line's job is which fields moved and who supplied them, and the blurb
-# itself is in the book. A description runs to a thousand characters.
-_NAME_ONLY = ("description",)
-
-# A cover a dry run stands in for the real one with. A dry run reports that a
-# cover would be added and fetches nothing to say so: the bytes are not what it
-# is reporting, and it writes nothing to put them in. Empty, because the bytes
-# are never looked at - a cover is treated as present or not, never inspected.
-COVER_IF_ADDED = b""
+# Fields whose values are not what belongs in a log line, so the line names them
+# without it: the blurb is a thousand characters of prose that is in the book,
+# and a cover's value is bytes. The line's job is which fields moved and who
+# supplied them.
+_NAME_ONLY = ("description", "cover")
 
 # The formats whose metadata Colophon understands. Everything else - PDFs,
 # comics, MOBI - passes straight through, untouched and unread. Kobo writes
@@ -271,7 +251,7 @@ class Corrector:
             except SourceError as error:
                 return self._failed(source, error, f"ISBN {book.isbn}")
             if found is not None:
-                return self._write(path, found, CONFIDENCE, book.isbn, book)
+                return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
         return Outcome(isbn=book.isbn, tried=tuple(tried))
 
     def _by_title(self, path, book):
@@ -362,9 +342,9 @@ class Corrector:
         where the values are from. `isbn` is set only when an ISBN is what
         recognised the book, because that is what the log line then reports.
 
-        `book` is the file as it was read, which is what each rule is judged
-        against: `fill` only writes a field the file is empty of, so the file has
-        to be in hand before anything can be decided.
+        `book` is the file as it was read, and it is never left out: each rule is
+        judged against it, `fill` writes only a field the file is empty of, and
+        whether the book already has a cover is a fact about the file.
         """
         edits = self._edits(found, book)
         matched = {
@@ -377,19 +357,33 @@ class Corrector:
 
         # Ask the file what would move before touching it: a book that already
         # matches is not backed up, and not rewritten either. The cover is asked
-        # for only once there is something to write, because fetching an image
-        # for a book about to be left alone is work done for nothing.
-        #
-        # The cover counts as one of the moves, so the plan is taken over what
-        # the book is about to be written rather than what would be written
-        # without it: a book whose only change is a cover still has a change.
-        cover = self._cover(path, found, book)
-        planned = epub.correct(
-            path,
-            edits,
-            write=False,
-            cover=COVER_IF_ADDED if cover is not None else None,
-        )
+        # for only once something is going to be written, because fetching an
+        # image for a book about to be left alone is work done for nothing -
+        # and a dry run fetches nothing either, for the same reason it writes
+        # nothing. What it reports is that a cover would be added, not the image.
+        cover = self._cover(path, found, book, would_add=self.dry_run)
+        wanted = self._wants_cover(found, book)
+        try:
+            planned = epub.correct(
+                path,
+                edits,
+                write=False,
+                cover=cover,
+                would_add_cover=self.dry_run and wanted,
+            )
+        except EpubError as error:
+            # The cover is not an image the file will take. Nothing is written
+            # on this pass whatever happens - it only says what would move - so
+            # the book is left alone and the reason is said once, here.
+            LOG.warning(
+                "%s offered a cover for %s that the file would not take, so the "
+                "book is corrected without it: %s",
+                _label(found.source),
+                path.name,
+                error,
+            )
+            planned = ()
+            cover = None
         if not planned:
             return Outcome(**matched)
         if self.dry_run:
@@ -404,7 +398,14 @@ class Corrector:
                 problem=f"could not back the original up: {error}",
             )
 
-        written = epub.correct(path, edits, cover=cover)
+        try:
+            written = epub.correct(path, edits, cover=cover)
+        except EpubError:
+            # The same cover, refused on the pass that writes. The book is left
+            # exactly as it was - `epub.correct` decides everything before it
+            # writes anything - so this is the same outcome as a cover that
+            # could not be fetched, and the warning above was the saying.
+            written = ()
         return Outcome(
             **matched,
             changed=_changes(written, edits, found.source),
@@ -426,7 +427,7 @@ class Corrector:
         publisher has not offered an empty one.
         """
         wanted = {}
-        for name in _WRITTEN:
+        for name in KNOWN_FIELDS:
             rule = self.fields.get(name, "skip")
             value = getattr(found, name, None)
             if name == "authors":
@@ -453,7 +454,7 @@ class Corrector:
             wanted["drop_series_number"] = True
         return Edits(**wanted)
 
-    def _cover(self, path, found, book):
+    def _cover(self, path, found, book, would_add=False):
         """The cover to add to this book, or None when there is none to add.
 
         Only the source that matched is asked for one: the priority list is a
@@ -465,11 +466,15 @@ class Corrector:
         a blurb and a right title are worth having whether or not the image
         arrives. So a failure here is a line in the log rather than a reason to
         leave the metadata alone.
+
+        `would_add` is a dry run asking whether a cover is on its way without
+        wanting the bytes: none are fetched, and `None` is the answer that means
+        "not to hand" rather than "none to add".
         """
-        if not self.add_cover or not found.cover or book.has_cover:
+        if not self._wants_cover(found, book):
             return None
-        if self.dry_run:
-            return COVER_IF_ADDED
+        if would_add:
+            return None
         try:
             return self.fetch(found.cover)
         except SourceError as error:
@@ -482,19 +487,16 @@ class Corrector:
             )
             return None
 
+    def _wants_cover(self, found, book):
+        """Whether a cover is to be added to this book, setting and all.
 
-def _edits(found):
-    """Only the fields the source actually has: a field it lacks is not a blank.
-
-    This is what keeps a Google Books match from writing a series: Google has no
-    series data for a novel, so its candidate carries none, and none is written.
-    """
-    return Edits(
-        title=found.title,
-        authors=found.authors or None,
-        series=found.series,
-        series_number=found.series_number,
-    )
+        Three things decide it and nothing else does: the setting is on, the
+        source offered one, and the book has none of its own. It is asked
+        separately from fetching because a dry run has to answer it without
+        fetching anything, and because "no cover to add" and "the bytes are not
+        to hand" are different answers with different outcomes.
+        """
+        return bool(self.add_cover and found.cover and not book.has_cover)
 
 
 def _build(name, config):

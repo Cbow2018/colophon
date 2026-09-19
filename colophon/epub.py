@@ -123,17 +123,28 @@ def read(path):
 
 
 def _read_series(metadata):
-    """The series the book is already in, as Calibre records it.
+    """The series the book is already in, and the number it claims.
 
-    Calibre's two tags are read rather than EPUB 3's collection, because they
-    are the pair the writing side already keeps together: whichever a book came
-    with, this is what "the file's series" means to the comparison.
+    Calibre's two tags are read first, because they are the pair the writing
+    side keeps together, and EPUB 3's collection is read when they are not
+    there. Both are read for the same reason the cover is looked for both ways:
+    a book that says what series it is in has said so, and whether a rule of
+    `fill` sees an empty field must not depend on which shape of EPUB it is.
     """
     found = {}
     for element in metadata.findall(f"{{{OPF}}}meta"):
         if element.get("name") in (CALIBRE_SERIES, CALIBRE_SERIES_INDEX):
             found[element.get("name")] = (element.get("content") or "").strip() or None
-    return found.get(CALIBRE_SERIES), found.get(CALIBRE_SERIES_INDEX)
+    if found.get(CALIBRE_SERIES):
+        return found.get(CALIBRE_SERIES), found.get(CALIBRE_SERIES_INDEX)
+
+    collection = _collection(metadata)
+    if collection is None:
+        return found.get(CALIBRE_SERIES), found.get(CALIBRE_SERIES_INDEX)
+    return (
+        (collection.text or "").strip() or None,
+        found.get(CALIBRE_SERIES_INDEX) or _refined(metadata, collection, GROUP_POSITION),
+    )
 
 
 def _has_cover(package, metadata):
@@ -144,13 +155,10 @@ def _has_cover(package, metadata):
     book may say it either way, or both, and any of them means the cover it came
     with is its own and is not to be replaced.
     """
-    for element in metadata.findall(f"{{{OPF}}}meta"):
-        if element.get("name") == COVER_META and (element.get("content") or "").strip():
-            return True
-    return _declared_cover(package)
+    return _cover_id(metadata) is not None or _declared_cover(package)
 
 
-def correct(path, edits, write=True, cover=None):
+def correct(path, edits, write=True, cover=None, would_add_cover=False):
     """Overwrite the fields a source provides, and say which ones moved.
 
     Nothing else in the file changes: the text, the images and any licence left
@@ -160,10 +168,34 @@ def correct(path, edits, write=True, cover=None):
 
     `cover` is the image a source offers, and it is added only when the book has
     none: a book with a cover keeps it, whatever it was offered. `None` means no
-    cover was offered, which is why a caller adding one hands over bytes and not
-    a truthy value; the bytes are never inspected here beyond their first few.
-    A book with nothing to change and no cover to add is still not written at all.
+    cover was offered. `would_add_cover` says a cover is coming without the bytes
+    being to hand, which is a dry run: the book is declared to have one and no
+    image is written, so a book whose only change is a cover still reports one.
+
+    An image the file will not take raises `EpubError`, and nothing is written
+    before the answer is known, so a caller left holding that error has an
+    untouched book rather than a half-corrected one.
     """
+    package, opf_path, metadata = _open_package(path)
+    changed = list(_apply(metadata, edits))
+    image = _set_cover(path, package, metadata, cover, would_add_cover)
+    if image is not None:
+        changed.append("cover")
+    if not changed or not write:
+        return tuple(changed)
+
+    # The declaration and the metadata go into the package document together,
+    # and the image is added after it: one write for what the book says about
+    # itself, and one for the file that backs the new cover.
+    name, image_bytes, _ = image if image is not None else (None, None, False)
+    _rewrite(path, opf_path, _document(package))
+    if name is not None and image_bytes:
+        _add_image(path, name, image_bytes)
+    return tuple(changed)
+
+
+def _open_package(path):
+    """The package document's tree, where it lives, and its metadata element."""
     try:
         with zipfile.ZipFile(path) as book:
             _refuse_if_locked(book, path)
@@ -179,15 +211,11 @@ def correct(path, edits, write=True, cover=None):
     metadata = _metadata(package)
     if metadata is None:
         raise EpubError(f"{path} has no metadata section to correct")
+    return package, opf_path, metadata
 
-    changed = list(_apply(metadata, edits))
-    image = _set_cover(path, package, metadata, cover)
-    if image is not None:
-        changed.append("cover")
-    if changed and write:
-        document = ET.tostring(package, encoding="utf-8", xml_declaration=True)
-        _rewrite(path, opf_path, document, image)
-    return tuple(changed)
+
+def _document(package):
+    return ET.tostring(package, encoding="utf-8", xml_declaration=True)
 
 
 def _apply(metadata, edits):
@@ -590,7 +618,7 @@ def _declared_cover(package):
     return False
 
 
-def _set_cover(path, package, metadata, cover):
+def _set_cover(path, package, metadata, cover, would_add_cover=False):
     """Add an image as the book's cover, or None when there is nothing to do.
 
     A book that already has a cover keeps it: the setting says a cover is added
@@ -602,17 +630,20 @@ def _set_cover(path, package, metadata, cover):
     The image goes in beside the package document, which is where a relative
     manifest href is resolved from, under a name built from its own bytes, so
     the same image added twice is the same entry rather than a second copy. With
-    no bytes at all the declaration is still made and no entry is named for
-    them, which is what a dry run is: what the book would say, without fetching
-    or storing the image it would say it about.
+    `would_add_cover` the declaration is made and no entry is named for an image,
+    which is what a dry run is: what the book would say, without fetching or
+    storing the image it would say it about.
     """
-    if cover is None:
+    if cover is None and not would_add_cover:
         return None
     if _cover_id(metadata) is not None or _declared_cover(package):
         return None
 
     package_folder = _package_folder(path)
     identifier = _free_id(metadata, COVER_ID)
+    # A declaration with no image behind it still needs a media type, and the
+    # media type is what says what the image is. Nothing reads it in a dry run;
+    # it is the one both sources serve, so it is the least surprising guess.
     media_type = "image/jpeg"
     name = None
     href = None
@@ -644,7 +675,7 @@ def _set_cover(path, package, metadata, cover):
     if _is_epub3(package):
         item.set("properties", "cover-image")
     _set_meta(metadata, COVER_META, identifier)
-    return name, cover
+    return name, cover, True
 
 
 def _image_type(cover):
@@ -687,17 +718,12 @@ def _keep_namespace_prefixes(declared):
             ET.register_namespace(prefix.decode() if prefix else "", uri.decode())
 
 
-def _rewrite(path, opf_path, document, image=None):
+def _rewrite(path, opf_path, document):
     """Rewrite the zip with the new package document and nothing else disturbed.
 
     Both handles are closed before the swap: Windows refuses to replace a file
     that anything still has open, so the book is read, closed, and only then
     replaced by the rewritten copy.
-
-    `image` is a cover to add, as (name, bytes). It goes in after every entry
-    the book already had, so the order the book was written in is left as it
-    was. A cover with no bytes is one that was only ever declared, which a dry
-    run does and a write never does.
     """
     half_written = path.parent / f".{path.name}.colophon-new"
     try:
@@ -705,11 +731,27 @@ def _rewrite(path, opf_path, document, image=None):
             for entry in book.infolist():
                 body = document if entry.filename == opf_path else book.read(entry.filename)
                 _copy_entry(rewritten, entry, body)
-            if image is not None and image[0] is not None:
-                name, cover = image
-                added = zipfile.ZipInfo(name, _now())
-                added.compress_type = zipfile.ZIP_DEFLATED
-                rewritten.writestr(added, cover)
+        os.replace(half_written, path)
+    except OSError:
+        half_written.unlink(missing_ok=True)
+        raise
+
+
+def _add_image(path, name, image):
+    """Add one image to the book, after everything it already had.
+
+    Its own step rather than part of the package document's: the declaration and
+    the image are written separately so that a refusal - bytes that are not an
+    image - cannot take corrections that are already on disk down with it.
+    """
+    half_written = path.parent / f".{path.name}.colophon-new"
+    try:
+        with zipfile.ZipFile(path) as book, zipfile.ZipFile(half_written, "w") as rewritten:
+            for entry in book.infolist():
+                _copy_entry(rewritten, entry, book.read(entry.filename))
+            added = zipfile.ZipInfo(name, _now())
+            added.compress_type = zipfile.ZIP_DEFLATED
+            rewritten.writestr(added, image)
         os.replace(half_written, path)
     except OSError:
         half_written.unlink(missing_ok=True)

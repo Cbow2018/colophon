@@ -586,6 +586,44 @@ class OtherFieldTests(EpubTestCase):
         self.assertIsNone(book.publisher)
         self.assertIsNone(book.date)
 
+    def test_it_reads_a_series_a_book_declares_the_epub_3_way(self):
+        """`fill` judges the file, so the file's series has to be read both ways.
+
+        Calibre's tags are the pair the writing side keeps together, but a book
+        that says what series it is in through EPUB 3's collection has said so
+        just as much - and a rule that overwrote it would be overwriting a field
+        that was not empty.
+        """
+        path = write_epub(self.folder / "Cragside.epub", EXISTING_SERIES_COLLECTION)
+
+        book = read(path)
+
+        self.assertEqual(book.series, "Old Series")
+        self.assertEqual(book.series_number, "1")
+
+    def test_the_calibre_tags_win_when_a_book_declares_both(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            """
+    <dc:title>Cragside</dc:title>
+    <meta name="calibre:series" content="Calibre's Series"/>
+    <meta name="calibre:series_index" content="2"/>
+    <meta property="belongs-to-collection" id="series-1">The Other One</meta>
+    <meta property="collection-type" refines="#series-1">series</meta>
+    <meta property="group-position" refines="#series-1">9</meta>
+""",
+        )
+
+        book = read(path)
+
+        self.assertEqual(book.series, "Calibre's Series")
+        self.assertEqual(book.series_number, "2")
+
+    def test_a_collection_that_is_not_a_series_is_not_a_series(self):
+        path = write_epub(self.folder / "Cragside.epub", A_BOXED_SET)
+
+        self.assertIsNone(read(path).series)
+
     def test_it_writes_them_onto_a_book_that_had_none(self):
         path = write_epub(self.folder / "Cragside.epub", SIMPLE)
 

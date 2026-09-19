@@ -3,12 +3,21 @@
 import inspect
 import json
 import shutil
+import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from colophon import sources as colophon_sources
 from colophon.backups import Backups
-from colophon.config import FIELD_DEFAULTS, KNOWN_FIELDS, KNOWN_SOURCES, Config
-from colophon.correction import _WRITTEN, SOURCE_SETUP, Corrector
+from colophon.config import (
+    FIELD_DEFAULTS,
+    KNOWN_FIELDS,
+    KNOWN_SOURCES,
+    Config,
+    load_config,
+)
+from colophon.correction import SOURCE_SETUP, Corrector
 from colophon.epub import read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -115,32 +124,46 @@ class RefusingBackups:
         raise OSError("no space left on device")
 
 
-class TheFieldListTests(unittest.TestCase):
-    """The fields the config has rules for are the fields the pass can write.
+def _refuse_the_network(url, *args, **kwargs):
+    """The real image fetch, replaced by one that fails and says why."""
+    raise SourceError(f"a test reached the network for {url}")
 
-    A field in one list and not the other is invisible either way: a rule the
-    user sets that nothing applies, or a field the pass writes that cannot be
-    turned off. `KNOWN_FIELDS` is what `config.toml` accepts and `_WRITTEN` is
-    what the corrector walks, so this is the test that keeps them one list.
+
+class TheFieldListTests(unittest.TestCase):
+    """Which fields there are is one list, and it is not a field itself.
+
+    `KNOWN_FIELDS` holds the nine a rule can be set for, and it is the list the
+    corrector walks as well as the one `config.toml` is checked against: two
+    copies would be two chances for a rule the user sets and nothing applies.
     """
 
-    def test_the_config_and_the_corrector_agree_on_which_fields_there_are(self):
-        self.assertEqual(
-            tuple(name for name, _ in FIELD_DEFAULTS),
-            KNOWN_FIELDS,
-            "the defaults are keyed by the field list",
-        )
-        self.assertEqual(set(_WRITTEN), set(KNOWN_FIELDS))
-        self.assertEqual(_WRITTEN, KNOWN_FIELDS, "and in the same order")
+    def test_the_field_list_is_the_one_the_defaults_are_keyed_by(self):
+        self.assertEqual(tuple(name for name, _ in FIELD_DEFAULTS), KNOWN_FIELDS)
 
-    def test_a_field_the_rules_do_not_name_is_not_written(self):
-        """`_WRITTEN` is what is walked, so a rule for anything else does nothing."""
-        self.assertNotIn("genre", KNOWN_FIELDS)
+    def test_the_nine_fields_are_the_ones_the_design_spec_names(self):
+        self.assertEqual(
+            KNOWN_FIELDS,
+            (
+                "title",
+                "authors",
+                "series",
+                "series_number",
+                "description",
+                "publisher",
+                "date",
+                "isbn",
+                "language",
+            ),
+        )
+
+    def test_a_cover_is_a_setting_and_not_one_of_the_fields(self):
         self.assertNotIn("cover", KNOWN_FIELDS, "a cover is a setting, not a rule")
+        self.assertNotIn("genre", KNOWN_FIELDS)
 
 
 class CorrectionTestCase(unittest.TestCase):
     def setUp(self):
+        self.refuse_the_real_fetch()
         self._tmp = TemporaryDirectory()
         self.folder = Path(self._tmp.name)
         self.backups = Backups(self.folder / "backups")
@@ -158,13 +181,40 @@ class CorrectionTestCase(unittest.TestCase):
         takes; a test about the priority list passes `sources=` instead. A test
         that wants no source at all passes `source=None`.
         """
-        settings = {"backups": self.backups}
+        settings = {"backups": self.backups, "fetch": self.offline_cover}
         settings.update(kwargs)
         if "sources" not in settings:
             if source == "default":
                 source = self.source
             settings["sources"] = [] if source is None else [source]
         return Corrector(**settings)
+
+    def offline_cover(self, url):
+        """A cover fetched from the fixtures, never from the network.
+
+        Every corrector a test builds gets this unless it says otherwise, so no
+        test can reach the network by accident: one that did would pass or fail
+        depending on whether the network was there, which is not a test. The one
+        URL it answers is the stand-in's own, and any other is refused loudly.
+        """
+        if url == MATCH.cover:
+            return COVER_FIXTURE.read_bytes()
+        raise SourceError(f"a test tried to fetch {url} from the network")
+
+    def refuse_the_real_fetch(self):
+        """Make the real fetch fail, so a corrector built without this one shows up.
+
+        The injected `fetch` above is what every corrector here uses, and a test
+        that builds its own without one would otherwise reach the network. This
+        is the backstop for that: the failure is loud, and named for what it is.
+        """
+        patcher = mock.patch.object(
+            colophon_sources,
+            "image",
+            _refuse_the_network,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def kept(self):
         folder = self.folder / "backups"
@@ -406,6 +456,29 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertEqual(read(path).series_number, None)
         self.assertIn("series_number", {change.field for change in outcome.changed})
 
+    def test_fill_leaves_a_series_the_book_declares_the_epub_3_way(self):
+        """A book says what series it is in two ways, and `fill` reads both.
+
+        Reading only Calibre's tags would call this book's series empty and
+        write over one that was there.
+        """
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <meta property="belongs-to-collection" id="series-1">Old Series</meta>
+    <meta property="collection-type" refines="#series-1">series</meta>
+    <meta property="group-position" refines="#series-1">9</meta>
+""",
+            version="3.0",
+        )
+
+        self.corrector(rules=self.rules(series="fill", series_number="fill")).correct(path)
+
+        self.assertEqual(read(path).series, "Old Series")
+        self.assertEqual(epub3_series(path), ("Old Series", "series", "9"))
+
     def test_a_series_number_is_kept_when_the_series_does_not_change(self):
         path = write_epub(
             self.folder / "Cragside.epub",
@@ -508,6 +581,58 @@ class FieldRuleTests(CorrectionTestCase):
         self.corrector(found=MATCH, fetch=fetch).correct(path)
 
         self.assertEqual(asked, [MATCH.cover])
+
+    def test_the_cover_comes_from_the_source_that_matched_and_no_other(self):
+        """The priority list is a trust order for a cover as much as a title.
+
+        The second source also has the book, and the first one is the one that
+        answers, so the image may only be fetched from the first one's URL.
+        """
+        first = FakeSource(found=MATCH)
+        second = FakeSource(
+            found=Candidate(
+                source="google_books",
+                title="Cragside",
+                authors=("L. J. Ross",),
+                isbn=ISBN,
+                cover="https://example.invalid/another-cover.jpg",
+            ),
+            name="google_books",
+        )
+        asked = []
+
+        corrector = Corrector(
+            sources=[first, second],
+            backups=self.backups,
+            fetch=lambda url: (asked.append(url), self.COVER)[1],
+        )
+        corrector.correct(write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED))
+
+        self.assertEqual(asked, [MATCH.cover])
+        self.assertEqual(second.asked, [], "the lower-priority source is not asked at all")
+
+    def test_a_cover_the_file_will_not_take_leaves_the_book_uncorrected(self):
+        """Bytes that are no image are caught, not raised on out of the pass.
+
+        The relay has no guard around the correction pass, so an `EpubError`
+        escaping here would stop the whole run over one bad image. The book is
+        left exactly as it was rather than half-corrected: the cover is decided
+        before anything is written, so a book this pass cannot finish with is a
+        book it does not touch.
+        """
+        path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+        before = path.read_bytes()
+
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            outcome = self.corrector(
+                found=MATCH, fetch=lambda url: b"not an image at all"
+            ).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(outcome.changed, ())
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertIn("cover", "\n".join(captured.output))
 
     def test_a_cover_that_cannot_be_fetched_does_not_stop_the_metadata(self):
         """A blurb and a right title are worth having without the image."""
@@ -673,6 +798,17 @@ class FromConfigTests(unittest.TestCase):
         settings.update(extra)
         return Config(**settings)
 
+    def write_config(self, text):
+        """A config.toml on disk, for the tests that go through the file.
+
+        The text is dedented because TOML is whitespace-sensitive: a setting
+        written indented under a `[...]` header belongs to that table, which is
+        not what an indented test string means.
+        """
+        path = self.folder / "config.toml"
+        path.write_text(textwrap.dedent(text).lstrip("\n"), encoding="utf-8")
+        return path
+
     def test_the_built_sources_are_in_the_order_the_config_puts_them(self):
         (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
         (self.folder / "google_books_key").write_text("a-key\n", encoding="utf-8")
@@ -743,6 +879,61 @@ class FromConfigTests(unittest.TestCase):
         corrector = Corrector.from_config(self.config(), Backups(self.folder / "backups"))
 
         self.assertEqual(corrector.sources, ())
+
+    def test_the_rules_a_config_carries_are_the_rules_the_pass_applies(self):
+        """The whole point of the ticket: the file decides, not the code.
+
+        This drives a `[fields]` table all the way through `load_config` and
+        `from_config` to a corrected book, because parsing a setting and
+        applying it are two different things and only one of them was tested.
+        """
+        path = self.write_config(
+            """
+            sources = ["hardcover"]
+            dry_run = false
+            add_cover = false
+            [fields]
+            title = "skip"
+            description = "overwrite"
+            """
+        )
+        (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+        book = write_epub(
+            self.folder / "Cragside.epub",
+            f"""    <dc:title>Something Else Entirely</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:description>The file's own blurb.</dc:description>
+""",
+            version="2.0",
+        )
+
+        corrector = Corrector.from_config(config, Backups(self.folder / "backups"))
+        corrector.sources = (FakeSource(),)
+        outcome = corrector.correct(book)
+
+        written = {change.field for change in outcome.changed}
+        self.assertIn("description", written, "the source's blurb replaced the file's")
+        self.assertEqual(read(book).title, "Something Else Entirely")
+        self.assertEqual(read(book).description, CRAGSIDE_BLURB)
+        self.assertNotIn("cover", written, "the config turned covers off, too")
+
+    def test_the_cover_setting_a_config_carries_is_applied_too(self):
+        """The same seam, for the one setting that is not a field rule."""
+        path = self.write_config(
+            'sources = ["hardcover"]\ndry_run = false\nadd_cover = false\n'
+        )
+        (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+        book = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+        corrector = Corrector.from_config(config, Backups(self.folder / "backups"))
+        corrector.sources = (FakeSource(found=MATCH),)
+        outcome = corrector.correct(book)
+
+        self.assertNotIn("cover", {change.field for change in outcome.changed})
+        self.assertIsNone(cover_meta(book))
 
     def test_every_configured_source_has_a_label(self):
         """The corrector can only hold sources `config.py` allows, and every one
@@ -1347,7 +1538,7 @@ class TheSourcePriorityListTests(CorrectionTestCase):
     def corrector_over(self, *sources, **kwargs):
         settings = {"backups": self.backups}
         settings.update(kwargs)
-        return Corrector(sources=list(sources), **settings)
+        return Corrector(sources=list(sources), fetch=self.offline_cover, **settings)
 
     # --- the ISBN path -----------------------------------------------------
 
@@ -1819,7 +2010,9 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
                 )
 
         # The first source in the list answers, and the second is never asked.
-        corrector = Corrector(sources=list(sources), backups=self.backups)
+        corrector = Corrector(
+            sources=list(sources), backups=self.backups, fetch=self.offline_cover
+        )
         outcome = corrector.correct(path)
         self.assertTrue(outcome.matched)
         self.assertEqual(outcome.source, "hardcover")
