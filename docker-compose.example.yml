@@ -24,16 +24,18 @@ services:
       - /srv/books/output:/output
       - /srv/books/backups:/backups
 
-    # The API keys. Create ./secrets/hardcover_token and
-    # ./secrets/google_books_key (one line each, the key) and leave them
-    # readable only by you; they are mounted at /run/secrets/, where the config
-    # expects them. Secrets never go in the environment or the image.
+    # The API keys. Create ./secrets/hardcover_token (one line, the token) and
+    # leave it readable only by you; it is mounted at /run/secrets/, where the
+    # config expects it. Secrets never go in the environment or the image.
     #
-    # A key that is not there is not fatal: Colophon says so once at startup and
-    # carries on with the sources it can use.
+    # Colophon tolerates a missing key - it says so once at startup and carries
+    # on with the sources it can use - but a `file:` secret still has to exist
+    # for Compose to start the stack, so the Google Books key is left out until
+    # you have one. Create ./secrets/google_books_key, then uncomment the
+    # google_books_key line below and the block at the bottom of this file.
     secrets:
       - hardcover_token
-      - google_books_key
+      # - google_books_key
 
     environment:
       # Overrides config.toml. Remove this once you trust the log.
@@ -42,5 +44,6 @@ services:
 secrets:
   hardcover_token:
     file: ./secrets/hardcover_token
-  google_books_key:
-    file: ./secrets/google_books_key
+  # Uncomment once you have created ./secrets/google_books_key.
+  # google_books_key:
+  #   file: ./secrets/google_books_key
