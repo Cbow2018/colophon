@@ -1,0 +1,208 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 3,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "wlssEAAAQBAJ",
+      "etag": "dv6y/nZduNg",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/wlssEAAAQBAJ",
+      "volumeInfo": {
+        "title": "Ecos De Paris",
+        "authors": [
+          "E\u00e7a De Queiroz"
+        ],
+        "publisher": "Clube de Autores",
+        "publishedDate": "2021-05-05",
+        "description": "Al\u00e9m de ser um dos melhores escritores europeus, E\u00e7a de Queiroz escreveu durante os anos em que serviu como c\u00f4nsul na Fran\u00e7a, algumas das cr\u00f4nicas mais atraentes da hist\u00f3ria do jornalismo. Ecos de Paris, re\u00fane escritos regularmente enviados pelo autor, para o jornal brasileiro Gazeta de Not\u00edcias, onde tamb\u00e9m colaboravam Machado de Assis, Oliveira Martins e Ramalho Ortig\u00e3o, entre outros.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9780000000002"
+          },
+          {
+            "type": "ISBN_10",
+            "identifier": "0000000000"
+          }
+        ],
+        "readingModes": {
+          "text": true,
+          "image": false
+        },
+        "pageCount": 210,
+        "printType": "BOOK",
+        "categories": [
+          "Fiction"
+        ],
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "0.1.1.0.preview.2",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=wlssEAAAQBAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=wlssEAAAQBAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "pt-BR",
+        "previewLink": "http://books.google.co.uk/books?id=wlssEAAAQBAJ&dq=isbn:9780000000000&hl=&cd=1&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=wlssEAAAQBAJ&dq=isbn:9780000000000&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/Ecos_De_Paris.html?hl=&id=wlssEAAAQBAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": true
+        },
+        "pdf": {
+          "isAvailable": true
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=wlssEAAAQBAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "Ecos de Paris, re\u00fane escritos regularmente enviados pelo autor, para o jornal brasileiro Gazeta de Not\u00edcias, onde tamb\u00e9m colaboravam Machado de Assis, Oliveira Martins e Ramalho Ortig\u00e3o, entre outros."
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "Q6BnYbySc_0C",
+      "etag": "pYnmbhVmsg0",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/Q6BnYbySc_0C",
+      "volumeInfo": {
+        "title": "A Quest\u00e3o da gambiarra",
+        "publisher": "Contrasto",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9780000000002"
+          },
+          {
+            "type": "ISBN_10",
+            "identifier": "0000000000"
+          }
+        ],
+        "readingModes": {
+          "text": false,
+          "image": false
+        },
+        "pageCount": 1,
+        "printType": "BOOK",
+        "averageRating": 5,
+        "ratingsCount": 2,
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "preview-1.0.0",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=Q6BnYbySc_0C&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=Q6BnYbySc_0C&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=Q6BnYbySc_0C&dq=isbn:9780000000000&hl=&cd=2&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=Q6BnYbySc_0C&dq=isbn:9780000000000&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/A_Quest%C3%A3o_da_gambiarra.html?hl=&id=Q6BnYbySc_0C"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": false
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=Q6BnYbySc_0C&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "s12ZDQAAQBAJ",
+      "etag": "xfl+GPWCI5A",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/s12ZDQAAQBAJ",
+      "volumeInfo": {
+        "title": "\uc560\uac70\uc11c\ud06c\ub9ac\uc2a4\ud2f0 A to Z",
+        "authors": [
+          "\ucd5c\uace0\uc6b4"
+        ],
+        "publisher": "Minumin",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9780000000002"
+          },
+          {
+            "type": "ISBN_10",
+            "identifier": "0000000000"
+          }
+        ],
+        "readingModes": {
+          "text": true,
+          "image": false
+        },
+        "pageCount": 209,
+        "printType": "BOOK",
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "1.2.3.0.preview.2",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=s12ZDQAAQBAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=s12ZDQAAQBAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "ko",
+        "previewLink": "http://books.google.co.uk/books?id=s12ZDQAAQBAJ&dq=isbn:9780000000000&hl=&cd=3&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=s12ZDQAAQBAJ&dq=isbn:9780000000000&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/%EC%95%A0%EA%B1%B0%EC%84%9C%ED%81%AC%EB%A6%AC%EC%8A%A4%ED%8B%B0_A_to_Z.html?hl=&id=s12ZDQAAQBAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": true
+        },
+        "pdf": {
+          "isAvailable": true
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=s12ZDQAAQBAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      }
+    }
+  ]
+}

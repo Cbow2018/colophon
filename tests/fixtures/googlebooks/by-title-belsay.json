@@ -1,0 +1,79 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 1,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "FAiV0QEACAAJ",
+      "etag": "t29PY9CsArc",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/FAiV0QEACAAJ",
+      "volumeInfo": {
+        "title": "Belsay",
+        "authors": [
+          "L. J. Ross"
+        ],
+        "publisher": "Penguin Group",
+        "publishedDate": "2026-01-22",
+        "description": "FROM THE MULTI-MILLION BESTSELLING AUTHOR OF HOLY ISLAND Christmas can be deadly... After a long year of crime-fighting, DCI Ryan and his team are looking forward to a peaceful Christmas filled with festive treats - including the occasional turkey stottie, or three. To celebrate a job well done, the entire team are treated to a party at beautiful Belsay Hall, a spectacular country estate on the outskirts of the city. But, when their dinner is interrupted by the untimely arrival of a dead body, they're reminded that crime never sleeps - and nor do the secrets within the walls of Belsay. It's time to find out who's been naughty or nice... Murder and mystery are peppered with romance and humour in this fast-paced crime whodunnit, set amidst the spectacular Northumbrian landscape. --------------------------------- PRAISE FOR LJ ROSS \"LJ Ross is the queen of Kindle\" - Sunday Telegraph \"She keeps company with the best mystery writers\" - The Times \"Holy Island is a blockbuster\" - Daily Express \"A literary phenomenon\" - Evening Chronicle",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_10",
+            "identifier": "1804960373"
+          },
+          {
+            "type": "ISBN_13",
+            "identifier": "9781804960370"
+          }
+        ],
+        "readingModes": {
+          "text": false,
+          "image": false
+        },
+        "pageCount": 0,
+        "printType": "BOOK",
+        "categories": [
+          "Fiction"
+        ],
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "preview-1.0.0",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=FAiV0QEACAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=FAiV0QEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=FAiV0QEACAAJ&dq=intitle:%22Belsay%22+inauthor:%22L.+J.+Ross%22&hl=&cd=1&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=FAiV0QEACAAJ&dq=intitle:%22Belsay%22+inauthor:%22L.+J.+Ross%22&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/Belsay.html?hl=&id=FAiV0QEACAAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": false
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=FAiV0QEACAAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "To celebrate a job well done, the entire team are treated to a party at beautiful Belsay Hall, a spectacular country estate on the outskirts of the city."
+      }
+    }
+  ]
+}

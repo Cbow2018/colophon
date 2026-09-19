@@ -41,8 +41,8 @@ matches, or one nothing confident was found for, is passed through untouched.
   confidence, what changed and where each value came from
 - Runs as a non-root user, with a read-only root filesystem and no open ports
 
-Everything else - Google Books, the LLM fallback, field rules, covers, failure
-handling, and formats other than EPUB/KEPUB - is still to come.
+Everything else - the LLM fallback, field rules, covers, failure handling, and
+formats other than EPUB/KEPUB - is still to come.
 
 ## Getting started
 
@@ -102,6 +102,42 @@ and the compose file mounts that file as a Docker secret.
 If the token file is missing, Colophon says so at startup and passes every book
 through with its metadata as it is.
 
+## Sources and their priority
+
+Books are looked up in the sources named by `sources` in `config.toml`, in that
+order. The default is Hardcover first, then Google Books:
+
+```toml
+sources = ["hardcover", "google_books"]
+```
+
+The first source that has the book is the one its values come from, and that is
+true of both the ISBN lookup and the title lookup. Reorder the list to change
+which source you trust most. Leave a name out to disable it - a list with one
+name is fine, and an empty one is an error rather than a silent pass-through.
+
+Two behaviours worth knowing before you set the order:
+
+- **Google Books needs a key.** Google gives a keyless caller no lookups at all,
+  so `google_books` in the list without a key in `google_books_key_file` means
+  that source is skipped: Colophon logs it once at startup and uses the rest of
+  the list.
+- **Google Books has no series data.** A book matched from Google Books has its
+  title and authors corrected and **no series written**, because Google has no
+  series to write. That is the whole of what it contributes.
+
+If a source that is listed cannot be reached, Colophon stops there for that
+book: it passes through untouched rather than being corrected from a source you
+ranked below the one that is down. A book is never quietly taken from a
+lower-priority source because a higher-priority one was busy.
+
+Each written value is attributed in the log line, so you can always see which
+source a value came from:
+
+```
+[google_books matched ISBN 9781521748831 by exact ISBN, confidence 1.00; changed title="Cragside"<-google_books, authors="L. J. Ross"<-google_books]
+```
+
 ## Settings
 
 All settings live in `config.toml`; see `config.example.toml` for the full list
@@ -114,18 +150,21 @@ the same name in capitals, prefixed with `COLOPHON_`:
 | `output_dir` | `COLOPHON_OUTPUT_DIR` | `/output` |
 | `backup_dir` | `COLOPHON_BACKUP_DIR` | `/backups` |
 | `backup_retention_days` | `COLOPHON_BACKUP_RETENTION_DAYS` | `30` |
+| `sources` | `COLOPHON_SOURCES` | `hardcover,google_books` |
 | `hardcover_token_file` | `COLOPHON_HARDCOVER_TOKEN_FILE` | `/run/secrets/hardcover_token` |
+| `google_books_key_file` | `COLOPHON_GOOGLE_BOOKS_KEY_FILE` | `/run/secrets/google_books_key` |
 | `dry_run` | `COLOPHON_DRY_RUN` | `true` |
 | `poll_seconds` | `COLOPHON_POLL_SECONDS` | `5` |
 | `stable_checks` | `COLOPHON_STABLE_CHECKS` | `2` |
 | `skip_suffixes` | `COLOPHON_SKIP_SUFFIXES` | `.part,.tmp,.!qb,.crdownload` |
 | `log_level` | `COLOPHON_LOG_LEVEL` | `INFO` |
 
-The token itself never goes in any of these: `hardcover_token_file` is a *path*
-to the secret, not the secret.
+The keys themselves never go in any of these: `hardcover_token_file` and
+`google_books_key_file` are *paths* to the secrets, not the secrets.
 
-Secrets are never read from the environment: the Hardcover token is read from
-the file `hardcover_token_file` points at, and it is never logged.
+Secrets are never read from the environment: each is read from the file its
+setting points at, and never logged. A log line names the source a value came
+from, never the key it was fetched with.
 
 ## Running the tests
 

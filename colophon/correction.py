@@ -16,15 +16,37 @@ from pathlib import Path
 
 from colophon import epub
 from colophon.epub import Edits, EpubError
-from colophon.hardcover import Hardcover, SourceError
+from colophon.googlebooks import GoogleBooks
+from colophon.hardcover import Hardcover
 from colophon.matching import (
     FileBook,
     nearest_candidate,
     primary_language,
     search_titles,
 )
+from colophon.sources import SourceError
 
 LOG = logging.getLogger("colophon")
+
+# One entry per source Colophon knows: where its key is mounted, what to call it
+# in a sentence, and how to build it from that key file. A name missing from here
+# is a programming mistake rather than a user one - `config.py` refuses a name it
+# does not know long before this is reached - which is why the label lives here
+# too, rather than in a second map keyed by the same names.
+SECRET_FILES = {
+    "hardcover": {
+        "file": "hardcover_token_file",
+        "label": "Hardcover",
+        "thing": "Hardcover token",
+        "make": Hardcover.from_secret_file,
+    },
+    "google_books": {
+        "file": "google_books_key_file",
+        "label": "Google Books",
+        "thing": "Google Books key",
+        "make": GoogleBooks.from_secret_file,
+    },
+}
 
 # An exact ISBN match is as certain as metadata matching gets.
 CONFIDENCE = 1.0
@@ -68,6 +90,10 @@ class Outcome:
     # Why the best candidate was not good enough, when there was one and it
     # was not. Empty whenever a match was made or none was offered.
     passed_over: str | None = None
+    # Which sources were asked, and did not have the book. Only filled in when
+    # nothing matched, because that is the case where the reader of the log has
+    # nothing else to go on about what was tried.
+    tried: tuple = ()
 
     def fragment(self):
         """The bracketed part of the log line, or nothing when there is nothing to say."""
@@ -82,9 +108,7 @@ class Outcome:
                     f"[no edition is called {self.sought} confidently enough: "
                     f"{self.passed_over}, confidence {self.confidence:.2f}]"
                 )
-            if self.sought:
-                return f"[no edition is called {self.sought}]"
-            return f"[no edition carries ISBN {self.isbn}]"
+            return f"[{self._nothing_found()}]"
 
         if self.isbn:
             head = (
@@ -106,35 +130,53 @@ class Outcome:
         )
         return f"[{head}; {'changed' if self.applied else 'would change'} {fields}]"
 
+    def _nothing_found(self):
+        """The one line that names every source asked, since none of them had it.
+
+        A book that was matched says which source matched it, and the sources
+        that were passed over on the way are reconstructible from the config. A
+        book that nothing matched has no such anchor, so this is where the
+        sources that were tried are worth writing down.
+        """
+        among = f" among {', '.join(self.tried)}" if self.tried else ""
+        if self.sought:
+            return f"no source{among} has an edition called {self.sought}"
+        return f"no source{among} carries ISBN {self.isbn}"
+
 
 class Corrector:
     """Corrects the books the relay hands it, one file at a time.
 
-    `source` is None when no Hardcover token was found, and `dry_run` decides
-    whether a correction is actually written: in a dry run every answer is the
-    same, except that nothing on disk moves, including the backup.
+    `sources` is the priority list, in the order the user set: the first source
+    that matches a book is the one it takes its values from, and both the ISBN
+    path and the title path walk the same list. An empty list - no source
+    configured, or none of them usable - means every book passes through with
+    the metadata it came with.
+
+    A source that cannot answer stops the walk for that book rather than being
+    passed over: the list is a trust order, so a lower-priority source must
+    never quietly stand in for a higher-priority one that is down. What happens
+    to the book after that belongs to the retry window (CBO-43).
+
+    `dry_run` decides whether a correction is actually written: in a dry run
+    every answer is the same, except that nothing on disk moves, including the
+    backup.
     """
 
-    def __init__(self, source=None, backups=None, dry_run=False):
-        self.source = source
+    def __init__(self, sources=None, backups=None, dry_run=False):
+        self.sources = tuple(sources or ())
         self.backups = backups
         self.dry_run = dry_run
 
     @classmethod
     def from_config(cls, config, backups):
-        """The pass this configuration asks for, whose source may be missing."""
-        try:
-            source = Hardcover.from_secret_file(config.hardcover_token_file)
-        except SourceError as error:
-            LOG.error("%s; carrying on without metadata lookups", error)
-            return cls(backups=backups, dry_run=config.dry_run)
-        if source is None:
-            LOG.info(
-                "no Hardcover token at %s, so books pass through with the metadata "
-                "they came with",
-                config.hardcover_token_file,
-            )
-        return cls(source=source, backups=backups, dry_run=config.dry_run)
+        """The pass this configuration asks for, minus any source it cannot build."""
+        sources = []
+        for name in config.sources:
+            source = _build(name, config)
+            if source is not None:
+                sources.append(source)
+        return cls(sources=sources, backups=backups, dry_run=config.dry_run)
 
     def correct(self, path):
         path = Path(path)
@@ -145,30 +187,39 @@ class Corrector:
             book = epub.read(path)
         except EpubError as error:
             return Outcome(problem=f"metadata not read: {error}")
-        if self.source is None:
-            return Outcome(problem="no Hardcover token, so nothing was looked up")
+        if not self.sources:
+            return Outcome(problem="no source is set up, so nothing was looked up")
         if book.isbn:
             return self._by_isbn(path, book)
         return self._by_title(path, book)
 
     def _by_isbn(self, path, book):
-        """The ISBN path: the file says which edition it is, so ask about that."""
-        try:
-            found = self.source.by_isbn(book.isbn)
-        except SourceError as error:
-            return Outcome(problem=f"Hardcover could not be asked: {error}")
-        if found is None:
-            return Outcome(isbn=book.isbn)
-        return self._write(path, found, CONFIDENCE, book.isbn)
+        """The ISBN path: the file says which edition it is, so ask about that.
+
+        The walk stops at the first source that has the edition. An ISBN
+        identifies one, so the first source to know it is as good as any other,
+        and the ISBN is not written into the file: it is already there.
+        """
+        tried = []
+        for source in self.sources:
+            tried.append(source.name)
+            try:
+                found = source.by_isbn(book.isbn)
+            except SourceError as error:
+                return self._failed(source, error, f"ISBN {book.isbn}")
+            if found is not None:
+                return self._write(path, found, CONFIDENCE, book.isbn)
+        return Outcome(isbn=book.isbn, tried=tuple(tried))
 
     def _by_title(self, path, book):
         """The title path, for a file that carries no ISBN.
 
         The title is cleaned first, because the file's title has the subtitle
-        and the series on it and a source keeps neither. Every candidate that
-        comes back is scored against the file, and only a confident match is
-        written; a book whose title matches but whose author does not is not a
-        match at all, so it is passed over.
+        and the series on it and a source keeps neither. Each source is asked in
+        turn, and the first to offer a candidate that clears the threshold is
+        the match - a near miss from a trusted source does not stop a
+        lower-priority one from being asked, but it is remembered, so a book no
+        source can match still names the closest thing to it.
         """
         titles = search_titles(book.title)
         if not titles:
@@ -178,27 +229,68 @@ class Corrector:
         # A `dc:language` may be regional (`en-GB`) or three-letter (`eng`); the
         # source indexes editions by the primary code, so that is what is asked.
         language = primary_language(book.language) or None
-        try:
-            # Every form in one request: the query filters with `_in`, which is
-            # the only title operator the server permits.
-            candidates = self.source.by_title(list(titles), language)
-        except SourceError as error:
-            return Outcome(problem=f"Hardcover could not be asked: {error}")
-
         file_book = FileBook(book.title, book.authors, language)
-        # One pass: the nearest candidate is measured once, and what was
-        # measured is what gets written or named.
-        match = nearest_candidate(file_book, candidates)
-        if match is not None and match.agrees and match.confidence >= TITLE_CONFIDENCE:
-            return self._write(path, match.candidate, match.confidence)
-        if match is None or not match.agrees:
-            # Nothing in the reply even looked like this book.
-            return Outcome(sought=title)
-        return Outcome(
-            sought=match.candidate.title or title,
-            confidence=match.confidence,
-            passed_over=match.why,
+        author = next((name for name in book.authors if str(name).strip()), None)
+
+        nearest = None
+        tried = []
+        for source in self.sources:
+            tried.append(source.name)
+            try:
+                # Every form in one request: a source filters its own way, and
+                # the caller's language and author are the filters that keep the
+                # reply to this book.
+                candidates = source.by_title(list(titles), language, author)
+            except SourceError as error:
+                return self._failed(source, error, title)
+
+            # One pass: the nearest candidate is measured once, and what was
+            # measured is what gets written or named.
+            match = nearest_candidate(file_book, candidates)
+            if match is None or not match.agrees:
+                # A reply that agrees on neither title nor author is not an
+                # explanation of this book, and is not named as one.
+                continue
+            if match.confidence >= TITLE_CONFIDENCE:
+                return self._write(path, match.candidate, match.confidence)
+            # A near miss: remembered rather than written, so a book no source
+            # can match still names the closest thing to it.
+            if nearest is None or match.confidence > nearest.confidence:
+                nearest = match
+
+        if nearest is not None:
+            return Outcome(
+                sought=nearest.candidate.title or title,
+                confidence=nearest.confidence,
+                passed_over=nearest.why,
+                tried=tuple(tried),
+            )
+        # Neither source offered anything that agrees on title and author, or
+        # offered nothing at all. The book is named by the title the sources
+        # were asked about, which is the file's own cleaned title.
+        return Outcome(sought=title, tried=tuple(tried))
+
+    def _failed(self, source, error, sought):
+        """A source that could not answer stops the walk, and is said out loud.
+
+        The walk does not carry on to a lower-priority source: the list is a
+        trust order, so a book is never quietly corrected from a source the user
+        ranked below one that is down. The book passes through untouched.
+
+        This is logged at WARNING and not only in the book's own log line,
+        because a source being unreachable is a problem with the run rather than
+        a fact about one book, and a user watching `docker logs` should not have
+        to read every book's line to notice it. What happens to the book next -
+        the retry window, and the `colophon:source-unavailable` tag - is CBO-43's.
+        """
+        blamed = _blamed(source)
+        LOG.warning(
+            "%s could not be asked about %s, so the book is left alone: %s",
+            blamed,
+            sought,
+            error,
         )
+        return Outcome(problem=f"{blamed} could not be asked: {error}")
 
     def _write(self, path, found, confidence, isbn=None):
         """Back the original up, then write what the source is sure of.
@@ -243,13 +335,52 @@ class Corrector:
 
 
 def _edits(found):
-    """Only the fields the source actually has: a field it lacks is not a blank."""
+    """Only the fields the source actually has: a field it lacks is not a blank.
+
+    This is what keeps a Google Books match from writing a series: Google has no
+    series data for a novel, so its candidate carries none, and none is written.
+    """
     return Edits(
         title=found.title,
         authors=found.authors or None,
         series=found.series,
         series_number=found.series_number,
     )
+
+
+def _build(name, config):
+    """The named source, or None if the user has not set its key up.
+
+    A missing key file is not an error: the source is simply not available, and
+    the user is told once, at startup, rather than once per book. A key file
+    that is there but unreadable is a real problem and is said so.
+    """
+    entry = SECRET_FILES[name]
+    where = getattr(config, entry["file"])
+    try:
+        source = entry["make"](where)
+    except SourceError as error:
+        LOG.error("%s; carrying on without %s", error, name)
+        return None
+    if source is None:
+        LOG.info(
+            "no %s at %s, so %s is not asked and the rest of the list carries on "
+            "without it",
+            entry["thing"],
+            where,
+            name,
+        )
+    return source
+
+
+def _blamed(source):
+    """What to call a source in a one-line report, whatever it calls itself.
+
+    A source names itself the way a log field wants it - `hardcover` - and a
+    sentence wants it the way a person writes it. A stand-in that the tests use
+    need not be in the map at all: its own name already reads as a sentence.
+    """
+    return SECRET_FILES.get(source.name, {}).get("label", source.name)
 
 
 def _changes(fields, edits, source):

@@ -18,6 +18,13 @@ DEFAULT_SKIP_SUFFIXES = (".part", ".tmp", ".!qb", ".crdownload")
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
+# Where metadata is looked up, in the order the user wants them tried. The list
+# covers every field: it is a trust order, not a per-field preference, so a book
+# takes its values from the first source that matches it. Leaving a name out is
+# how a source is disabled.
+KNOWN_SOURCES = ("hardcover", "google_books")
+DEFAULT_SOURCES = KNOWN_SOURCES
+
 _TRUE = ("true", "1", "yes", "on")
 _FALSE = ("false", "0", "no", "off")
 
@@ -41,6 +48,12 @@ class Config:
     # Where the Docker secret holding the Hardcover token is mounted. A file
     # that is not there means no ISBN lookups happen at all, which is fine.
     hardcover_token_file: Path = Path("/run/secrets/hardcover_token")
+    # The same for Google Books. Unlike Hardcover's token this one is required
+    # for the source to work at all: Google gives a keyless caller no queries.
+    google_books_key_file: Path = Path("/run/secrets/google_books_key")
+    # Which sources to consult, in order. Both paths - the ISBN one and the
+    # title one - walk this same list.
+    sources: tuple = DEFAULT_SOURCES
 
 
 def load_config(env=None):
@@ -71,6 +84,10 @@ def load_config(env=None):
     values["hardcover_token_file"] = Path(
         _setting(env, values, "hardcover_token_file", str)
     )
+    values["google_books_key_file"] = Path(
+        _setting(env, values, "google_books_key_file", str)
+    )
+    values["sources"] = _to_sources(_setting(env, values, "sources", list))
 
     return Config(**values)
 
@@ -162,3 +179,35 @@ def _to_suffixes(value, name):
         if not suffix.startswith("."):
             raise ConfigError(f"{name} entries should start with a dot, not {suffix!r}")
     return suffixes
+
+
+def _to_sources(value):
+    """The source names to consult, checked against the ones Colophon knows.
+
+    An environment variable arrives as one comma-separated string, config.toml
+    as a list of strings. Names are matched without regard to case, because the
+    setting is read by hand as often as it is written by hand.
+    """
+    if isinstance(value, str):
+        names = value.split(",")
+    else:
+        names = list(value)
+    sources = tuple(str(name).strip().lower() for name in names if str(name).strip())
+
+    if not sources:
+        raise ConfigError(
+            "sources should name at least one source, e.g. "
+            + ", ".join(KNOWN_SOURCES)
+        )
+    for name in sources:
+        if name not in KNOWN_SOURCES:
+            raise ConfigError(
+                f"sources names {name!r}, which is not a source Colophon has; "
+                "expected one of " + ", ".join(KNOWN_SOURCES)
+            )
+    if len(set(sources)) != len(sources):
+        # Trying one source twice would ask it the same question twice and, on a
+        # good day, get the same answer: it is a typo, not an intention.
+        repeated = next(name for name in sources if sources.count(name) > 1)
+        raise ConfigError(f"sources names {repeated!r} more than once")
+    return sources

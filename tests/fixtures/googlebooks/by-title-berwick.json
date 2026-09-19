@@ -1,0 +1,51 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 1,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "-BOX0QEACAAJ",
+      "etag": "MOV5XLOn2xo",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/-BOX0QEACAAJ",
+      "volumeInfo": {
+        "title": "Berwick",
+        "readingModes": {
+          "text": false,
+          "image": false
+        },
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "full-1.0.0",
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=-BOX0QEACAAJ&dq=intitle:%22Berwick%22+inauthor:%22L.+J.+Ross%22&hl=&cd=1&source=gbs_api",
+        "infoLink": "https://play.google.com/store/books/details?id=-BOX0QEACAAJ&source=gbs_api",
+        "canonicalVolumeLink": "https://play.google.com/store/books/details?id=-BOX0QEACAAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "FREE",
+        "isEbook": true,
+        "buyLink": "https://play.google.com/store/books/details?id=-BOX0QEACAAJ&rdid=book--BOX0QEACAAJ&rdot=1&source=gbs_api"
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": false
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=-BOX0QEACAAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "The twenty-fourth instalment in LJ Ross&#39;s globally bestselling DCI Ryan mystery series --------------------------------- Blood never lies."
+      }
+    }
+  ]
+}

@@ -371,7 +371,7 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         self.relay = Relay(
             self.config,
             corrector=Corrector(
-                source=self.source,
+                sources=[self.source],
                 backups=Backups(self.backups),
                 dry_run=False,
             ),
@@ -421,8 +421,8 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
     def test_the_line_says_when_a_book_was_matched_on_its_title_instead(self):
         """A book with no ISBN is looked up by its title, and the line says so."""
         write_epub(self.ingest / "Cragside.epub", CRAGSIDE, version="2.0")
-        self.relay.correction.source = FakeSource(
-            found=None, candidates=[CRAGSIDE_CANDIDATE]
+        self.relay.correction.sources = (
+            FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE]),
         )
 
         with self.assertLogs("colophon", level="INFO") as captured:
@@ -472,7 +472,7 @@ class CorrectingInDryRunTests(RelayTestCase):
                 stable_checks=2,
             ),
             corrector=Corrector(
-                source=self.source,
+                sources=[self.source],
                 backups=Backups(self.backups),
                 dry_run=True,
             ),
