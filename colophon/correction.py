@@ -541,7 +541,7 @@ class Corrector:
         "Not being able to ask" is not only an outage: the day's call limit is
         spent, and a 4xx that is not a 401 is a configuration mistake that
         repeats every day - both leave the book waiting, deliberately, because
-        CBO-43 owns the window and CBO-44 owns a rejected key.
+        CBO-43 owns the window and the rejected key.
         """
         if self.llm is None:
             # Not "waiting": a fresh install with no key has nothing to wait for,
@@ -575,7 +575,7 @@ class Corrector:
         when tomorrow arrives.
 
         Every failure ends here, and the shape of the failure is the only thing
-        that differs: an outage is worth waiting out, a rejected key is CBO-44's
+        that differs: an outage is worth waiting out, a rejected key is CBO-43's
         to act on, and a 4xx that is not a 401 repeats every day - which is why
         the LLM logs that last class as a probable misconfiguration rather than
         as an outage.

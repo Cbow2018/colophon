@@ -362,8 +362,8 @@ is first hit so the user knows when it clears.
 **Q12. Errors and rejected credentials.** → **Any LLM failure is treated exactly
 like hitting the limit: the book waits until the next UTC day.** No tag, no hold.
 The distinction between "rejected key", "5xx" and "daily limit" must still be
-**named in the log**, so CBO-44 (hold books on a rejected key) and CBO-43 (retry
-window) have something to inherit. A configuration 400 — see Q20 — repeats every
+**named in the log**, so CBO-43 (the retry window, and holding books on a rejected
+key) has something to inherit. A configuration 400 — see Q20 — repeats every
 day, so its log line must say plainly that it is probably a configuration problem
 and not an outage, or the book silently never finishes.
 
@@ -628,7 +628,7 @@ book never arriving.
 So the log line for this class must say plainly that it is **probably a
 configuration problem, not an outage** — naming the status and the provider's own
 message — and it must be logged at WARNING rather than buried in the per-book
-line. The distinction to carry: 401 (a bad key) is CBO-44's to act on, 429 and 5xx
+line. The distinction to carry: 401 (a bad key) is CBO-43's to act on, 429 and 5xx
 are temporary, and everything else in the 4xx range is a misconfiguration. All of
 it is redacted before logging, per §4.
 
@@ -705,9 +705,9 @@ config key and as `COLOPHON_LLM_DAILY_LIMIT`.
 ### What this ticket does not build
 
 CBO-43's retry window, `colophon:source-unavailable`, the unhealthy healthcheck and
-the webhook; CBO-44's notice EPUB and hold-the-books on a rejected key; CBO-41's
-SQLite record; and AI-guess mode (CBO-46), which is a different feature that happens
-to use the same client.
+the webhook; CBO-43's hold-the-books on a rejected key and CBO-44's notice EPUB;
+CBO-41's SQLite record; and AI-guess mode (CBO-46), which is a different feature that
+happens to use the same client.
 
 ### Unprobed, and to be said so rather than implied
 
