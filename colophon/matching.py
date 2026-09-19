@@ -252,16 +252,15 @@ def best_candidate(file_book, candidates, threshold):
 def nearest_candidate(file_book, candidates):
     """The candidate closest to this file, whether or not it is close enough.
 
-    What a book that was passed over is named by. A candidate in another
-    language is not this book at all, so it is left out however well it scores:
-    non-English books are matched in their own language and nothing is
-    translated. Ties go to the first candidate, which is the order the source
-    offered them in.
+    What a book that was passed over is named by. Every candidate here is in the
+    file's language already, because that is the query's filter and not this
+    function's business: asking on `code2` or `code3` is what keeps another
+    language's edition out, and a record that comes back carrying the other code
+    for the same language is still this book. Ties go to the first candidate,
+    which is the order the source offered them in.
     """
     nearest = None
     for candidate in candidates:
-        if not _same_language(file_book.language, candidate.language):
-            continue
         match = score_candidate(file_book, candidate)
         if nearest is None or match.confidence > nearest.confidence:
             nearest = match
@@ -363,22 +362,6 @@ def _split_subtitle(raw):
 def _generic(subtitle):
     """Whether a subtitle says what kind of book this is, rather than which one."""
     return bool(_GENERIC_SUBTITLE.search(subtitle)) or subtitle.lower().startswith(("a ", "an "))
-
-
-def _same_language(wanted, found):
-    """Whether a candidate's language is the file's, either of them maybe unknown.
-
-    Nothing is translated: a candidate in another language is not this book.
-    Both sides are reduced to their primary subtag first, so a file that says
-    `en-GB` agrees with an edition that says `en`. A file that says `eng` and an
-    edition that says `eng` agree; `eng` against `en` does not, because the
-    client reads what the source writes (`code2` when there is one, and that is
-    what a client asks about). A missing language on either side is no evidence
-    either way.
-    """
-    if not wanted or not found:
-        return True
-    return primary_language(wanted) == primary_language(found)
 
 
 def _squeeze(text):

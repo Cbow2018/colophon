@@ -246,16 +246,6 @@ class ConfidenceTests(unittest.TestCase):
 
         self.assertFalse(match.agrees)
 
-    def test_a_candidate_in_another_language_is_never_the_book(self):
-        """Non-English books are matched in their own language, never translated."""
-        german = Candidate(title="Cragside", authors=("L.J. Ross",), language="de")
-
-        found = best_candidate(
-            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [german], TITLE_CONFIDENCE
-        )
-
-        self.assertIsNone(found)
-
     def test_a_language_nobody_stated_is_no_evidence_either_way(self):
         self.assertTrue(confidence_of(AS_DOWNLOADED, language=None).agrees)
         self.assertIsNotNone(
@@ -288,6 +278,20 @@ class ConfidenceTests(unittest.TestCase):
         self.assertEqual(found.confidence, 1.0)
         self.assertTrue(found.agrees)
 
+    def test_the_language_is_the_querys_business_and_not_the_comparisons(self):
+        """Nothing here looks at a candidate's language; `by_title` asked for it.
+
+        So a candidate in another language that agrees on title and author
+        scores as a match. That is the deliberate trade: the filter is stated
+        once, on the request, rather than half-applied here as well.
+        """
+        found = nearest_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"),
+            [Candidate(title="Cragside", authors=("L.J. Ross",), language="de")],
+        )
+
+        self.assertEqual(found.confidence, 1.0)
+
     def test_a_regional_language_agrees_with_its_primary_one(self):
         """`en-GB` in the file is `en` on the record, and the same book."""
         for written, on_the_record in (
@@ -306,15 +310,6 @@ class ConfidenceTests(unittest.TestCase):
                 )
 
                 self.assertEqual(match.confidence, 1.0)
-
-    def test_a_regional_language_still_does_not_agree_with_another_language(self):
-        found = best_candidate(
-            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en-GB"),
-            [Candidate(title="Cragside", authors=("L.J. Ross",), language="de-DE")],
-            TITLE_CONFIDENCE,
-        )
-
-        self.assertIsNone(found)
 
     def test_a_source_title_that_carries_the_subtitle_on_it_still_agrees(self):
         match = confidence_of(

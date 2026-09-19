@@ -258,6 +258,17 @@ class TitleLookupTests(unittest.TestCase):
         self.assertEqual(variables["language"], "en")
         self.assertIn("code2: {_eq: $language}", replay.sent["body"]["query"])
 
+    def test_a_three_letter_tag_is_asked_about_on_the_other_column(self):
+        """This filter is what keeps another language's editions out."""
+        replay = Replay()
+
+        self.source(replay).by_title([CRAGSIDE_TITLE], "eng")
+
+        variables = replay.sent["body"]["variables"]
+        self.assertEqual(variables["language"], "eng")
+        self.assertIn("code3: {_eq: $language}", replay.sent["body"]["query"])
+        self.assertNotIn("code2: {_eq: $language}", replay.sent["body"]["query"])
+
     def test_a_file_that_names_no_language_is_asked_about_without_one(self):
         """`code2` is not nullable, so asking for a null language is refused."""
         replay = Replay()
