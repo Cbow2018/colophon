@@ -55,6 +55,7 @@ from tests.samplebooks import (
     KEPUB_CHAPTER,
     SAPIENS,
     SIMPLE,
+    THE_INFIRMARY,
     WITHOUT_AUTHOR,
     WITHOUT_AUTHOR_OR_LANGUAGE,
     add_isbn,
@@ -1702,6 +1703,27 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     else "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
                     "accepted means the record's values are written",
                 )
+
+    def test_a_lowered_threshold_does_not_let_a_record_that_agrees_on_nothing_through(self):
+        """The threshold is the number; `agrees` is the floor under it.
+
+        `Another Infirmary` is a real book of this one's name by someone else, so
+        the title agrees exactly, the author does not, and the number is 0.6 -
+        which the default 0.85 refuses and a lowered 0.5 would accept on the
+        arithmetic alone. It is not an explanation of this file whatever the
+        number says, so the rules must not write it, and the author left on the
+        file is what shows they did not.
+        """
+        path = self.book("The Infirmary.epub", THE_INFIRMARY)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source, confidence=0.5).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(
+            read(path).authors, ("L. J. Ross",), "the other author was not written"
+        )
 
     def test_the_top_of_the_range_is_one_and_one_is_a_usable_setting(self):
         """1.0 accepts an exact match and nothing else - and it is not "the ISBN path only".

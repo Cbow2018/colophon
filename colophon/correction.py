@@ -444,10 +444,10 @@ class Corrector:
 
         The title is cleaned first, because the file's title has the subtitle
         and the series on it and a source keeps neither. Each source is asked in
-        turn, and the first to offer a candidate that clears the threshold is
-        the match - a near miss from a trusted source does not stop a
-        lower-priority one from being asked, and a source that cannot answer
-        stops the walk rather than being passed over.
+        turn, and the first to offer a candidate that agrees on the title and
+        the author and clears the threshold is the match - a near miss from a
+        trusted source does not stop a lower-priority one from being asked, and a
+        source that cannot answer stops the walk rather than being passed over.
 
         When no candidate clears the threshold there is one more thing to try:
         the LLM chooser, which sees the candidates the sources did offer and
@@ -485,7 +485,17 @@ class Corrector:
             # One pass: the nearest candidate is measured once, and what was
             # measured is what gets written or named.
             match = nearest_candidate(file_book, candidates)
-            if match is not None and match.confidence >= self.confidence:
+            # Both the number and `agrees`, because the threshold is a setting:
+            # at 0.85 the ceiling under a candidate that agrees on neither half
+            # already refuses it, and at a lower one the number alone would not.
+            # A candidate that is not an explanation of this book is never
+            # written from on the rules' say-so at any setting; it goes to the
+            # model below with every other one the rules could not use.
+            if (
+                match is not None
+                and match.agrees
+                and match.confidence >= self.confidence
+            ):
                 return self._write(path, match.candidate, match.confidence, book=book)
             # No match yet, so this source's best few are what the model may be
             # shown. The cap is per source, so a second source's best record is

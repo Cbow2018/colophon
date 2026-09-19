@@ -700,7 +700,7 @@ class ChooserTests(unittest.TestCase):
             transport=Replay(*names, **kwargs),
         )
 
-    def corrector(self, llm, candidates=(BELSAY_RECORD, BERWICK, THE_INFIRMARY)):
+    def corrector(self, llm, candidates=(BELSAY_RECORD, BERWICK, THE_INFIRMARY), confidence=None):
         """The candidates the recordings were made against, and no others.
 
         *Holy Island* is deliberately not among them: the file is that book, and
@@ -708,11 +708,13 @@ class ChooserTests(unittest.TestCase):
         answered and the LLM would never be reached.
         """
         source = FakeSource(found=None, candidates=list(candidates))
+        settings = {} if confidence is None else {"confidence": confidence}
         return Corrector(
             sources=[source],
             backups=self.backups,
             llm=llm,
             fetch=no_network,
+            **settings,
         )
 
     def test_the_rules_alone_do_not_match_this_book(self):
@@ -868,6 +870,21 @@ class ChooserTests(unittest.TestCase):
 
         self.assertTrue(outcome.matched)
         self.assertEqual(len(llm._transport.sent), 1)
+
+    def test_a_candidate_the_rules_cannot_agree_with_still_reaches_the_model(self):
+        """The rules refuse the number, not the question: the model still answers.
+
+        At 0.3 the rules' own arithmetic would accept one of these records - they
+        agree on the author and on no title at all - so what refuses it is
+        `agrees`. Refused there, the book reaches the chooser rather than being
+        written from a record that is not an explanation of it.
+        """
+        llm = self.llm("belsay-picked.json")
+
+        outcome = self.corrector(llm, confidence=0.3).correct(self.book())
+
+        self.assertEqual(len(llm._transport.sent), 1, "the model was asked")
+        self.assertTrue(outcome.matched)
 
     def test_a_book_the_rules_already_matched_never_reaches_the_llm(self):
         """The rules answer this one exactly, so there is nothing to ask about."""
