@@ -147,8 +147,8 @@ Settled with the maintainer before any code was written:
    reached it. A book with no source configured, no title to ask about, an
    unreadable package, an unreadable key or a source that could not answer keeps
    its own state and gets no tag - "nobody could ask" is not "we asked and could
-   not be sure". Two of those are other tickets' (CBO-43's retry and
-   `colophon:source-unavailable`, CBO-44's hold-the-books on a rejected key).
+   not be sure". Two of those are another ticket's (CBO-43's retry and
+   `colophon:source-unavailable`, CBO-43's hold-the-books on a rejected key).
    An ISBN no source has **does** get the tag when the title path finds nothing
    either: the identifier is not an answer, and once both ways of recognising the
    book have failed there is nothing left that could vouch for it. That is what
