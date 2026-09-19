@@ -512,6 +512,41 @@ class LimitTests(LlmTestCase):
 
         self.assertEqual(choice.pick, 1)
 
+    def test_a_counter_for_today_with_no_count_in_it_counts_from_zero(self):
+        """The file is state, not a contract: a shape we cannot read is no count.
+
+        A file truncated to `{}`, or written by a version that kept something
+        else in it, must not refuse the call and must not crash on the way to
+        deciding.
+        """
+        counter = self.tmp / "llm.json"
+        counter.write_text(json.dumps({"date": today()}), encoding="utf-8")
+
+        choice = self.client("belsay-picked.json", counter=counter, limit=2).choose(
+            FILE, [BELSAY_RECORD]
+        )
+
+        self.assertEqual(choice.pick, 1)
+        self.assertEqual(json.loads(counter.read_text(encoding="utf-8"))["calls"], 1)
+
+    def test_a_count_that_is_not_an_integer_counts_from_zero(self):
+        """`True` is an `int` in Python, and none of these is a count."""
+        for written in ("many", 1.5, None, True, [2], {"n": 2}):
+            with self.subTest(calls=written):
+                counter = self.tmp / "llm.json"
+                counter.write_text(
+                    json.dumps({"date": today(), "calls": written}), encoding="utf-8"
+                )
+
+                choice = self.client(
+                    "belsay-picked.json", counter=counter, limit=2
+                ).choose(FILE, [BELSAY_RECORD])
+
+                self.assertEqual(choice.pick, 1)
+                self.assertEqual(
+                    json.loads(counter.read_text(encoding="utf-8"))["calls"], 1
+                )
+
     def test_the_counter_is_written_beside_itself_so_the_swap_is_atomic(self):
         """`os.replace` is only atomic within one filesystem."""
         counter = self.tmp / "nested" / "llm.json"

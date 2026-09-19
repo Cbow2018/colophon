@@ -368,15 +368,28 @@ class Llm:
         self._write_counter(today, calls + 1)
 
     def _counter_state(self):
+        """The counter's contents, as a state with a real count in it.
+
+        A file that cannot be read is not a reason to refuse a call: the worst
+        it does is restart the day's count. A `calls` that is absent or is not
+        an integer is the same kind of thing - a file this version did not
+        write, or one that was truncated - and it counts from zero rather than
+        refusing the call or crashing on the way. `True` passes
+        `isinstance(x, int)` in Python and is not a count of anything, so it is
+        refused explicitly too.
+        """
         if not self.counter:
             return {}
         try:
             state = json.loads(self.counter.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            # A counter that cannot be read is not a reason to refuse a call:
-            # the worst it does is restart the day's count.
             return {}
-        return state if isinstance(state, dict) else {}
+        if not isinstance(state, dict):
+            return {}
+        calls = state.get("calls")
+        if isinstance(calls, bool) or not isinstance(calls, int):
+            calls = 0
+        return {**state, "calls": calls}
 
     def _write_counter(self, date, calls):
         if not self.counter:
