@@ -59,6 +59,13 @@ THE_INFIRMARY_CANDIDATE = Candidate(
 ANOTHER_INFIRMARY = Candidate(
     source=SOURCE, title="The Infirmary", authors=("Carly Reagon",), language="en"
 )
+# A book whose record keeps the subtitle the file's cleaning took off.
+SAPIENS_CANDIDATE = Candidate(
+    source=SOURCE,
+    title="Sapiens: A Brief History of Humankind",
+    authors=("Yuval Noah Harari",),
+    language="en",
+)
 
 
 class FakeSource:

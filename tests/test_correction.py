@@ -22,6 +22,7 @@ from tests.samplebooks import (
     INITIALS_WITHOUT_STOPS,
     ISBN,
     KEPUB_CHAPTER,
+    SAPIENS,
     SIMPLE,
     WITHOUT_AUTHOR,
     WITHOUT_AUTHOR_OR_LANGUAGE,
@@ -33,6 +34,7 @@ from tests.sources import (
     BELSAY_CANDIDATE,
     BERWICK_CANDIDATE,
     CRAGSIDE_CANDIDATE,
+    SAPIENS_CANDIDATE,
     THE_INFIRMARY_CANDIDATE,
     FakeSource,
 )
@@ -424,6 +426,38 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertEqual(source.asked_languages, ["en"])
         self.assertTrue(outcome.matched)
+
+    def test_a_named_subtitle_is_asked_about_both_ways(self):
+        """A record may keep the subtitle, so both forms go in the one request."""
+        path = self.book("Sapiens.epub", SAPIENS)
+        source = FakeSource(found=None, candidates=[SAPIENS_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertEqual(
+            source.asked_titles, [["Sapiens", "Sapiens: A Brief History of Humankind"]]
+        )
+        self.assertTrue(outcome.matched)
+        self.assertEqual(read(path).title, "Sapiens: A Brief History of Humankind")
+
+    def test_a_subtitle_the_record_kept_is_still_matched(self):
+        """The short form finds nothing; the long one, in the same request, does."""
+        path = self.book("Sapiens.epub", SAPIENS)
+        source = FakeSource(found=None, candidates=[SAPIENS_CANDIDATE])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertIn("hardcover matched Sapiens", outcome.fragment())
+
+    def test_a_title_with_no_subtitle_is_asked_about_once(self):
+        path, source = self.a_book_the_source_has(
+            "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
+        )
+
+        self.corrector(source=source).correct(path)
+
+        self.assertEqual(source.asked_titles, [["Cragside"]])
 
     def test_the_lookalike_is_not_accepted_for_any_of_them(self):
         for name, metadata in (

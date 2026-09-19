@@ -100,6 +100,13 @@ INITIALS_WITHOUT_STOPS = """    <dc:title>Cragside: A DCI Ryan Mystery (The DCI 
 WITHOUT_AUTHOR_OR_LANGUAGE = """    <dc:title>Cragside</dc:title>
 """
 
+# A subtitle that names the book rather than describing it, so it comes off for
+# searching - and a record that may still be carrying it.
+SAPIENS = """    <dc:title>Sapiens: A Brief History of Humankind</dc:title>
+    <dc:creator>Yuval Noah Harari</dc:creator>
+    <dc:language>en</dc:language>
+"""
+
 TWO_CREATORS = """    <dc:title>Cragside</dc:title>
     <dc:creator id="author_0">LJ Ross</dc:creator>
     <dc:creator id="author_1">Someone Else</dc:creator>
