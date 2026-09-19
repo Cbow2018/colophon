@@ -16,8 +16,13 @@ from pathlib import Path
 
 from colophon import epub
 from colophon.epub import Edits, EpubError
-from colophon.hardcover import SOURCE, Hardcover, SourceError
-from colophon.matching import FileBook, best_candidate, title_variants
+from colophon.hardcover import Hardcover, SourceError
+from colophon.matching import (
+    FileBook,
+    best_candidate,
+    nearest_candidate,
+    title_variants,
+)
 
 LOG = logging.getLogger("colophon")
 
@@ -60,6 +65,9 @@ class Outcome:
     silent: bool = False
     # Where the original was kept before it was changed, if it was.
     kept: str | None = None
+    # Why the best candidate was not good enough, when there was one and it
+    # was not. Empty whenever a match was made or none was offered.
+    passed_over: str | None = None
 
     def fragment(self):
         """The bracketed part of the log line, or nothing when there is nothing to say."""
@@ -68,6 +76,12 @@ class Outcome:
         if not self.matched:
             if self.problem is not None:
                 return f"[{self.problem}]"
+            if self.passed_over is not None:
+                # The best explanation of this file, and what was wrong with it.
+                return (
+                    f"[no edition is called {self.sought} confidently enough: "
+                    f"{self.passed_over}, confidence {self.confidence:.2f}]"
+                )
             if self.sought:
                 return f"[no edition is called {self.sought}]"
             return f"[no edition carries ISBN {self.isbn}]"
@@ -145,7 +159,7 @@ class Corrector:
             return Outcome(problem=f"Hardcover could not be asked: {error}")
         if found is None:
             return Outcome(isbn=book.isbn)
-        return self._write(path, found, found.source, CONFIDENCE, book.isbn)
+        return self._write(path, found, CONFIDENCE, book.isbn)
 
     def _by_title(self, path, book):
         """The title path, for a file that carries no ISBN.
@@ -165,27 +179,35 @@ class Corrector:
         except SourceError as error:
             return Outcome(problem=f"Hardcover could not be asked: {error}")
 
-        found = best_candidate(FileBook(book.title, book.authors, book.language), candidates)
+        file_book = FileBook(book.title, book.authors, book.language)
+        found = best_candidate(file_book, candidates, TITLE_CONFIDENCE)
         if found is None:
-            return Outcome(sought=variants[0])
-        candidate, match = found
-        if match.confidence < TITLE_CONFIDENCE:
-            # Not confident enough to write, but worth saying which book was
-            # the best explanation and how close it came.
-            return Outcome(sought=candidate.title or variants[0], confidence=match.confidence)
-        return self._write(path, candidate, SOURCE, match.confidence)
+            # Nothing was near enough to write. If anything was near at all,
+            # say which book it was and what was wrong with it.
+            nearest = nearest_candidate(file_book, candidates)
+            if nearest is None or not nearest.agrees:
+                return Outcome(sought=variants[0])
+            return Outcome(
+                sought=nearest.candidate.title or variants[0],
+                confidence=nearest.confidence,
+                passed_over=nearest.why,
+            )
+        return self._write(path, found.candidate, found.confidence)
 
-    def _write(self, path, found, source, confidence, isbn=None):
-        """Back the original up, then write what the source is sure of."""
+    def _write(self, path, found, confidence, isbn=None):
+        """Back the original up, then write what the source is sure of.
+
+        `found` carries the source it came from, so nothing here has to be told
+        where the values are from. `isbn` is set only when an ISBN is what
+        recognised the book, because that is what the log line then reports.
+        """
         edits = _edits(found)
         matched = {
-            # The ISBN the file was recognised by, when it was an ISBN that
-            # recognised it; a title match keeps the title it was made on.
             "isbn": isbn,
             "sought": None if isbn else found.title,
             "matched": True,
             "confidence": confidence,
-            "source": source,
+            "source": found.source,
         }
 
         # Ask the file what would move before touching it: a book that already
@@ -194,21 +216,21 @@ class Corrector:
         if not planned:
             return Outcome(**matched)
         if self.dry_run:
-            return Outcome(**matched, changed=_changes(planned, edits, source))
+            return Outcome(**matched, changed=_changes(planned, edits, found.source))
 
         try:
             kept = self.backups.keep(path)
         except OSError as error:
             return Outcome(
                 **matched,
-                changed=_changes(planned, edits, source),
+                changed=_changes(planned, edits, found.source),
                 problem=f"could not back the original up: {error}",
             )
 
         written = epub.correct(path, edits)
         return Outcome(
             **matched,
-            changed=_changes(written, edits, source),
+            changed=_changes(written, edits, found.source),
             applied=True,
             kept=str(kept),
         )

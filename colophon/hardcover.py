@@ -57,31 +57,21 @@ query BookByIsbn($isbn: String!) {
 # is case-sensitive, so the title has to be spelt the way Hardcover spells it.
 # `_eq` on an author's name needs the full name as Hardcover writes it, which
 # is why authors are compared here rather than filtered for on the server.
-_TITLE_BY_LANGUAGE = """
-query BooksByTitle($titles: [String!]!, $language: String!) {
+#
+# The two placeholders are the language filter and the matching variable
+# declaration, and they are the only things that differ between the two forms:
+# `code2` is not nullable, so `{code2: {_eq: null}}` is refused outright rather
+# than matching everything, and a file that does not say what language it is
+# written in has to be asked about without one.
+_TITLE_QUERY = """
+query BooksByTitle($titles: [String!]!%s) {
   editions(
     where: {
       book: {title: {_in: $titles}}
-      language: {code2: {_eq: $language}}
+      %s
     }
   ) {
-%s
-  }
-}
-"""
-
-# A file that does not say what language it is written in gets asked about
-# without the language filter: `code2` is not nullable, so `_eq: null` is
-# refused outright rather than matching everything.
-_TITLE_ANY_LANGUAGE = """
-query BooksByTitle($titles: [String!]!) {
-  editions(where: {book: {title: {_in: $titles}}}) {
-%s
-  }
-}
-"""
-
-_TITLE_SELECTION = """    title
+    title
     language { language code2 code3 }
     book {
       id
@@ -95,9 +85,16 @@ _TITLE_SELECTION = """    title
         position
         series { name }
       }
-    }"""
+    }
+  }
+}
+"""
 
-TITLE_QUERY = _TITLE_BY_LANGUAGE % _TITLE_SELECTION
+_TITLE_LANGUAGE = ", $language: String!"
+_TITLE_FILTER = "language: {code2: {_eq: $language}}"
+
+TITLE_QUERY = _TITLE_QUERY % (_TITLE_LANGUAGE, _TITLE_FILTER)
+_TITLE_QUERY_ANY_LANGUAGE = _TITLE_QUERY % ("", "")
 
 
 class SourceError(Exception):
@@ -181,7 +178,7 @@ class Hardcover:
             query = TITLE_QUERY
             variables = {"titles": titles, "language": language}
         else:
-            query = _TITLE_ANY_LANGUAGE % _TITLE_SELECTION
+            query = _TITLE_QUERY_ANY_LANGUAGE
             variables = {"titles": titles}
         payload = self._ask({"query": query, "variables": variables})
         editions = _dig(payload, "data", "editions")
@@ -237,12 +234,17 @@ class Hardcover:
         return text.replace(self._token, REDACTED) if self._token else text
 
 
-def _as_book(edition, isbn):
-    """Turn one edition from the reply into a source record."""
+def _candidate(edition, isbn=None):
+    """Turn one edition from the reply into a candidate for the work behind it.
+
+    The work is where the title, the authors and the series live; the edition
+    only carries the language and, sometimes, an ISBN. Both lookups read a
+    reply through here, so there is one place that decides what a reply means.
+    """
     book = edition.get("book") or {}
     language = edition.get("language") or {}
     series, series_number = _series(book)
-    return SourceBook(
+    return Candidate(
         source=SOURCE,
         # The work's title is the book's name; an edition's title often repeats
         # the series and the subtitle, and is only used when the work has none.
@@ -253,6 +255,20 @@ def _as_book(edition, isbn):
         # A code is what an EPUB wants to be given back; the English name is a fallback.
         language=_text(language.get("code2")) or _text(language.get("language")),
         isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")) or isbn,
+    )
+
+
+def _as_book(edition, isbn):
+    """The same, as the record an ISBN lookup answers with."""
+    found = _candidate(edition, isbn)
+    return SourceBook(
+        source=found.source,
+        title=found.title,
+        authors=found.authors,
+        series=found.series,
+        series_number=found.series_number,
+        language=found.language,
+        isbn=found.isbn,
     )
 
 
@@ -268,27 +284,15 @@ def _candidates(editions):
     candidates = []
     seen = set()
     for position, edition in enumerate(editions):
-        book = edition.get("book") or {}
-        language = edition.get("language") or {}
-        series, series_number = _series(book)
         # A work whose id the reply omitted cannot be recognised twice over, so
         # it is left as its own candidate rather than mistaken for another.
-        identity = book.get("id")
+        identity = (edition.get("book") or {}).get("id")
         if identity is None:
             identity = f"unnamed-{position}"
         if identity in seen:
             continue
         seen.add(identity)
-        candidates.append(
-            Candidate(
-                title=_text(book.get("title")) or _text(edition.get("title")),
-                authors=tuple(_authors(book)),
-                series=series,
-                series_number=series_number,
-                language=_text(language.get("code2")) or _text(language.get("language")),
-                isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")),
-            )
-        )
+        candidates.append(_candidate(edition))
     return candidates
 
 

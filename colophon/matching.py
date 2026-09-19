@@ -27,6 +27,23 @@ NO_TITLE = 0.0
 MATCHING_AUTHOR = 1.0
 NO_AUTHOR = 0.0
 
+# A third signal, once the first two have been weighed. The file's title often
+# carries its series position, and that is the one fact about the book the
+# title has that the source keeps elsewhere. Agreement is a small nudge up;
+# two flatly different positions are a contradition, and worth more than a
+# nudge down. Neither can move a score across the line on its own: the
+# disagreement band (0.8) is below the 0.85 the pipeline applies and the
+# agreement band (1.0) is only reached by a title and an author that already
+# agree.
+SERIES_AGREEMENT = 0.0
+SERIES_DISAGREEMENT = -0.2
+SERIES_CONFIRMED = 0.05
+
+# The most a candidate can score while agreeing on only one of the two halves,
+# or on neither. Under the 0.85 the pipeline applies, with room for the series
+# nudge above it, so that the arithmetic and `agrees` always say the same thing.
+NO_AGREEMENT_CEILING = 0.7
+
 # `(The DCI Ryan Mysteries Book 6)` and its relatives. The name is only there
 # to be read by a human; the number is the part worth having.
 _SERIES_BRACKET = re.compile(
@@ -65,7 +82,11 @@ class FileBook:
 
 @dataclass(frozen=True)
 class Candidate:
-    """One book a source offered, as the source describes it."""
+    """One book a source offered, as the source describes it.
+
+    `source` names where it came from, so a candidate can be written into a
+    file without anything else having to remember who offered it.
+    """
 
     title: str | None
     authors: tuple = ()
@@ -73,25 +94,37 @@ class Candidate:
     series_number: str | None = None
     language: str | None = None
     isbn: str | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True)
 class Match:
-    """How a candidate compares with the file, and whether it may be applied.
+    """One candidate measured against the file, and what came of the measuring.
 
     `confidence` is the number the pipeline applies its 0.85 threshold to, and
-    `agrees` is whether the comparison found anything to go on at all: the
+    `agrees` says whether the comparison found anything to go on at all: the
     titles have something in common and so do the authors. A candidate that
-    does not `agree` must not be accepted whatever the number says - and the
-    weights mean it would not clear the threshold anyway.
+    does not agree is not an explanation of this file whatever the number says,
+    which is why its confidence is held under `NO_AGREEMENT_CEILING`: the two
+    always tell the same story.
+
+    `candidate` is the book this is a measurement of, so a caller never has to
+    carry the two around separately. The two reasons say why each half scored
+    what it did, so a book that was passed over can say what was wrong with the
+    best explanation of it.
     """
 
+    candidate: Candidate
     confidence: float
     title_score: float
     author_score: float
     agrees: bool
     title_reason: str
     author_reason: str
+    @property
+    def why(self):
+        """What was wrong with this candidate, for a log line about a near miss."""
+        return f"{self.title_reason}; {self.author_reason}"
 
 
 def clean_title(title):
@@ -122,56 +155,94 @@ def clean_title(title):
 
 
 def title_variants(title):
-    """The titles worth asking a source about, best first.
+    """The titles to ask a source about, as the list the query takes.
 
     One, always: the cleaned title. The subtitle and the series bracket are the
-    two things the sources do not spell the same way as the file, and both are
-    gone by the time this runs. It returns a list because the query asks about
-    several titles at once, so a later ticket can add forms without changing
-    the caller.
+    two things a source does not spell the way the file does, and both are gone
+    by the time this runs. It is a list of one, rather than a string, because
+    the query filters with `_in` - the only title operator the server permits -
+    and taking a list is what that costs.
     """
     cleaned = clean_title(title)
     return [cleaned.search] if cleaned.search else []
 
 
-def compared(file_book, candidate):
+def score_candidate(file_book, candidate):
     """Score one candidate against the file it is being considered for.
 
-    Title and author are scored separately and weighted. A candidate that
-    agrees on neither, or on only one of the two, cannot reach the threshold;
-    `agrees` says whether there was anything to go on at all.
+    Title and author are scored separately and weighted; the series position
+    the file's title carried, if any, then nudges the total. A candidate that
+    agrees on neither title nor author, or on only one of the two, is not an
+    explanation of this book, which is what `agrees` reports.
     """
     cleaned = clean_title(file_book.title)
     title_score, title_reason = _title_score(cleaned.search, candidate.title)
     author_score, author_reason = _author_score(file_book.authors, candidate.authors)
+    agrees = title_score > 0.0 and author_score > 0.0
+    # Rounded before the series nudge, so a title and an author that both agree
+    # perfectly are exactly 1.0 rather than 1.0000000000000002 of it.
+    weighed = round(TITLE_WEIGHT * title_score + AUTHOR_WEIGHT * author_score, 3)
+    confidence = weighed + _series_adjustment(cleaned.series_number, candidate.series_number)
+    if not agrees:
+        # One half alone is not a match, however good the other half was. Held
+        # under the threshold so that `agrees` is never the only thing standing
+        # between a wrong book and someone's library.
+        confidence = min(confidence, NO_AGREEMENT_CEILING)
     return Match(
-        confidence=round(TITLE_WEIGHT * title_score + AUTHOR_WEIGHT * author_score, 4),
+        candidate=candidate,
+        confidence=round(min(confidence, 1.0), 4),
         title_score=title_score,
         author_score=author_score,
-        agrees=title_score > 0.0 and author_score > 0.0,
+        agrees=agrees,
         title_reason=title_reason,
         author_reason=author_reason,
     )
 
 
-def best_candidate(file_book, candidates):
+def best_candidate(file_book, candidates, threshold):
     """The candidate that best explains this file, or None if none does.
 
-    A candidate in another language is not this book at all, so it is left out
-    however well it scores: non-English books are matched in their own language
-    and nothing is translated. Ties go to the first candidate, which is the
-    order the source offered them in; a later one has to be strictly better.
+    The nearest candidate is measured against the threshold and comes back only
+    if it clears it: being the best of a bad set is not a match, and there is
+    no second place to fall back to.
     """
-    best = None
+    match = nearest_candidate(file_book, candidates)
+    if match is None or not match.agrees or match.confidence < threshold:
+        return None
+    return match
+
+
+def nearest_candidate(file_book, candidates):
+    """The candidate closest to this file, whether or not it is close enough.
+
+    What a book that was passed over is named by. A candidate in another
+    language is not this book at all, so it is left out however well it scores:
+    non-English books are matched in their own language and nothing is
+    translated. Ties go to the first candidate, which is the order the source
+    offered them in.
+    """
+    nearest = None
     for candidate in candidates:
         if not _same_language(file_book.language, candidate.language):
             continue
-        match = compared(file_book, candidate)
-        if not match.agrees:
-            continue
-        if best is None or match.confidence > best[1].confidence:
-            best = (candidate, match)
-    return best
+        match = score_candidate(file_book, candidate)
+        if nearest is None or match.confidence > nearest.confidence:
+            nearest = match
+    return nearest
+
+
+def _series_adjustment(wanted, found):
+    """What the file's series number says about a candidate's.
+
+    Two positions that flatly disagree are evidence against the candidate: a
+    file that says this is book 6 of a series has not been matched to book 11
+    of it, however the title is spelled. Either side saying nothing is no
+    evidence either way, which is the usual case - most files carry no series
+    bracket at all, and a source need not have a position for a book.
+    """
+    if not wanted or not found:
+        return SERIES_AGREEMENT
+    return SERIES_CONFIRMED if str(wanted) == str(found) else SERIES_DISAGREEMENT
 
 
 def normalise(text):
@@ -202,7 +273,12 @@ def _title_score(cleaned, title):
 
 
 def _author_score(file_authors, record_authors):
-    """Whether any creator the file names is any author the record names."""
+    """Whether any creator the file names is any author the record names.
+
+    Compared as sorted words with the spacing taken out, so the punctuation and
+    the word order both stop mattering: `L. J. Ross`, `L.J. Ross` and the
+    surname-first `Ross, L. J.` are one name.
+    """
     wanted = {_name(author) for author in file_authors} - {""}
     found = {_name(author) for author in record_authors} - {""}
     if not wanted:
@@ -211,21 +287,18 @@ def _author_score(file_authors, record_authors):
         return NO_AUTHOR, "the record names no author"
     if wanted & found:
         return MATCHING_AUTHOR, "an author agrees"
-    # A record that spells the name the other way round - `Ross, LJ` - is the
-    # same name, so both sides are compared in both orders.
-    if {_reversed(name) for name in wanted} & found:
-        return MATCHING_AUTHOR, "an author agrees, surname first on one side"
     return NO_AUTHOR, "no author agrees"
 
 
 def _name(author):
-    """A name reduced to its words, so `L. J. Ross` becomes `lj ross`."""
-    return "".join(_WORDS.findall(str(author or "").casefold()))
+    """A name as its words sorted, so neither the order nor the spacing matters.
 
-
-def _reversed(name):
-    """A run-together name with its words the other way round, for `Ross, LJ`."""
-    return "".join(_WORDS.findall(str(name or "").casefold())[::-1])
+    `L. J. Ross` and `Ross, L. J.` both come out as `jlross`: the punctuation is
+    a word break either way, and sorting puts the surname and the initials in
+    the same place however the name was written round.
+    """
+    words = _WORDS.findall(str(author or "").casefold())
+    return "".join(sorted(words))
 
 
 def _split_subtitle(raw):

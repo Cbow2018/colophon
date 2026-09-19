@@ -9,6 +9,7 @@ come back untouched.
 
 import unittest
 
+from colophon.correction import TITLE_CONFIDENCE
 from colophon.matching import (
     AUTHOR_WEIGHT,
     TITLE_WEIGHT,
@@ -16,13 +17,15 @@ from colophon.matching import (
     FileBook,
     best_candidate,
     clean_title,
-    compared,
+    nearest_candidate,
     normalise,
+    score_candidate,
     title_variants,
 )
 
-# The metadata a file arrives with, and what Hardcover has for the same book.
 AS_DOWNLOADED = "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)"
+
+# What Hardcover has for that book, as the client hands it over to be scored.
 CRAGSIDE = Candidate(
     title="Cragside",
     authors=("L.J. Ross",),
@@ -31,9 +34,27 @@ CRAGSIDE = Candidate(
     language="en",
 )
 
+# The other books the recorded Hardcover replies describe: Belsay is #23 on the
+# record though its file's title never says so, and The Infirmary is the same
+# author's other book.
+BELSAY = Candidate(
+    title="Belsay",
+    authors=("L.J. Ross",),
+    series="DCI Ryan Mysteries",
+    series_number="23",
+    language="en",
+)
+THE_INFIRMARY = Candidate(
+    title="The Infirmary",
+    authors=("L.J. Ross",),
+    series="DCI Ryan Mysteries",
+    series_number="11",
+    language="en",
+)
+
 
 def confidence_of(file_title, file_authors=("L. J. Ross",), candidate=CRAGSIDE, language="en"):
-    return compared(FileBook(file_title, file_authors, language), candidate)
+    return score_candidate(FileBook(file_title, file_authors, language), candidate)
 
 
 class CleaningTests(unittest.TestCase):
@@ -103,12 +124,22 @@ class CleaningTests(unittest.TestCase):
 class NormalisingTests(unittest.TestCase):
     def test_a_name_compares_the_same_however_it_is_spelt(self):
         """The file says `L. J. Ross`; Hardcover says `L.J. Ross`."""
-        match = compared(
+        match = score_candidate(
             FileBook("Cragside", ("L. J. Ross",), "en"),
             Candidate(title="Cragside", authors=("L.J. Ross",), language="en"),
         )
 
         self.assertEqual(match.author_score, 1.0, "the punctuation must not matter")
+        self.assertEqual(match.confidence, 1.0)
+
+    def test_a_surname_first_name_is_the_same_name(self):
+        """A record that spells the name the other way round agrees too."""
+        match = score_candidate(
+            FileBook("Cragside", ("L. J. Ross",), "en"),
+            Candidate(title="Cragside", authors=("Ross, L. J.",), language="en"),
+        )
+
+        self.assertEqual(match.author_score, 1.0)
         self.assertEqual(match.confidence, 1.0)
 
     def test_normalise_keeps_the_words_apart(self):
@@ -135,6 +166,22 @@ class ConfidenceTests(unittest.TestCase):
     def test_the_two_halves_are_weighted_and_the_title_alone_is_not_enough(self):
         self.assertEqual(TITLE_WEIGHT + AUTHOR_WEIGHT, 1.0)
         self.assertLess(TITLE_WEIGHT, 0.85, "a title match on its own must not be accepted")
+
+    def test_no_candidate_agreeing_on_one_half_alone_can_reach_the_threshold(self):
+        """The number and `agrees` must not be able to disagree."""
+        files = ("Cragside", "Cragside: A DCI Ryan Mystery")
+        candidates = (
+            Candidate(title="Cragside", authors=("M.J. Porter",), series_number="6"),
+            Candidate(title="Cragside: A DCI Ryan Mystery", authors=("M.J. Porter",)),
+            Candidate(title="Cragside", authors=()),
+            Candidate(title="The Infirmary", authors=("L.J. Ross",), series_number="11"),
+        )
+        for file_title in files:
+            for candidate in candidates:
+                with self.subTest(file=file_title, candidate=candidate.title):
+                    match = confidence_of(file_title, candidate=candidate)
+                    if not match.agrees:
+                        self.assertLess(match.confidence, TITLE_CONFIDENCE)
 
     def test_a_cleaned_title_and_an_agreeing_author_is_certain(self):
         match = confidence_of(AS_DOWNLOADED)
@@ -185,7 +232,9 @@ class ConfidenceTests(unittest.TestCase):
         """Non-English books are matched in their own language, never translated."""
         german = Candidate(title="Cragside", authors=("L.J. Ross",), language="de")
 
-        found = best_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [german])
+        found = best_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [german], TITLE_CONFIDENCE
+        )
 
         self.assertIsNone(found)
 
@@ -195,12 +244,14 @@ class ConfidenceTests(unittest.TestCase):
             best_candidate(
                 FileBook(AS_DOWNLOADED, ("L. J. Ross",), None),
                 [Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
+                TITLE_CONFIDENCE,
             )
         )
         self.assertIsNotNone(
             best_candidate(
                 FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"),
                 [Candidate(title="Cragside", authors=("L.J. Ross",), language=None)],
+                TITLE_CONFIDENCE,
             )
         )
 
@@ -226,34 +277,125 @@ class ConfidenceTests(unittest.TestCase):
         self.assertFalse(match.agrees)
 
 
+class SeriesTests(unittest.TestCase):
+    """The series number the file's own title carried, used as a check."""
+
+    def test_a_number_the_record_agrees_with_confirms_the_match(self):
+        match = confidence_of(AS_DOWNLOADED)
+
+        self.assertEqual(match.confidence, 1.0, "not above 1.0, whatever the nudge")
+
+    def test_a_file_with_no_number_is_no_evidence_either_way(self):
+        """Belsay's title carries no number; the record's #23 is not a conflict."""
+        match = confidence_of("Belsay: A DCI Ryan Mystery", candidate=BELSAY)
+
+        self.assertEqual(match.confidence, 1.0)
+
+    def test_a_number_the_record_contradicts_is_evidence_against_it(self):
+        """A file that says book 6 has not been matched to book 11 of the series.
+
+        Everything else agrees, so the position is the only thing left to go on
+        - which is exactly the case the file's own series bracket is for.
+        """
+        match = confidence_of(
+            AS_DOWNLOADED,
+            candidate=Candidate(
+                title="Cragside", authors=("L.J. Ross",), series_number="11", language="en"
+            ),
+        )
+
+        self.assertEqual(match.title_score, 1.0, "same title, so the title is no help")
+        self.assertEqual(match.author_score, 1.0, "and the author is the same person")
+        self.assertLess(match.confidence, 0.85, "so the position is all there is to go on")
+
+    def test_the_number_picks_between_two_candidates_nothing_else_can(self):
+        right = Candidate(title="Berwick", authors=("L.J. Ross",), series_number="24")
+        wrong = Candidate(title="Berwick", authors=("L.J. Ross",), series_number="11")
+
+        found = best_candidate(
+            FileBook("Berwick (Book 24)", ("L. J. Ross",), "en"),
+            [wrong, right],
+            TITLE_CONFIDENCE,
+        )
+
+        self.assertEqual(found.candidate, right)
+
+
 class BestCandidateTests(unittest.TestCase):
-    def test_the_best_agreeing_candidate_wins(self):
+    def test_the_nearest_candidate_wins(self):
         worse = Candidate(title="Cragside: A DCI Ryan Mystery", authors=("L.J. Ross",))
-        best = Candidate(title="Cragside", authors=("L.J. Ross",), series="DCI Ryan Mysteries")
+        best = Candidate(
+            title="Cragside",
+            authors=("L.J. Ross",),
+            series="DCI Ryan Mysteries",
+            series_number="6",
+            language="en",
+        )
 
-        found = best_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [worse, best])
+        found = best_candidate(
+            FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [worse, best], TITLE_CONFIDENCE
+        )
 
-        self.assertEqual(found[0], best)
-        self.assertEqual(found[1].confidence, 1.0)
+        self.assertEqual(found.candidate, best)
+        self.assertEqual(found.confidence, 1.0)
 
-    def test_a_candidate_whose_author_disagrees_is_passed_over(self):
+    def test_the_right_book_wins_even_when_a_lookalike_is_offered_first(self):
         someone_else = Candidate(title="Cragside", authors=("M.J. Porter",))
         wanted = Candidate(title="Cragside", authors=("L.J. Ross",))
 
-        found = best_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [someone_else, wanted])
-
-        self.assertEqual(found[0], wanted)
-
-    def test_a_title_alone_is_left_for_someone_else(self):
         found = best_candidate(
             FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"),
-            [Candidate(title="Cragside", authors=("M.J. Porter",))],
+            [someone_else, wanted],
+            TITLE_CONFIDENCE,
         )
 
-        self.assertIsNone(found)
+        self.assertEqual(found.candidate, wanted)
+
+    def test_a_candidate_agreeing_on_neither_half_is_never_a_match(self):
+        nothing_alike = Candidate(title="The Infirmary", authors=("Carly Reagon",))
+
+        self.assertIsNone(
+            best_candidate(
+                FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [nothing_alike], TITLE_CONFIDENCE
+            )
+        )
+        # It is still the nearest, and still scores nothing: the two are
+        # different questions, and the log names one and applies the other.
+        nearest = nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [nothing_alike])
+        self.assertEqual(nearest.candidate, nothing_alike)
+        self.assertFalse(nearest.agrees)
+        self.assertEqual(nearest.confidence, 0.0)
 
     def test_no_candidates_is_no_match_rather_than_an_error(self):
-        self.assertIsNone(best_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), []))
+        self.assertIsNone(
+            best_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [], TITLE_CONFIDENCE)
+        )
+        self.assertIsNone(
+            nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [])
+        )
+
+
+class NearestCandidateTests(unittest.TestCase):
+    """What a book that was passed over is named by in the log."""
+
+    def test_a_near_miss_is_returned_to_be_named(self):
+        """The caller applies the threshold; this only says which was nearest."""
+        someone_elses = Candidate(title="Cragside", authors=("M.J. Porter",))
+
+        found = nearest_candidate(FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [someone_elses])
+
+        self.assertEqual(found.candidate, someone_elses)
+        self.assertLess(found.confidence, TITLE_CONFIDENCE)
+        self.assertEqual(found.why, "same title; no author agrees")
+
+    def test_the_threshold_is_what_the_match_has_to_clear(self):
+        someone_elses = Candidate(title="Cragside", authors=("M.J. Porter",))
+
+        self.assertIsNone(
+            best_candidate(
+                FileBook(AS_DOWNLOADED, ("L. J. Ross",), "en"), [someone_elses], TITLE_CONFIDENCE
+            )
+        )
 
 
 if __name__ == "__main__":

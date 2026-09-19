@@ -5,13 +5,13 @@ The title candidates below are what the recorded replies in
 corrector without going through the client's parsing of a reply.
 """
 
-from colophon.hardcover import SourceBook
+from colophon.hardcover import SOURCE, SourceBook
 from colophon.matching import Candidate
 from tests.samplebooks import ISBN
 
 # What Hardcover has for the ISBN in the sample book.
 MATCH = SourceBook(
-    source="hardcover",
+    source=SOURCE,
     title="Cragside",
     authors=("L.J. Ross",),
     series="DCI Ryan Mysteries",
@@ -23,6 +23,7 @@ MATCH = SourceBook(
 # What Hardcover has for the three books whose files carry no ISBN. Belsay is
 # #23 on the record, which the file's title never says.
 CRAGSIDE_CANDIDATE = Candidate(
+    source=SOURCE,
     title="Cragside",
     authors=("L.J. Ross",),
     series="DCI Ryan Mysteries",
@@ -30,6 +31,7 @@ CRAGSIDE_CANDIDATE = Candidate(
     language="en",
 )
 BERWICK_CANDIDATE = Candidate(
+    source=SOURCE,
     title="Berwick",
     authors=("L.J. Ross",),
     series="DCI Ryan Mysteries",
@@ -37,6 +39,7 @@ BERWICK_CANDIDATE = Candidate(
     language="en",
 )
 BELSAY_CANDIDATE = Candidate(
+    source=SOURCE,
     title="Belsay",
     authors=("L.J. Ross",),
     series="DCI Ryan Mysteries",
@@ -45,6 +48,7 @@ BELSAY_CANDIDATE = Candidate(
 )
 # The lookalike this ticket names: the same author, a different book of hers.
 THE_INFIRMARY_CANDIDATE = Candidate(
+    source=SOURCE,
     title="The Infirmary",
     authors=("L.J. Ross",),
     series="DCI Ryan Mysteries",
@@ -52,7 +56,9 @@ THE_INFIRMARY_CANDIDATE = Candidate(
     language="en",
 )
 # The real book of that name, by someone else, whose title matches exactly.
-ANOTHER_INFIRMARY = Candidate(title="The Infirmary", authors=("Carly Reagon",), language="en")
+ANOTHER_INFIRMARY = Candidate(
+    source=SOURCE, title="The Infirmary", authors=("Carly Reagon",), language="en"
+)
 
 
 class FakeSource:

@@ -20,19 +20,20 @@ in the PR description.
 ### The seam
 
 `colophon/correction.py` already has exactly the decision point this ticket
-needs. `Corrector.correct()` reads the book, then:
+needs. `Corrector.correct()` read the book and then returned early:
 
 ```python
 if not book.isbn:
     return Outcome(problem="no ISBN in the file, so no source was asked")
 ```
 
-That early return is where CBO-36 goes. Everything downstream —
+That early return is where CBO-36 went. Everything downstream —
 `Outcome.fragment()`, `Change`, `_edits()`, `_changes()`, `Corrector._write()` —
-carries over unchanged, except that `CONFIDENCE = 1.0` is currently a module
-constant and a title match has to compute a real score instead.
+carried over, with two changes: `CONFIDENCE = 1.0` is now passed in rather than
+being the only answer a match can have, and `Outcome` gained `sought`, because
+the log line asked for `self.isbn` and a title match has none to give.
 
-`Correcter._write()` calls `epub.correct(path, edits, write=False)` first to ask
+`Corrector._write()` calls `epub.correct(path, edits, write=False)` first to ask
 the file what would move, so a book that already matches is neither backed up nor
 rewritten. A title match gets that behaviour for free. Note that
 `epub.correct(..., write=False)` returns the fields whose value *already*
@@ -52,6 +53,10 @@ Note the spacing difference between `L. J. Ross` (the file, in
 `tests/samplebooks.py:AS_DOWNLOADED`) and `L.J. Ross` (Hardcover,
 `tests/sources.py:MATCH`). Normalising the two to compare is explicitly in
 CBO-36's criteria, and that pair is the fixture for it.
+
+*(Everything below this line was written before the build, as the brief for it.
+The only later additions are marked; "As built" at the end says what actually
+happened.)*
 
 ## Verified against the API
 
@@ -267,51 +272,91 @@ Settled by the direct instruction that a title match alone must never reach the
 threshold. Built as proposed, minus the edit distance:
 
 ```
-confidence = 0.6 * title_score + 0.4 * author_score
+confidence = 0.6 * title_score + 0.4 * author_score + series_adjustment
 title_score  = 1.0   the cleaned titles are equal after normalising
              = 0.9   one normalised title is contained in the other, whole words
              = 0.0   otherwise
-author_score = 1.0   any file creator normalises to any record author, in either
-                     order, so `L. J. Ross` = `L.J. Ross` = `Ross, LJ`
+author_score = 1.0   any file creator is any record author, as sorted words with
+                     the spacing out: `L. J. Ross` = `L.J. Ross` = `Ross, L. J.`
              = 0.0   otherwise, including when either side names nobody
+series_adjustment = +0.05  the file's bracket number and the record's agree
+                  = -0.2   both are there and they flatly disagree
+                  = 0      either side says nothing, which is the usual case
 ```
 
 The weights are what make the instruction hold arithmetically: a perfect title
 with no author agreement scores **0.6**, and an author agreement with no title
 scores **0.4**, so no single half can clear 0.85. A candidate that does not
-agree on both is also refused outright (`agrees`), so the number is never the
-only thing standing between a wrong book and someone's library.
+agree on both is refused outright as well (`agrees`), and its confidence is
+capped at **0.7** so that the number and the flag can never tell different
+stories — a contained title (0.9) with no author agreement would otherwise have
+reached 0.95 and cleared the threshold on the number alone.
+
+The series adjustment is the third signal, and the reason the file's series
+bracket is captured rather than discarded. It cannot move anything across the
+line on its own: a disagreement band of 0.8 is below the threshold, and the
+agreement band of 1.0 is only reached by a title and an author that already
+agree. It is what rejects a candidate that agrees on the title and the author
+but sits at a flatly different position in the series — the case the file's own
+`(… Book N)` exists to catch. Most files carry no bracket at all, in which case
+it does nothing.
 
 A candidate in another language is left out entirely rather than scored down —
 non-English books are matched in their own language and nothing is translated.
-A language missing on either side is no evidence either way. The language is
-also the query's filter, so this is the second line of the same defence.
+A language missing on either side is no evidence either way: the file may not
+say, and not every edition has one. The language is also the query's filter, so
+this is the second line of the same defence.
 
 Every real candidate, scored with the recorded replies, against 0.85:
 
-| file's title | candidate | title | author | confidence | 0.85 |
-| --- | --- | --- | --- | --- | --- |
-| Cragside (messy) | Cragside, L.J. Ross | 1.0 | 1.0 | **1.00** | accepted |
-| Berwick (messy) | Berwick, L.J. Ross | 1.0 | 1.0 | **1.00** | accepted |
-| Belsay (`: A … Mystery` only) | Belsay, L.J. Ross | 1.0 | 1.0 | **1.00** | accepted |
-| Cragside (messy) | The Infirmary, L.J. Ross | 0.0 | 1.0 | 0.40 | rejected |
-| Cragside (messy) | The Infirmary, Carly Reagon | 0.0 | 0.0 | 0.00 | rejected |
-| The Infirmary (messy) | The Infirmary, Carly Reagon | 1.0 | 0.0 | 0.60 | rejected |
-| Cragside (messy), no author in the file | Cragside, L.J. Ross | 1.0 | 0.0 | 0.60 | rejected |
-| Cragside (clean) | *Cragside: A DCI Ryan Mystery* on the record | 0.9 | 1.0 | **0.94** | accepted |
+| file's title | candidate | title | author | series | confidence | 0.85 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Cragside (messy) | Cragside, L.J. Ross #6 | 1.0 | 1.0 | +0.05 | **1.00** | accepted |
+| Berwick (messy) | Berwick, L.J. Ross #24 | 1.0 | 1.0 | +0.05 | **1.00** | accepted |
+| Belsay (`: A … Mystery` only) | Belsay, L.J. Ross #23 | 1.0 | 1.0 | 0 | **1.00** | accepted |
+| Cragside (messy) | The Infirmary, L.J. Ross #11 | 0.0 | 1.0 | −0.2 | 0.20 | rejected |
+| Cragside (messy) | The Infirmary, Carly Reagon | 0.0 | 0.0 | 0 | 0.00 | rejected |
+| The Infirmary (messy) | The Infirmary, Carly Reagon | 1.0 | 0.0 | 0 | 0.60 | rejected |
+| Cragside (messy), no author in the file | Cragside, L.J. Ross #6 | 1.0 | 0.0 | +0.05 | 0.65 | rejected |
+| Cragside (messy), #6 | Cragside, L.J. Ross #11 | 1.0 | 1.0 | −0.2 | 0.80 | rejected |
+| Cragside (clean) | *Cragside: A DCI Ryan Mystery* on the record | 0.9 | 1.0 | 0 | **0.94** | accepted |
+| Cragside (clean) | *Cragside: A DCI Ryan Mystery*, M.J. Porter | 0.9 | 0.0 | 0 | 0.54 | rejected |
 
 **The three real books clear 0.85 because the candidate set is one work and the
 author then agrees** — title equality is doing no discriminating work there at
 all, which is the finding this note asked for. The score earns its keep in the
-other direction: it is what rejects *The Infirmary* by the same author (0.40),
-what rejects the same title by another author (0.60), and what still accepts a
-record that kept its subtitle (0.94).
+other direction: it is what rejects *The Infirmary* by the same author (0.20 —
+right author, wrong book, and the series position says so too), what rejects the
+same title by another author (0.60), what rejects the right book at the wrong
+position in its series (0.80), and what still accepts a record that kept its
+subtitle (0.94).
 
 The edit-distance decay in the proposal was dropped. With exact-title querying
 it can never fire — a candidate too differently spelt to score 1.0 is never
 returned — so it would be a branch no fixture could reach. A title that is
 neither equal nor contained is 0.0, which is the honest answer to "the query
 never found it".
+
+Two things came out of the review of the first cut, both now fixed:
+
+- **The surname-first fallback was dead code.** It joined a name's words with
+  no separator, so `_reversed("ross l j")` was `jlross` while
+  `_name("L.J. Ross")` was `ljross`: `Ross, L. J.` never matched `L.J. Ross`.
+  Names are now reduced to their words **sorted**, which handles the order and
+  the spacing in one rule and is covered by a test.
+- **Nothing enforced "one half is not a match".** With the series adjustment, a
+  contained title and a disagreeing series scored 0.95 — over the threshold —
+  while `agrees` said no. The confidence of a candidate that agrees on only one
+  half is now capped (0.7), so the number and the flag cannot disagree.
+
+One review finding was checked and deliberately kept: **the contained-title tier
+(0.9) is a judgement call worth a second look.** It is what lets a record that
+kept its subtitle match, and its false-positive risk is a file whose title is
+the prefix of another book's — a boxed set, or a series title that is also a
+book title. Accepted for now because the author must agree as well, and because
+the alternative is refusing to match a book whose only sin is that Hardcover
+spelt its title longer. Worth revisiting if a real false positive shows up.
+
 
 
 ## What else to know before building
@@ -343,17 +388,21 @@ The slices were built in the order below; everything in this note that was a
 question above is answered in place, and the rest is here.
 
 1. **`colophon/matching.py`** — new. `clean_title()`, `title_variants()`,
-   `normalise()`, `compared()`, `best_candidate()`, and the `FileBook`,
-   `Candidate` and `Match` types. The cleaning and the comparison live here
-   rather than in the client, so neither needs a network to test.
+   `normalise()`, `score_candidate()`, `best_candidate()` and
+   `nearest_candidate()`, with the `FileBook`, `Candidate`, `CleanedTitle` and
+   `Match` types. The cleaning and the comparison live here rather than in the
+   client, so neither needs a network to test. `Match` carries the candidate it
+   measured, so a caller never has to hold the two side by side.
 2. **`colophon/hardcover.py`** — a second query, `TITLE_QUERY`, and
    `by_title(titles, language)`, which returns `Candidate`s with the work's
-   first edition per `books.id`. `by_isbn` is untouched.
+   first edition per `books.id`. Both lookups read a reply through one
+   `_candidate()`, so `_as_book()` and `Candidate` can no longer drift apart.
+   `by_isbn` behaves exactly as it did.
 3. **`colophon/correction.py`** — `Corrector.correct()` splits into `_by_isbn`
-   and `_by_title`; the ISBN path behaves exactly as it did, including the
-   confidence of 1.0. `Outcome` gained `sought`, the title a book with no ISBN
-   was recognised by, because the log line said `matched ISBN None` otherwise.
-   The one line per book now reads
+   and `_by_title`. `Outcome` gained `sought` (the title a book with no ISBN
+   was recognised by, because the log line said `matched ISBN None` otherwise)
+   and `passed_over` (why the nearest candidate was not good enough, when one
+   was named). The one line per book now reads
    `hardcover matched Cragside by title and author, confidence 1.00`.
 4. **Fixtures** — `by-title-{cragside,berwick,belsay,the-infirmary}.json`, real
    replies for one cleaned title each, exactly the request the client sends.
@@ -363,7 +412,7 @@ question above is answered in place, and the rest is here.
 5. **`tests/samplebooks.py`** — `CRAGSIDE`, `BERWICK`, `BELSAY`,
    `THE_INFIRMARY`, `WITHOUT_AUTHOR` and `WITHOUT_AUTHOR_OR_LANGUAGE`, the same
    files with no ISBN in them.
-6. **Tests** — `tests/test_matching.py` (28), `TitleLookupTests` in
+6. **Tests** — `tests/test_matching.py`, `TitleLookupTests` in
    `tests/test_hardcover.py`, and `BooksWithoutAnIsbnTests` in
    `tests/test_correction.py`, plus the relay's one-line log.
 

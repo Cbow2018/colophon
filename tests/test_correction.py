@@ -431,6 +431,42 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertIn("hardcover matched Cragside by title and author", outcome.fragment())
         self.assertIn("confidence 1.00", outcome.fragment())
 
+    def test_a_near_miss_says_which_book_it_was_and_what_was_wrong_with_it(self):
+        """A book that was found, trusted less, but still named.
+
+        The Infirmary is the same author's other book: the title is nothing
+        like this file's, so it is not close enough to name, but its position
+        in the series is what a file's own bracket is there to catch.
+        """
+        path = self.book("Cragside.epub", CRAGSIDE)
+        wrong_position = Candidate(
+            source="hardcover",
+            title="Cragside",
+            authors=("L.J. Ross",),
+            series_number="11",
+            language="en",
+        )
+
+        outcome = self.corrector(
+            source=FakeSource(found=None, candidates=[wrong_position])
+        ).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertIn("Cragside", outcome.fragment())
+        self.assertIn("confidence 0.80", outcome.fragment())
+        self.assertIn("same title", outcome.fragment())
+
+    def test_a_book_the_source_has_nothing_like_is_not_named_at_all(self):
+        """Nothing in the reply agrees on title or author, so there is no near miss."""
+        path = self.book("Cragside.epub", CRAGSIDE)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertIn("no edition is called Cragside", outcome.fragment())
+        self.assertNotIn("The Infirmary", outcome.fragment())
+
     def test_a_dry_run_reports_the_match_without_writing_it(self):
         path, source = self.a_book_the_source_has(
             "Cragside.epub", CRAGSIDE, CRAGSIDE_CANDIDATE
