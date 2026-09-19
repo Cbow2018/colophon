@@ -102,9 +102,9 @@ contract:
   JSON, no `pick`, and therefore a null by the parsing rules.
 
 The prose reply is committed as `tests/fixtures/llm/prose-not-json.json`, because
-"a reply that is not JSON counts as null" needs a real one to test against.
-Whether the shipped request sends `response_format` at all is a live question —
-see "The one decision left open" at the end.
+"a reply that is not JSON counts as null" needs a real one to test against. The
+shipped request still sends `response_format` regardless, and the division of
+labour between it and the prompt is settled at the end of this note.
 
 **The word "JSON" must be in the prompt, and this is a hard requirement rather
 than a nicety** — it is what makes `response_format` usable at all. A system
@@ -256,9 +256,10 @@ said we would not guess at.
 
 *One premise of this answer was later found to be wrong and is corrected in §2:
 the contract is held by the **system prompt**, not by `response_format`, and the
-system prompt held it without `response_format` three times. The answer is still
-the recommendation, for the reliability reason rather than the contract one, but
-it is now the one open decision in this note — see the end.*
+system prompt held it without `response_format` three times. The answer itself
+stands — the request always sends `response_format`, for the parseable-JSON
+guarantee rather than for the contract. Confirmed by the maintainer after the
+correction; the reasoning is at the end of this note.*
 
 **Q3. What counts as a malformed reply.** → **`null`, all of these:** not JSON;
 missing or non-string content; `pick` not a real integer; `pick` out of range for
@@ -656,31 +657,31 @@ DeepSeek's, the preset table's other six rows are documentation, and the two
 documentation traps that will bite first are Gemini's missing `/v1` and Anthropic's
 ignored `response_format`.
 
-## The one decision left open
+## Q2, settled
 
-Everything else in this note is settled. This one is not, and it was reopened by
-the late probe in §2 rather than by a change of mind.
+This is the one question the late probe in §2 reopened rather than a change of
+mind, so it is recorded here as settled with the reasoning that actually carries
+it — not the reasoning it was originally given on.
 
-**Should the shipped request send `response_format` at all?** Q2 answered yes, and
-that answer was given on the reading that `response_format` is what makes the model
-produce the contract. §2 shows that reading was wrong: the **system prompt** holds
-the contract, and it held it without `response_format`, repeatedly. What
-`response_format` actually adds is (a) a requirement that the word "JSON" appear in
-the messages — which the pinned prompt satisfies anyway — and (b) a constraint to
-*some* JSON object, which `{"answer": null}` shows is not the object we asked for.
+**The request always sends `response_format: {"type": "json_object"}`.** Confirmed
+by the maintainer after §2 corrected the premise. The division of labour is:
 
-The case for **keeping it** is that it is a real reliability gain on DeepSeek at no
-cost to the request we care about: providers that ignore it (Anthropic) behave as
-if it were absent, and the fallback when it is refused is a null.
+- **The system prompt holds the contract.** It is what makes the reply
+  `{"pick": …, "confidence": …, "reason": …}` rather than merely valid JSON. The
+  "asks for JSON but not the contract" probe answered `{"answer": null}`, which is
+  what a prompt without the contract earns however the request is configured.
+- **`response_format` guarantees parseable JSON.** It is what rules out the prose
+  reply — the shape `prose-not-json.json` records — so it removes a whole class of
+  answer that would otherwise become a null and waste the call. This is the reason
+  it is sent, and the contract is not.
+- **The pinned prompt must contain the word "JSON".** This is not optional: it is
+  what makes `response_format` usable at all, since the parameter is refused with a
+  400 when the messages do not mention it.
 
-The case for **dropping it** is portability. It is the one field in the body most
-likely to be rejected outright by an OpenAI-*ish* endpoint that is not OpenAI, and
-without it the request is the smallest possible: `model`, `messages`, `max_tokens`.
-The probe measured that the contract survives without it on the only provider
-available to test.
+The portability cost is accepted knowingly and is the reason this was asked twice:
+`response_format` is the field most likely to be refused by an endpoint that is
+OpenAI-*ish* rather than OpenAI. Providers that ignore it (Anthropic's compatibility
+layer) behave as if it were absent, and a provider that refuses it fails loudly
+rather than quietly — which is the correct failure for a misconfiguration.
 
-**Recommendation: keep sending it** — the reliability gain is measured, the
-portability risk is unprobed, and a provider that refuses it fails loudly rather
-than quietly. But this is the maintainer's call and it has not been confirmed, so
-the builder should ask before writing the request. What must not happen is the
-builder deciding silently.
+Nothing here is left for the builder to decide.
