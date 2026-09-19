@@ -24,6 +24,7 @@ from colophon.matching import (
     FileBook,
     nearest_candidate,
     primary_language,
+    score_candidate,
     search_titles,
 )
 from colophon.sources import SourceError, fetcher_for
@@ -470,27 +471,25 @@ class Corrector:
             # One pass: the nearest candidate is measured once, and what was
             # measured is what gets written or named.
             match = nearest_candidate(file_book, candidates)
-            if match is None or not match.agrees:
-                # A reply that agrees on neither title nor author is not an
-                # explanation of this book, and is not named as one. What it
-                # does do is widen the list the LLM sees: the model may know
-                # which book this is when the rules cannot see it.
-                offered.extend(candidates[:CANDIDATES_PER_SOURCE])
-                continue
-            if match.confidence >= self.confidence:
+            if match is not None and match.confidence >= self.confidence:
                 return self._write(path, match.candidate, match.confidence, book=book)
-            # A near miss: remembered rather than written, so a book no source
-            # can match still names the closest thing to it - and, from here,
-            # put to the LLM along with everything else the sources offered.
-            offered.extend(candidates[:CANDIDATES_PER_SOURCE])
-            if nearest is None or match.confidence > nearest.confidence:
+            offered.extend(candidates)
+            # A near miss - one that agrees on both title and author but not
+            # confidently enough - is remembered rather than written, so a book
+            # no source can match still names the closest thing to it. A reply
+            # that agrees on neither is not an explanation of this book at all,
+            # and is not named as one; it is still offered to the model.
+            if (
+                match is not None
+                and match.agrees
+                and (nearest is None or match.confidence > nearest.confidence)
+            ):
                 nearest = match
 
         if offered:
-            # A candidate the rules could not use is still worth the model's
-            # time: the rules only read the title and the author, and the reason
-            # a book needs an LLM is usually that they are not enough.
-            chosen = self._ask_llm(path, book, offered, title, tried, nearest)
+            chosen = self._ask_llm(
+                path, book, offered, title, tried, nearest, file_book
+            )
             if chosen is not None:
                 return chosen
 
@@ -503,7 +502,7 @@ class Corrector:
         # instead, where the sources were asked and did not have it.
         return self._unverified(path, book, title, tried, nearest)
 
-    def _ask_llm(self, path, book, candidates, title, tried, nearest):
+    def _ask_llm(self, path, book, candidates, title, tried, nearest, file_book=None):
         """Put the candidates to the LLM, and produce the outcome its answer earns.
 
         Three answers and three endings, and the differences matter:
@@ -529,7 +528,7 @@ class Corrector:
             return None
         details = {"title": book.title, "filename": path.name}
         try:
-            choice = self.llm.choose(details, candidates)
+            choice = self.llm.choose(details, top_candidates(file_book, candidates))
         except (LlmError, LlmLimited) as error:
             return self._wait(path, error)
 
@@ -841,6 +840,29 @@ class Corrector:
         return bool(
             found is not None and self.add_cover and found.cover and not book.has_cover
         )
+
+
+def top_candidates(file_book, candidates, limit=CANDIDATES_PER_SOURCE):
+    """The candidates worth putting to the LLM, best first, and at most `limit`.
+
+    A source can return a long tail of lookalikes, and every one of them costs
+    tokens and buries the right record a little deeper. So the cap is on the
+    *best* few rather than the first few: the ones the source listed first are
+    in whatever order its own search ranked them, while the score is what this
+    project's rules make of them against this file. The best candidate is
+    therefore candidate 1 in the prompt, which is the number a reply is read
+    against.
+
+    Being ranked here does not mean being accepted: a candidate that agrees on
+    neither title nor author is not an explanation of the book to the rules, and
+    is still offered to the model - they read the title and the author, and the
+    reason a book needs an LLM is usually that those two are not enough.
+    """
+    scored = [(score_candidate(file_book, candidate), candidate) for candidate in candidates]
+    # Largest first; ties keep the order the source offered them in, which is
+    # what `sorted` does with a stable sort and a single key.
+    scored.sort(key=lambda pair: pair[0].confidence, reverse=True)
+    return [candidate for _, candidate in scored[:limit]]
 
 
 def _series_consistent(edits, found, book):

@@ -13,10 +13,10 @@ from pathlib import Path
 
 from colophon.backups import Backups
 from colophon.config import Config, load_config
-from colophon.correction import Corrector
+from colophon.correction import Corrector, top_candidates
 from colophon.epub import read
 from colophon.llm import PROVIDERS, Llm, LlmError, LlmLimited
-from colophon.matching import Candidate
+from colophon.matching import Candidate, FileBook
 from colophon.sources import SourceError
 from tests.samplebooks import HOLY_ISLAND as HOLY_ISLAND_BOOK
 from tests.samplebooks import write_epub
@@ -788,6 +788,86 @@ class ChooserTests(unittest.TestCase):
         self.corrector(llm, candidates=(HOLY_ISLAND,)).correct(self.book())
 
         self.assertEqual(llm._transport.sent, [])
+
+
+class TheCandidateCapTests(unittest.TestCase):
+    """Only the best few candidates per source are put to the model.
+
+    A long tail of lookalikes would bury the right record and cost tokens for
+    it, so a source contributes at most `CANDIDATES_PER_SOURCE` - and, this
+    being the point, the best of them by the rules' own score rather than
+    whichever five the source happened to list first.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.folder = Path(self._tmp.name)
+        self.backups = Backups(self.folder / "backups")
+        self.calls = 0
+        self.addCleanup(self._tmp.cleanup)
+
+    def llm(self, *names):
+        self.calls += 1
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key=KEY,
+            daily_limit=0,
+            counter=self.folder / f"llm-{self.calls}.json",
+            transport=Replay(*names),
+        )
+
+    def corrector(self, llm, candidates):
+        return Corrector(
+            sources=[FakeSource(found=None, candidates=list(candidates))],
+            backups=self.backups,
+            llm=llm,
+            fetch=self.offline_cover,
+        )
+
+    def offline_cover(self, url):
+        raise SourceError(f"a test tried to fetch {url} from the network")
+
+    def test_the_one_the_rules_like_best_is_kept_even_when_it_is_listed_last(self):
+        """The file is Belsay; the source lists five other books first.
+
+        Every one of the six agrees with the file on nothing, so the outcome is
+        the same either way and the log line names Belsay as the nearest either
+        way. What differs is which candidates the model is shown, and this is the
+        seam that decides it: the cap keeps the best by score, not the first five
+        the source happened to list.
+        """
+        file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
+        distractors = [
+            Candidate(source="hardcover", title=f"Book {number}", authors=("L. J. Ross",))
+            for number in range(1, 6)
+        ]
+        candidates = distractors + [BELSAY_RECORD]
+
+        kept = top_candidates(file_book, candidates)
+
+        self.assertEqual(len(kept), 5)
+        self.assertEqual(kept[0], BELSAY_RECORD, "the best candidate goes first")
+        self.assertNotIn(distractors[-1], kept, "and the worst of the tail is dropped")
+
+    def test_the_prompt_numbers_the_candidates_in_the_order_it_gives_them(self):
+        """Number 1 is the first line, so a pick of 1 is the best candidate."""
+        file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
+        distractors = [
+            Candidate(source="hardcover", title=f"Book {number}", authors=("L.J. Ross",))
+            for number in range(1, 6)
+        ]
+
+        kept = top_candidates(file_book, distractors + [BELSAY_RECORD])
+
+        self.assertEqual(kept, [BELSAY_RECORD, *distractors[:4]])
+
+    def test_every_candidate_is_kept_when_there_are_no_more_than_the_cap(self):
+        file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
+        candidates = [BELSAY_RECORD, BERWICK]
+
+        self.assertEqual(top_candidates(file_book, candidates), candidates)
 
 
 def _reply(pick, confidence):

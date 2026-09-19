@@ -313,7 +313,27 @@ them to be what production would replay.
 reach the LLM.** Two conditions: **reuse the candidates already fetched during the
 rule-based walk** and query only the sources it had not reached; and **cap each
 source's contribution at 5 candidates**, so prompt size and cost stay predictable
-and a long tail of lookalikes cannot bury the right record.
+and a long tail of lookalikes cannot bury the right record. The cap is on the
+**best five by this project's own score**, not the first five the source listed:
+the source's order is its search's ranking, and the score is what the rules made
+of the record against this file.
+
+**Q7a. Which candidates count as offered at all** — settled while building, after
+Q7's wording left it open. The ticket's own wording is that the LLM chooses
+"between the candidates Colophon has fetched", and Colophon has fetched all of
+them. So **every candidate a source returned is a candidate the model may be
+shown**, including one that agrees on neither title nor author: the rules only
+read the title and the author, and the reason a book needs an LLM is usually
+that those two are not enough. The narrowed list is Q7's best five by score.
+The rules' own verdict is unchanged — a candidate that agrees on neither is still
+not named as the nearest explanation of the file, and is never written from on
+the rules' say-so.
+
+*This is a change to what the first draft of this note described, and it is
+deliberate rather than a drift. Under Q7 as first written, the reply that
+"agrees on neither" was dropped before the model saw it, which left the commonest
+fallback book — the author agrees, the title does not — with an empty candidate
+list and no call at all. That is the case the fallback exists for.*
 
 **Q8. What a limited book does.** → **It stays in the ingest folder, untouched.**
 Not "corrected as far as the rules got": rewriting the file in place changes its
@@ -524,6 +544,12 @@ N. title=… author=… series=… position=… year=… publisher=… isbn=… 
 `source` is deliberately absent (Q23). `reason` is logged on one line, newlines
 escaped and length-capped (Q17).
 
+**The numbering is the order the prompt gives them**, which is Q7's best-five-by-
+score order and not the order a source listed its reply in. So candidate 1 is the
+best candidate by the rules' own score, and a reply of `{"pick": 1}` is the reply
+that agrees with this project's rules as far as they can see — which is also the
+order the candidates are ranked in for Q3's out-of-range check.
+
 ### Parsing the reply
 
 `null` for every case in Q3, including `finish_reason: "length"`, a boolean
@@ -557,19 +583,19 @@ delivers. **A waiting book needs a third answer** — something the relay reads 
 
 **A second structural change to call out in the PR.** Today `_by_title` walks the
 sources and returns at the *first* one whose candidate clears the threshold. Q7
-requires gathering from all sources for the books that reach the LLM. The simplest
-shape that satisfies both — and the one to build — is to **score each source's
-candidates locally as they arrive, consult the LLM only if nothing cleared the
-threshold, then break out or continue as before**. Breaking out when a match is
-found means no extra source requests for the ISBN path or for books the rules
-already matched, which is what "reuse the candidates already fetched" means in
-practice.
+requires gathering from all sources for the books that reach the LLM. The shape
+that satisfies both — and the one to build — is to **score each source's
+candidates as they arrive; a candidate that clears the threshold is written there
+and then and the walk stops, because nothing better is coming; a candidate that
+does not is kept, and the walk carries on to the next source**. Only when the walk
+ends without a match is the LLM consulted, over everything the walk kept.
 
-One consequence to state rather than discover: if a lower-priority source cannot be
-reached *after* a higher-priority one already matched, the current code's
-stop-on-source-error rule would now fail a book that used to succeed. **The walk
-must keep its existing stop-on-error behaviour for the books it can already match,
-and only touch the remaining sources when the rules did not answer.**
+Cutting the walk short at a match is what "break out when a match is found" means
+in practice: no source after the matching one is asked, for the ISBN path or for
+any book the rules already answered. That also disposes of the problem stated
+below rather than leaving it to be discovered — a source that could not be reached
+*after* a match can no longer fail a book that used to succeed, because it is
+never reached.
 
 ### A 4xx that is not 401 or 429 repeats every day
 
