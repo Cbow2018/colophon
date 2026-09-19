@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from colophon.config import Config
 from colophon.relay import Relay, RelayError, temp_name
@@ -182,6 +183,61 @@ class MovingTests(RelayTestCase):
 
         self.assertTrue((self.output / "Here.epub").exists())
         self.assertFalse((self.output / "Gone.epub").exists())
+
+
+class StuckFileTests(RelayTestCase):
+    """A book that copies out fine but cannot be removed from the ingest folder.
+
+    Without care this looks like a brand new book on the very next scan, and
+    because output now holds an identical copy it is filed as a duplicate,
+    again and again, filling the backups folder with (2), (3), (4)...
+    """
+
+    def settle_with_a_file_that_will_not_delete(self, times=8):
+        def refuse(self, *args, **kwargs):
+            raise PermissionError(13, "Permission denied")
+
+        with mock.patch.object(Path, "unlink", refuse):
+            with self.assertLogs("colophon", level="INFO") as captured:
+                self.settle(times=times)
+        return captured
+
+    def test_it_is_not_copied_out_over_and_over(self):
+        self.drop("Cragside.epub")
+
+        self.settle_with_a_file_that_will_not_delete()
+
+        self.assertEqual(
+            sorted(path.name for path in self.output.iterdir()), ["Cragside.epub"]
+        )
+        self.assertEqual(list(self.backups.iterdir()), [])
+
+    def test_the_problem_is_reported_once_not_on_every_scan(self):
+        self.drop("Cragside.epub")
+
+        captured = self.settle_with_a_file_that_will_not_delete()
+
+        complaints = [line for line in captured.output if "could not remove" in line]
+        self.assertEqual(len(complaints), 1)
+        self.assertIn("Cragside.epub", complaints[0])
+
+    def test_the_book_is_still_reported_as_delivered(self):
+        self.drop("Cragside.epub")
+
+        captured = self.settle_with_a_file_that_will_not_delete()
+
+        deliveries = [line for line in captured.output if "moved" in line]
+        self.assertEqual(len(deliveries), 1)
+
+    def test_it_is_tried_again_once_the_file_changes(self):
+        book = self.drop("Cragside.epub", "first")
+        self.settle_with_a_file_that_will_not_delete()
+
+        book.write_text("second", encoding="utf-8")
+        self.settle()
+
+        self.assertFalse(book.exists())
+        self.assertEqual((self.output / "Cragside (2).epub").read_text(), "second")
 
 
 class CollisionTests(RelayTestCase):

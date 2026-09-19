@@ -38,6 +38,9 @@ class Relay:
         self._seen = {}
         # files already reported in dry-run mode, so each is logged once
         self._announced = set()
+        # path -> the (size, mtime) it had when it could not be removed from
+        # the ingest folder, so it is left alone until it changes
+        self._stuck = {}
 
     def prepare(self):
         """Make sure the three folders exist before the first scan."""
@@ -62,10 +65,15 @@ class Relay:
     def scan_once(self):
         """Look at the ingest folder once and deliver whatever has settled."""
         still_settling = {}
+        present = set()
         for path in self._candidates():
             mark = self._mark(path)
             if mark is None:
                 continue
+            present.add(path)
+            if self._stuck.get(path) == mark:
+                continue
+            self._stuck.pop(path, None)
             previous_mark, count = self._seen.get(path, (None, 0))
             count = count + 1 if previous_mark == mark else 1
             if count >= self.config.stable_checks:
@@ -73,6 +81,9 @@ class Relay:
             else:
                 still_settling[path] = (mark, count)
         self._seen = still_settling
+        self._stuck = {
+            path: mark for path, mark in self._stuck.items() if path in present
+        }
 
     def _candidates(self):
         """Every file in the ingest folder, including subfolders, worth looking at."""
@@ -109,11 +120,25 @@ class Relay:
             return
 
         try:
-            _transfer(path, destination)
+            _copy_into_place(path, destination)
         except OSError as error:
             LOG.error('could not move "%s": %s', path.name, error)
             return
         LOG.info('%s "%s" -> %s (%s)', kind, path.name, destination, note)
+
+        try:
+            path.unlink()
+        except OSError as error:
+            # The copy is safely in place, so the book itself is fine. What
+            # matters is not delivering it again on every scan from here on.
+            self._stuck[path] = mark
+            LOG.error(
+                'delivered "%s" but could not remove it from %s: %s; leaving it '
+                "there until it changes",
+                path.name,
+                path.parent,
+                error,
+            )
 
     def _destination_for(self, path):
         """Where the file should go, what to call that, and why."""
@@ -138,12 +163,13 @@ class Relay:
             return None, None, None
 
 
-def _transfer(source, destination):
-    """Copy into place under a hidden name, then rename, then drop the original.
+def _copy_into_place(source, destination):
+    """Copy under a hidden name, then rename it, leaving the original alone.
 
     Copying rather than renaming is deliberate: a rename keeps the original
     owner, while a copy is created by this process and so comes out owned by
-    the user the container runs as.
+    the user the container runs as. Removing the original is the caller's job,
+    because it can fail on its own.
     """
     half_written = destination.parent / temp_name(destination.name)
     try:
@@ -155,7 +181,6 @@ def _transfer(source, destination):
     except OSError:
         half_written.unlink(missing_ok=True)
         raise
-    source.unlink()
 
 
 def _same_contents(one, other):
