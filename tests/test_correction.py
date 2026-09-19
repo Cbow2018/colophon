@@ -55,6 +55,7 @@ from tests.samplebooks import (
     KEPUB_CHAPTER,
     SAPIENS,
     SIMPLE,
+    THE_INFIRMARY,
     WITHOUT_AUTHOR,
     WITHOUT_AUTHOR_OR_LANGUAGE,
     add_isbn,
@@ -1095,10 +1096,13 @@ class FromConfigTests(unittest.TestCase):
 
     def config(self, **extra):
         # One source's file by default, so a test about that source is not also
-        # a test about the other one's key being absent.
+        # a test about the other one's key being absent. The LLM's key file is
+        # pointed at a path under the temporary folder for the same reason: it is
+        # absent either way, but not at the real `/run/secrets` path.
         settings = {
             "hardcover_token_file": self.folder / "hardcover_token",
             "google_books_key_file": self.folder / "google_books_key",
+            "llm_key_file": self.folder / "llm_key",
             "sources": ("hardcover",),
         }
         settings.update(extra)
@@ -1138,8 +1142,33 @@ class FromConfigTests(unittest.TestCase):
 
         self.assertEqual([source.name for source in corrector.sources], ["google_books"])
 
+    def test_a_custom_endpoint_with_no_key_is_not_reported_as_no_llm(self):
+        """"No LLM key at …" is about a preset that needed one. A custom endpoint
+        is used without a key, so saying the LLM is not set up would be a lie."""
+        (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
+
+        with self.assertLogs("colophon", level="INFO") as captured:
+            corrector = Corrector.from_config(
+                self.config(
+                    sources=("hardcover", "google_books"),
+                    llm_provider="llamacpp",
+                    llm_base_url="http://localhost:8080/v1",
+                    llm_model="qwen2.5",
+                ),
+                Backups(self.folder / "backups"),
+            )
+
+        self.assertIsNotNone(corrector.llm, "it is set up, and no key file is needed")
+        said = "\n".join(captured.output)
+        self.assertIn("Google Books key", said, "the source with no key is still named")
+        self.assertNotIn("no LLM key", said)
+
     def test_a_source_with_no_key_file_is_skipped_once_then_left_out(self):
-        """Hardcover's token is there; Google Books' key is not set up at all."""
+        """Hardcover's token is there; Google Books' key is not set up at all.
+
+        Said once each, not once per book: the source that is set up, and the
+        LLM that is not.
+        """
         (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
 
         with self.assertLogs("colophon", level="INFO") as captured:
@@ -1149,8 +1178,10 @@ class FromConfigTests(unittest.TestCase):
             )
 
         self.assertEqual([source.name for source in corrector.sources], ["hardcover"])
-        self.assertEqual(len(captured.output), 1, "said once, not once per book")
-        self.assertIn("Google Books key", "\n".join(captured.output))
+        said = "\n".join(captured.output)
+        self.assertEqual(len(captured.output), 2, "said once, not once per book")
+        self.assertIn("Google Books key", said)
+        self.assertIn("no LLM key", said)
 
     def test_a_key_file_that_cannot_be_read_is_not_fatal(self):
         """A path that is not a readable key file is a real error, and said so.
@@ -1672,6 +1703,27 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     else "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
                     "accepted means the record's values are written",
                 )
+
+    def test_a_lowered_threshold_does_not_let_a_record_that_agrees_on_nothing_through(self):
+        """The threshold is the number; `agrees` is the floor under it.
+
+        `Another Infirmary` is a real book of this one's name by someone else, so
+        the title agrees exactly, the author does not, and the number is 0.6 -
+        which the default 0.85 refuses and a lowered 0.5 would accept on the
+        arithmetic alone. It is not an explanation of this file whatever the
+        number says, so the rules must not write it, and the author left on the
+        file is what shows they did not.
+        """
+        path = self.book("The Infirmary.epub", THE_INFIRMARY)
+        source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
+
+        outcome = self.corrector(source=source, confidence=0.5).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(
+            read(path).authors, ("L. J. Ross",), "the other author was not written"
+        )
 
     def test_the_top_of_the_range_is_one_and_one_is_a_usable_setting(self):
         """1.0 accepts an exact match and nothing else - and it is not "the ISBN path only".

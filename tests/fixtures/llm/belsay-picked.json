@@ -1,0 +1,15 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"pick\": 1, \"confidence\": 1.0, \"reason\": \"Title 'Belsay', author L.J. Ross, series DCI Ryan Mysteries position 23 match the file exactly.\"}"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ]
+}

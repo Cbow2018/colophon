@@ -15,6 +15,8 @@ from colophon.epub import UNVERIFIED_TAG, read
 from colophon.files import temp_name
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
+from colophon.llm import Llm
+from colophon.matching import Candidate
 from colophon.relay import Relay, RelayError
 from tests.opf import calibre_series, epub3_series, subjects
 from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, ISBN, write_epub
@@ -659,6 +661,94 @@ class ABookNothingCanMatchTests(RelayTestCase):
         self.assertIn("moved", line)
         self.assertIn("marked colophon:unverified", line)
         self.assertIn("no source among hardcover has an edition called", line)
+
+
+class ABookWaitingForTheLLMTests(RelayTestCase):
+    """A book the LLM could not be asked about stays in the ingest folder.
+
+    This is the half of the ticket the correction alone cannot show: the
+    correction produces the "wait" answer, and it is the relay that has to read
+    it and leave the file where it is. The file is not delivered, not marked, and
+    not backed up, because tomorrow's pass starts from the file that arrived.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # A record the rules cannot match against this file: the same author, a
+        # different book, so the score is 0.4 and the LLM is the next thing to
+        # ask. Nothing about the relay's half of the waiting path needs the two
+        # to be the same book.
+        self.source = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Berwick",
+                    authors=("L.J. Ross",),
+                    series="DCI Ryan Mysteries",
+                    series_number="24",
+                    language="en",
+                )
+            ],
+        )
+        self.relay = Relay(
+            self.config,
+            corrector=Corrector(
+                sources=[self.source],
+                backups=Backups(self.backups),
+                dry_run=False,
+                fetch=no_network,
+                llm=Llm(
+                    provider="deepseek",
+                    model="deepseek-flash",
+                    base_url="https://api.deepseek.com",
+                    key="a-key",
+                    daily_limit=0,
+                    counter=self.backups / ".colophon-llm.json",
+                    transport=lambda url, headers, body: (503, b"nope"),
+                ),
+            ),
+        )
+        # A book with no ISBN, so it is the title path that reaches the LLM.
+        self.path = write_epub(self.ingest / "Cragside.epub", CRAGSIDE, version="2.0")
+
+    def test_the_book_stays_in_the_ingest_folder_untouched(self):
+        original = self.path.read_bytes()
+
+        self.settle()
+
+        self.assertTrue(self.path.exists(), "left where the library cannot see it yet")
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(list(self.output.iterdir()), [])
+
+    def test_the_book_is_not_marked_as_unverified(self):
+        """It was not answered, so it is not a final state - CBO-43 owns that."""
+        self.settle()
+
+        self.assertNotIn("colophon:unverified", subjects(self.path))
+        self.assertEqual(self.backups_kept(), [], "and the original is not backed up either")
+
+    def backups_kept(self):
+        """What the backups folder holds, the LLM's own counter aside."""
+        return sorted(
+            path.name for path in self.backups.iterdir() if not path.name.startswith(".")
+        )
+
+    def test_it_says_why_in_the_log(self):
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            self.settle()
+
+        self.assertIn("left in the ingest folder until tomorrow", "\n".join(captured.output))
+
+    def test_it_is_not_asked_about_again_on_a_later_scan_today(self):
+        self.settle()
+
+        self.settle(times=3)
+
+        self.assertEqual(
+            len(self.source.asked_titles), 1, "asked once, then left for tomorrow"
+        )
+        self.assertTrue(self.path.exists())
 
 
 class ARealNoMatchThroughTheRelayTests(RelayTestCase):

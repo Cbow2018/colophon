@@ -1,0 +1,15 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The book is **Belsay** by **LJ Ross**.\n\nThe matching candidate is:\n\n**1. title='Belsay' author='L.J. Ross' series='DCI Ryan Mysteries' position='23' year='2021' publisher='Independently Published' isbn='9781999761009' language='en'**"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ]
+}

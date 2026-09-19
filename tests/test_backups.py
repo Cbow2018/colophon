@@ -141,6 +141,24 @@ class ExpiringTests(BackupsTestCase):
         self.assertEqual(sorted(path.name for path in deleted), ["One.epub", "Two.epub"])
         self.assertEqual(list(self.folder.iterdir()), [])
 
+    def test_it_never_deletes_the_hidden_files_it_shares_the_folder_with(self):
+        """The LLM call counter lives here, and clearing the folder is exactly
+        how it would disappear - which would hand every restart a fresh limit.
+        """
+        counter = self.folder / ".colophon-llm.json"
+        counter.write_text('{"date": "2020-01-01", "calls": 200}', encoding="utf-8")
+        age(counter, 400)
+        old = self.backups.keep(self.original("Old.epub"))
+        age(old, 400)
+
+        deleted = self.backups.expire()
+
+        self.assertEqual(deleted, (old,), "the counter is not something it cleared")
+        self.assertTrue(counter.exists())
+        self.assertEqual(
+            counter.read_text(encoding="utf-8"), '{"date": "2020-01-01", "calls": 200}'
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

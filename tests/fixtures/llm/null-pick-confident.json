@@ -1,0 +1,15 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"pick\": null, \"confidence\": 1.0, \"reason\": \"No candidate matches title 'Belsay' by LJ Ross; candidates are different books in the series.\"}"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ]
+}
