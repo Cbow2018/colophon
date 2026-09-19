@@ -263,7 +263,7 @@ correction; the reasoning is at the end of this note.*
 
 **Q3. What counts as a malformed reply.** → **`null`, all of these:** not JSON;
 missing or non-string content; `pick` not a real integer; `pick` out of range for
-the candidate list; `confidence` outside 0–1; and a reply with
+the candidate list; `confidence` missing or outside 0–1; and a reply with
 `finish_reason: "length"` even if its content happens to parse. Two Python traps
 were called out specifically and must be tested:
 
@@ -570,7 +570,8 @@ order the candidates are ranked in for Q3's out-of-range check.
 
 `null` for every case in Q3, including `finish_reason: "length"`, a boolean
 `pick`, a float `pick`, an out-of-range `pick` (logged at WARNING) and a
-`confidence` outside 0–1. A `null` pick is never applied even at confidence 1.0.
+`confidence` that is missing or outside 0–1. A `null` pick is never applied even
+at confidence 1.0.
 Errors are redacted before they reach a log or an exception, because DeepSeek
 echoes part of the key in its 401 body (§4).
 
@@ -689,7 +690,8 @@ with Berwick as a lookalike → `null`.
 
 Parsing tests, all from recorded replies or hand-made bodies: the Q3 list; a
 boolean `pick` (`{"pick": true}`); a float `pick` (`1.0`); `"1"` as a string; an
-out-of-range `pick`; `confidence` outside 0–1; `finish_reason: "length"` with
+out-of-range `pick`; a `confidence` that is missing or outside 0–1;
+`finish_reason: "length"` with
 parseable content; `pick: null` at `confidence: 1.0` (read
 `null-pick-confident.json`); a 401 whose body is a bare string rather than JSON;
 a 404 with an empty body.

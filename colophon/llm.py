@@ -450,7 +450,10 @@ def _choice(answer, candidates):
             )
             return None
 
-    confidence = answer.get("confidence", 0.0)
+    # No default: the contract object carries a confidence, so a reply without
+    # one is not the contract (Q3). Reading it as 0.0 would turn a model that
+    # forgot the field into one saying it is sure of nothing.
+    confidence = answer.get("confidence")
     if (
         isinstance(confidence, bool)
         or not isinstance(confidence, (int, float))

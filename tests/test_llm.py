@@ -641,10 +641,10 @@ class ParsingTests(LlmTestCase):
     def test_a_reply_that_is_a_json_array_rather_than_an_object_is_a_null(self):
         self.assertIsNone(self.choose("[1, 2]"))
 
-    def test_a_confidence_that_is_absent_is_read_as_zero(self):
-        choice = self.choose('{"pick": 1}')
-        self.assertEqual(choice.pick, 1)
-        self.assertEqual(choice.confidence, 0.0)
+    def test_a_confidence_that_is_absent_is_a_null(self):
+        """Q3: the contract object carries all three, so a reply without one is
+        not the contract - and a missing number is not the model saying zero."""
+        self.assertIsNone(self.choose('{"pick": 1}'))
 
 
 class RedactionTests(LlmTestCase):
