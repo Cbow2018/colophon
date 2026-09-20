@@ -870,10 +870,10 @@ class Corrector:
         return Decision(
             resolutions=standards.resolved,
             match=Match(
-                # The file's own title, not the record's: a book whose ISBN no
-                # source has is recognised by its title, and the title it is
-                # recognised by is the one the file carries.
-                book_key=book_key(found.isbn, book.title),
+                # The file's own title and authors, not the record's: a book
+                # whose ISBN no source has is recognised by those, and the ones
+                # it is recognised by are the ones the file carries.
+                book_key=book_key(found.isbn, book.title, book.authors),
                 source=found.source,
                 confidence=confidence,
                 matched_as=str(found.isbn or ""),

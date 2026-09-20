@@ -245,10 +245,24 @@ class NormalisingTests(unittest.TestCase):
 
         The failure this guards is the one the rule is one step away from: join
         every one-letter word to whatever follows it and half a title runs
-        together.
+        together. What stops it is that a one-letter word only joins a token
+        that is *already* initials — the `k` in `K. Le` has the word `ursula`
+        before it, so it never becomes one, and `le` is therefore never offered
+        anything to join.
         """
         self.assertEqual(normalise("I am here"), "i am here")
         self.assertEqual(normalise("Music by J. S. Bach"), "music by js bach")
+
+    def test_a_lone_initial_before_a_word_stays_on_its_own(self):
+        """`K.` is not a run, however short it is, so it takes nothing with it.
+
+        The trap this pins: by the time `le` is looked at, the token before it is
+        one letter long, and a rule that asked "is the token before me short?"
+        instead of "is the token before me a run?" would glue `Kle` together.
+        """
+        self.assertEqual(normalise("Ursula K. Le Guin"), "ursula k le guin")
+        self.assertEqual(normalise("Robert F. Jones"), "robert f jones")
+        self.assertEqual(normalise("J. R. R. Tolkien"), "jrr tolkien")
 
     def test_normalising_never_touches_the_value_it_was_given(self):
         """Symbols and accents are stripped for comparison, never for writing."""

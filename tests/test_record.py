@@ -175,19 +175,37 @@ class BookKeyTests(unittest.TestCase):
     """What a book is recognised by when it is looked up a second time."""
 
     def test_an_isbn_is_the_key(self):
-        self.assertEqual(book_key("9781521748831", "Anything"), "9781521748831")
+        self.assertEqual(book_key("9781521748831", "Anything", ("Anyone",)), "9781521748831")
 
-    def test_the_title_is_the_key_when_there_is_no_isbn(self):
-        self.assertEqual(book_key(None, "Cragside"), "cragside")
+    def test_the_title_and_author_are_the_key_when_there_is_no_isbn(self):
+        self.assertEqual(book_key(None, "Cragside", ("L.J. Ross",)), "cragside lj ross")
 
-    def test_two_books_with_no_isbn_are_not_one_book(self):
-        """A blank key would make the second book recorded overwrite the first."""
-        self.assertNotEqual(book_key(None, "Cragside"), book_key(None, "Berwick"))
+    def test_two_books_sharing_a_title_under_different_authors_are_two_books(self):
+        """Otherwise one overwrites the other, in a store nothing clears.
 
-    def test_the_key_ignores_how_the_title_is_spelt(self):
+        Two books called *The Infirmary* really exist — one by L.J. Ross and one
+        by Carly Reagon — and a title-only key would make the second match
+        replace the first's, silently, for good.
+        """
+        one = book_key(None, "The Infirmary", ("L.J. Ross",))
+        other = book_key(None, "The Infirmary", ("Carly Reagon",))
+
+        self.assertNotEqual(one, other)
+
+    def test_two_books_with_neither_an_isbn_nor_a_title_are_still_two(self):
+        """Both fall back to the author, which is all either of them has."""
+        self.assertNotEqual(book_key(None, None, ("A",)), book_key(None, None, ("B",)))
+
+    def test_the_key_ignores_how_the_name_or_the_title_is_spelt(self):
         self.assertEqual(
-            book_key(None, "J.R.R. Tolkien"), book_key(None, "JRR Tolkien")
+            book_key(None, "J.R.R. Tolkien", ("J. R. R. Tolkien",)),
+            book_key(None, "JRR Tolkien", ("JRR Tolkien",)),
         )
+
+    def test_it_is_made_of_what_the_book_has(self):
+        """A missing half is not a hole in the middle of the key."""
+        self.assertEqual(book_key(None, "Cragside", ()), "cragside")
+        self.assertEqual(book_key(None, None, ("L.J. Ross",)), "lj ross")
 
 
 class MatchTests(RecordTestCase):

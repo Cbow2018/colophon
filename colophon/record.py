@@ -375,22 +375,31 @@ class Record:
         self.connection.commit()
 
 
-def book_key(isbn, title):
+def book_key(isbn, title, authors=()):
     """What a book is recognised by when it is looked up again.
 
-    The ISBN when there is one, and the normalised title when there is not. The
-    title is the weaker key and is used only because the alternative is worse:
-    keying every ISBN-less book on a blank would make them all one book, so the
-    second one recorded would overwrite the first's match.
+    The ISBN when there is one, and otherwise the normalised title **and
+    author**. Both halves are load-bearing on the fallback:
+
+    * The title alone would make every ISBN-less book with a shared title one
+      book, and *The Infirmary* is two — one by L.J. Ross and one by Carly
+      Reagon. The higher-confidence rule would then let the second match quietly
+      replace the first's, in a store that is never cleared on its own.
+    * The author alone would do the same to a series, and to two authors with a
+      title each.
+    * Neither, which is a book that says nothing at all about itself, leaves the
+      author as the last thing that can tell two books apart.
 
     Two editions of one book carry different ISBNs and key separately, which is
     accepted for v1 — the consequence is that each can settle a spelling — and
-    a paperback and a hardback of one title under one spelling key together.
+    two editions that agree on title and author and have no ISBN key together.
     """
     isbn = str(isbn or "").strip()
     if isbn:
         return isbn
-    return normalise(title)
+    parts = [normalise(title)]
+    parts.extend(normalise(name) for name in authors or ())
+    return " ".join(part for part in parts if part)
 
 
 def _beats(match, held, priority):

@@ -303,10 +303,10 @@ def normalise(text):
     because initials are what a library spells inconsistently and the whole
     point is that `J.R.R. Tolkien` and `JRR Tolkien` come out the same. Written
     words never join, so `Ursula K. Le Guin` keeps its words and never becomes
-    `ursulakleguin`: a rule that joined every one-letter word to what followed it
-    would swallow half a title and would turn `I am` into `Iam`. Digits are left
-    alone for the same reason — a version string is not initials, and `1.0.0` is
-    `1 0 0`, not `10 0`.
+    `ursulakleguin`: a one-letter word only ever joins a run that is already
+    initials, never the word beside it. Digits are left alone for the same
+    reason — a version string is not initials, and `1.0.0` is `1 0 0`, not
+    `10 0`.
 
     This is for comparison only: the values written into a file are the source's
     own, symbols and accents and all. CBO-41 also keys the record's name
@@ -319,30 +319,27 @@ def normalise(text):
 def _join_initials(words):
     """The words, with each run of initials joined into one token.
 
-    A one-letter word joins its neighbour when the neighbour is a one-letter word
-    too and there is no word beyond it that is not one: `J. R. R.` is a run and
-    joins, while `K. Le` is an initial in front of a word and does not. A token
-    that has taken one initial stays eligible for another, which is what makes a
-    run of three come out as `jrr` rather than as `jr` and `r`.
+    A one-letter word joins the token before it **only when that token is itself
+    a one-letter run**; otherwise it starts a run of its own. That single
+    condition is the whole rule, and it is what tells `L. J. Ross` from `Ursula
+    K. Le Guin`: `j` joins the `l` beside it and makes a run, while the `k` in
+    `K. Le` has the word `ursula` before it and so never becomes one, which is
+    why `le` and `guin` keep their own letters. The same condition is what stops
+    `I am` becoming `Iam` — the `i` has nothing before it, and `am` is not a
+    one-letter run to join.
 
-    Each token is carried with whether the next one may join it. That flag is
-    only set by a run that had another single letter beside it, so `ab` in
-    `A B C` is joinable while `k` in `K. Le Guin` is not, even though both are
-    one letter long by the time the word after them is considered.
+    What a run may take next is fixed when it is born rather than recomputed: a
+    token carries whether it is a run, so a word that merely happens to be one
+    letter long by this point — `k` in `K. Le Guin` — cannot be mistaken for one
+    and swallow the word after it.
     """
     joined = []
-    for position, word in enumerate(words):
+    for word in words:
         single = _LETTER.fullmatch(word) is not None
-        before_joins = bool(joined) and joined[-1][1]
-        after_is_single = position + 1 < len(words) and (
-            _LETTER.fullmatch(words[position + 1]) is not None
-        )
-        if single and before_joins:
+        if single and joined and joined[-1][1]:
             joined[-1][0] += word
-        elif single and after_is_single:
-            joined.append([word, True])
         else:
-            joined.append([word, False])
+            joined.append([word, single])
     return [word for word, _ in joined]
 
 

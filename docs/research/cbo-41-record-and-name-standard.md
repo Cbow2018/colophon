@@ -223,15 +223,22 @@ Measured against the committed spellings:
 | `Ursula LeGuin` | `ursula leguin` | `ursula leguin` |
 | `1.0.0` | `1 0 0` | `1 0 0` |
 
-**Blast radius, measured against `git show HEAD:colophon/matching.py` rather than
+**Blast radius, measured against `main` with the shipped function rather than
 argued:** `normalise` is called on two things and only two — the file's cleaned
-title and the candidate's title — so every title in the fixture set was compared
-under both versions. **Not one moves.** The names that move are exactly the three
-the change is for. An earlier draft of this section quoted "6 of 394 strings"
-from a prototype whose word-splitting was wrong, which made the change look
-broader than it is and, worse, made a version string look safe when that
-prototype was still gluing `1.0.0` into `10 0`. The figure is corrected here
-because a number in a note is what the next session trusts.
+title and the candidate's title — so both were measured.
+
+- **0 of 28 title keys in the fixture set move**, and **0 of 36
+  file-title/candidate pairs** change their score or their `agrees` verdict. No
+  match the project already makes is decided differently.
+- **4 of 11 author spellings move**: `L.J. Ross` and `L. J. Ross` onto one key,
+  and `J.R.R. Tolkien` and `J. R. R. Tolkien` onto `JRR Tolkien`'s. Those four
+  are exactly the names the change is for.
+
+An earlier draft of this section quoted "6 of 394 strings" from a prototype whose
+word-splitting was wrong, which made the change look broader than it is and,
+worse, made a version string look safe when that prototype was still gluing
+`1.0.0` into `10 0`. The figure is corrected here because a number in a note is
+what the next session trusts.
 
 Two ordinary inputs that must **not** change, and are pinned by tests:
 
@@ -242,17 +249,31 @@ Two ordinary inputs that must **not** change, and are pinned by tests:
 ```
 
 The rule that gets all three right is narrower than "join runs of single
-letters", and this is the part worth reading before touching it:
+letters", and this is the part worth reading before touching it. **This is the
+rule as the code implements it, not as an earlier draft described it:**
 
-- **A one-letter word joins its neighbour only when that neighbour is also a
-  one-letter word, and only when there is no word beyond the pair that is not
-  one.** `J. R. R.` is a run and joins; `K. Le` is an initial in front of a word
-  and does not. The look-ahead is what stops `I am` becoming `Iam`.
-- **A run chains.** `J. R. R.` has to come out `jrr`, not `jr r`, so a token that
-  has already taken one initial is still eligible for the next.
+- **A one-letter word joins the token before it only when that token is itself a
+  one-letter run.** Otherwise it starts a run of its own. That one condition is
+  the whole rule and it carries every case: `L. J. Ross` joins because `j` finds
+  the run `l` beside it, while `Ursula K. Le Guin` does not, because the `k` has
+  the word `ursula` before it and so never becomes a run for `le` to join.
+- **A run is marked when it is born, not recomputed.** A token carries whether it
+  is a run, so a word that merely happens to be one letter long by this point —
+  `k` in `K. Le Guin` — cannot be mistaken for one and swallow the word after it.
+  This is the flag `_join_initials` keeps beside each token, and it is the only
+  thing that makes `ursula k le guin` and `i am here` come out as they do.
 - **A full stop between two letters is part of an initial; a full stop after a
   digit is a decimal point and one after a word is a sentence ending.** Both
   others are left as separators, which is what keeps `1.0.0` a version string.
+
+**An earlier draft of this note described a look-ahead instead** — "join only
+when the next word is also one letter" — and claimed it was what stopped `I am`
+becoming `Iam`. It is not, and the build exposed the draft as wrong rather than
+the code: the look-ahead was implemented, measured, and **removed**, because it
+changes no answer for any arrangement of one-letter and word-shaped tokens up to
+five long. What actually does the work is the rule above. The note is corrected
+rather than the code, because the simpler rule is the one that is right and the
+simpler rule is the one to keep.
 
 `normalise` also scores titles, so the change reaches the title half as well, and
 the 36 title-and-author pairs the project tests with all score exactly what they
@@ -637,7 +658,7 @@ CREATE TABLE names (
 );
 
 CREATE TABLE matches (
-    book_key   TEXT PRIMARY KEY, -- the ISBN, else the normalised title
+    book_key   TEXT PRIMARY KEY, -- the ISBN, else normalised title + author
     source     TEXT NOT NULL,    -- who matched it
     confidence REAL NOT NULL,    -- the match's own confidence
     matched_at TEXT NOT NULL,
@@ -890,11 +911,12 @@ smaller change than the note asked for rather than a larger one.
 
 1. **`colophon/matching.py`** — `normalise` joins runs of initials. The rule it
    settled on is narrower than "join runs of single letters", and the note's
-   "The normaliser change" section was rewritten from the built code: **a
-   one-letter word joins its neighbour only when the neighbour is a one-letter
-   word too and no non-one-letter word follows the pair**, a run chains, and a
-   full stop is taken out only between two letters. Without the look-ahead,
-   `I am` becomes `Iam`; without the digit guard, `1.0.0` becomes `10 0`.
+   "The normaliser change" section was rewritten twice: once from the built code,
+   and once more when a look-ahead the first draft described was measured and
+   found to change nothing. The shipped rule is the one in that section: **a
+   one-letter word joins the token before it only when that token is itself a
+   one-letter run**, and a token carries whether it is a run so a lone initial
+   before a word cannot be mistaken for one.
 2. **`colophon/record.py`** — the schema, `user_version`, `resolve`, `save`,
    `reset`, `names`, `standard`, `match`, `genres`, and `book_key`.
 3. **`colophon/config.py`** — `record_path` and `[authors]`, the latter keyed by
@@ -915,14 +937,8 @@ Tests: 638 in the suite, 2 skipped. New files are `tests/test_record.py` (33)
 and the record classes in `tests/test_correction.py`, `tests/test_relay.py`,
 `tests/test_config.py`, `tests/test_main.py` and `tests/test_matching.py`.
 
-### Four places the build is narrower than the note
+### Three places the build is narrower than the note
 
-- **`book_key` is the ISBN, else the normalised title — not "title and author".**
-  The note said both. The title alone is what the pass already has to hand and
-  what a file with no ISBN is looked up by, and two books sharing a title are
-  already separated by their matches rather than by this key. The stated
-  limitation stands: two editions of one book key separately because their
-  ISBNs differ.
 - **The `genres` table is never written**, as decided (Q7); the migration
   scaffold is a `user_version` guard and a comment marking where a step goes,
   rather than an empty list of steps. A first schema needs nothing to migrate
@@ -936,10 +952,44 @@ and the record classes in `tests/test_correction.py`, `tests/test_relay.py`,
   once by `main` (or by a test) and the connection is passed down as the note
   says; `Relay` closes nothing, because it did not open it.
 
+### Where the build first departed from the note, and was sent back
+
+`book_key` was built as the ISBN else the normalised **title only**, and review
+rejected it. The reasoning that produced the narrowing — "the ISBN alone makes
+every ISBN-less book one row" — argues for *adding* the title, not for dropping
+the author; and a title-only key collides where it matters, because *The
+Infirmary* is two books by two authors and the higher-confidence rule would let
+the second match silently replace the first's in a store nothing clears. It is
+now **ISBN, else normalised title + author**, with a test asserting two books
+sharing a title under different authors produce two rows, and another for the
+book that has neither an ISBN nor a title. The note's original wording was
+right and the build is what moved.
+
 ### What the note said that the build proved wrong
 
-One number, already corrected in place: the blast radius was "6 of 394 strings"
-from a prototype whose word-splitting was itself broken. Re-measured against
-`HEAD`'s `matching.py`, **no title key in the fixture set moves at all**, and the
-only names that move are the three Ross spellings and the Tolkien pair — which
-is what the change is for.
+Two things, both now corrected in place, with the numbers the review asked for:
+
+- **The blast radius was "6 of 394 strings"**, and that figure came from the
+  broken prototype — the one whose word-splitting concatenated whole
+  descriptions, and which therefore also made a version string look safe when it
+  was not. **The corrected measurement, taken against `main` with the shipped
+  `normalise`:**
+  - **0 of 28 distinct title keys** in the fixture set move. Every cleaned title
+    the fixtures contain keys exactly as it did before.
+  - **0 of 36 file-title/candidate pairs** change their score or their `agrees`
+    verdict. So no match the project already makes is decided differently.
+  - **4 of 11 author spellings move**: `L.J. Ross` and `L. J. Ross` onto each
+    other's key, and `J.R.R. Tolkien` and `J. R. R. Tolkien` onto `JRR Tolkien`'s.
+    Those four moving is the entire point of the change; nothing else does.
+- **The look-ahead rule the note described was dead code.** Implemented,
+  measured, and removed: it changes no answer for any arrangement of one-letter
+  and word-shaped tokens up to five long. The section above now states the rule
+  as the code implements it.
+
+**Where each number came from, since one of them was doubted:** the 0-of-36
+figure was never the prototype's. It comes from scoring the project's own
+file-title/candidate pairs with `score_candidate` under each `normalise`, which
+is a measurement of the shipping comparison and not of any rewritten helper. It
+has since been re-run against the built `normalise`, not the proposed one, and
+still reads 0 of 36. The only number the broken prototype produced was the
+"6 of 394", which is withdrawn.
