@@ -1027,7 +1027,7 @@ class Corrector:
                 if standards is not None
                 else None
             ),
-            genres=tuple(genres),
+            genres=genres,
         )
 
     def _edits(self, found, book, unverified=False):

@@ -324,24 +324,19 @@ def _genres(book):
     because that is the provenance and a later string is not a better account of
     it.
     """
+    tags = book.get("cached_tags") or {}
     found = []
     taken = set()
-    for entry in _genre_rows(book):
-        written = _text((entry or {}).get("tag"))
+    for entry in (tags.get("Genre") or []) if isinstance(tags, dict) else ():
+        if not isinstance(entry, dict):
+            continue
+        written = _text(entry.get("tag"))
         for part in genre_parts(written) if written else ():
             if part in taken:
                 continue
             taken.add(part)
             found.append((part, written))
     return tuple(found)
-
-
-def _genre_rows(book):
-    """The `Genre` entries in a work's `cached_tags`, in the order it lists them."""
-    tags = book.get("cached_tags") or {}
-    if not isinstance(tags, dict):
-        return []
-    return [row for row in tags.get("Genre") or [] if isinstance(row, dict)]
 
 
 def _candidates(editions):
