@@ -29,6 +29,55 @@ the edition has none.
 The ISBN the design spec uses for *Cragside*, 9781786813891, is not in Hardcover
 at all. *Cragside* is there as 9781521748831.
 
+## CBO-41: the author and series ids
+
+CBO-41 (Colophon's own record) needs to know whether the author of one book is
+the author of another. Comparing the two spellings cannot always answer that, so
+these recordings are the ISBN query widened to ask for `authors.id` and
+`series.id`.
+
+| File | ISBN | What it is | How |
+| --- | --- | --- | --- |
+| `by-isbn-cragside-authors.json` | 9781521748831 | *Cragside*, author id 318638 `L.J. Ross`, series id 23832 `DCI Ryan Mysteries` | recorded |
+| `by-isbn-berwick-authors.json` | 9781529978940 | *Berwick*, the same two ids | recorded |
+| `by-isbn-the-infirmary-authors.json` | 9781799729945 | *The Infirmary*, the same two ids | recorded |
+| `author-lj-ross.json` | — | the `authors` row itself: id 318638, `alternate_names: []`, `canonical_id: null`, `alias_id: null` | recorded |
+| `authors-spelling-variants.json` | — | three separate author rows for one person: 318638 `L.J. Ross`, 350233 `L. J. Ross`, 350235 `LJ Ross` | recorded |
+| `works-good-omens-authors.json` | — | one work called *Good Omens* spelt `Terry Pratchett`, another spelt `Terry David John Pratchett`, and a third with the two authors in a different order | recorded |
+
+Three DCI Ryan books carry the same author id and the same series id, which is
+what makes an id worth recording: it resolves **the same id under a different
+spelling**, the case `works-good-omens-authors.json` shows most plainly. It does
+**not** merge 318638, 350233 and 350235 — those are three separate rows for one
+human, and nothing in the API says they are related (`canonical_id` and
+`alias_id` are null on all three). Reconciling those is what `[authors]` in
+`config.toml` is for, and CBO-41's test says so rather than implying the id solves
+it.
+
+The id was first looked for in the `authors` root field, where **`_ilike` is
+refused** — `{"error":"ilike and related operations are not permitted on this
+server."}`, the same refusal CBO-36 found on titles — so only an exact `_eq` or
+an `_in` on a name works. That is why `authors-spelling-variants.json` names
+every spelling it asks about: there is no way to ask Hardcover for the rows whose
+name resembles a spelling, so a search for "any other spelling of this author" is
+not available and the three rows had to be asked for by name to be found.
+
+The three ISBNs were read from the replies already committed in
+`by-title-*.json`, so these recordings are about the same three books rather
+than about three new ones. *Belsay* is the fourth of those books and has no ISBN
+in its own recording, so it is not repeated here.
+
+**These six recordings are wider than the eleven above them**, which were made
+before the ids were asked for and therefore carry no `authors.id` or
+`series.id`. That is the same stated difference CBO-38's pair records: the
+fixtures show the queries as they were when they were recorded, and a client
+reading one of these must treat a missing id as absent rather than as a bug.
+
+No test reads these six yet. They were recorded in CBO-41's planning session,
+before any of that ticket's code exists, so that the note it produced argues from
+captured replies rather than from the docs — and so the session that builds the
+record has the same ids the live API gave.
+
 ## By ISBN — the query that walks from an edition to its work
 
 | File | ISBN | What it is | How |

@@ -72,6 +72,31 @@ where one would exercise the same branch, because the point of it is that the
 *reply* Google gave for a nonsense ISBN was three unrelated books and not an
 empty result. It is kept whole for the same reason every other body here is.
 
+## CBO-41: the spelling Google returns
+
+CBO-41 (Colophon's own record) has to decide what a name's standard spelling is,
+and Google Books is the second source it can take one from.
+
+| File | Query | What came back | How |
+| --- | --- | --- | --- |
+| `by-isbn-cragside-authors.json` | `isbn:9781521748831` | 1 volume, *Cragside*, author **`L. J. Ross`** — with a space between the initials, where Hardcover spells the same author `L.J. Ross` | recorded |
+
+The spelling is the whole finding: **the two sources disagree about the same
+author, and neither is wrong.** Google matched `inauthor:"LJ Ross"` (no stops, no
+space) and `inauthor:"L.J. Ross"` to the same two volumes and answered
+`"L. J. Ross"` both times, and an `inauthor:"L.J. Ross"` search across the author
+returned `"L. J. Ross"` on every volume. So Google does the punctuation
+normalising server-side and its own spelling is stable, exactly as CBO-37's note
+records.
+
+Two recordings of those two title searches were made and then **not kept**: both
+answers are `by-title-cragside.json` again — the same two volumes, the same
+fields, a different `etag`, which Google changes on every request — so keeping
+them would be two near-duplicate files for a property this README already
+states. `by-isbn-cragside-authors.json` overlaps `by-isbn-cragside.json` for the
+same reason, and is kept because CBO-41's research note quotes its author value
+directly rather than through a second file.
+
 ## What these replies do **not** contain
 
 **No usable series data.** `seriesInfo` is absent from every novel here, and

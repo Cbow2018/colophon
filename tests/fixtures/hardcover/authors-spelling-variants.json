@@ -1,0 +1,42 @@
+{
+  "data": {
+    "exact": [
+      {
+        "id": 350235,
+        "name": "LJ Ross",
+        "slug": "lj-ross-9c7bfe5a-c601-494d-897e-fc36460a4b10"
+      }
+    ],
+    "spaced": [
+      {
+        "id": 350233,
+        "name": "L. J. Ross",
+        "slug": "l-j-ross"
+      }
+    ],
+    "plain": [
+      {
+        "id": 806228,
+        "name": "Ross",
+        "slug": "ross"
+      }
+    ],
+    "many": [
+      {
+        "id": 350233,
+        "name": "L. J. Ross",
+        "slug": "l-j-ross"
+      },
+      {
+        "id": 318638,
+        "name": "L.J. Ross",
+        "slug": "lj-ross"
+      },
+      {
+        "id": 350235,
+        "name": "LJ Ross",
+        "slug": "lj-ross-9c7bfe5a-c601-494d-897e-fc36460a4b10"
+      }
+    ]
+  }
+}

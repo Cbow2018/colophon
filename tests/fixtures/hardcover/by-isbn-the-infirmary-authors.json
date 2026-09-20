@@ -1,0 +1,33 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9781799729945",
+        "isbn_10": "179972994X",
+        "title": "The Infirmary",
+        "book": {
+          "title": "The Infirmary",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 318638,
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 11,
+              "series": {
+                "id": 23832,
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
