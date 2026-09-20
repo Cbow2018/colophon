@@ -217,45 +217,48 @@ Measured against the committed spellings:
 | `LJ Ross` | `lj ross` | `lj ross` |
 | `Ross, L. J.` | `ross l j` | `ross lj` |
 | `J.R.R. Tolkien` | `j r r tolkien` | `jrr tolkien` |
+| `J. R. R. Tolkien` | `j r r tolkien` | `jrr tolkien` |
 | `JRR Tolkien` | `jrr tolkien` | `jrr tolkien` |
 | `Ursula K. Le Guin` | `ursula k le guin` | `ursula k le guin` |
+| `Ursula LeGuin` | `ursula leguin` | `ursula leguin` |
+| `1.0.0` | `1 0 0` | `1 0 0` |
 
-**Two implementation choices, both measured, both needing a nod rather than a
-decision** — they are refinements of the rule above and neither changes what it
-is for:
+**Blast radius, measured against `git show HEAD:colophon/matching.py` rather than
+argued:** `normalise` is called on two things and only two — the file's cleaned
+title and the candidate's title — so every title in the fixture set was compared
+under both versions. **Not one moves.** The names that move are exactly the three
+the change is for. An earlier draft of this section quoted "6 of 394 strings"
+from a prototype whose word-splitting was wrong, which made the change look
+broader than it is and, worse, made a version string look safe when that
+prototype was still gluing `1.0.0` into `10 0`. The figure is corrected here
+because a number in a note is what the next session trusts.
 
-1. **Digits are not collapsed.** "Runs of single letters" read literally as "runs
-   of single characters" turns `1.0.0` into `10 0` and `0.1.1.0.preview.2` into
-   `01 10 preview 2`. Those strings are version numbers in the source's own
-   metadata, and `normalise` is used on titles as well as names, so collapsing
-   them is a behaviour change nothing asked for. The rule skips anything that is
-   not a letter (`[^\W\d_]`), which on every committed fixture changes **the same
-   6 of 394 strings as the literal reading does** — the extra safety costs
-   nothing today and stops a version string being mangled later.
-2. **Only one separator is crossed, not two.** The collapsing happens over the
-   token list, so `J. R. R.` (spaces) collapses to `jrr` and `J.R.R.` (dots) also
-   gives `jrr`, because the dots are already gone by then. It stops there. A
-   tokeniser that treats every character as its own token — `\w` rather than
-   `\w+` — would let the run walk across the space and merge `Ursula K. Le Guin`
-   into `ursulakleguin`, and over a description it concatenates whole sentences;
-   measured, that variant changes **343 of 394** fixture strings. The word-shaped
-   tokeniser is the one to keep.
-
-**This is a change to `normalise`, so it touches the title comparison too, and
-that was measured rather than waved at.** Scoring every file title the project
-tests with against every candidate in every committed Hardcover title recording —
-36 pairs — **no score, and no `agrees` verdict, moves.** What it does change is a
-gap of the same shape the title half has been carrying:
+Two ordinary inputs that must **not** change, and are pinned by tests:
 
 ```
-file "J.R.R. Tolkien"  vs  record "JRR Tolkien"   title score 0.0 -> 1.0
+"Ursula K. Le Guin"       -> "ursula k le guin"      (never "ursulakleguin")
+"I am here"               -> "i am here"             (never "iam here")
+"1.0.0"                   -> "1 0 0"                 (never "10 0")
 ```
 
-Today that pair scores 0.0 on the title — `j r r tolkien` against `jrr tolkien` —
-and is carried entirely by the author. After the change it is an exact title, so
-the initial-spacing tolerance `_name` already gives authors is extended to titles
-as well. It is the same class of fix as the one this ticket needed, arriving
-through the same function.
+The rule that gets all three right is narrower than "join runs of single
+letters", and this is the part worth reading before touching it:
+
+- **A one-letter word joins its neighbour only when that neighbour is also a
+  one-letter word, and only when there is no word beyond the pair that is not
+  one.** `J. R. R.` is a run and joins; `K. Le` is an initial in front of a word
+  and does not. The look-ahead is what stops `I am` becoming `Iam`.
+- **A run chains.** `J. R. R.` has to come out `jrr`, not `jr r`, so a token that
+  has already taken one initial is still eligible for the next.
+- **A full stop between two letters is part of an initial; a full stop after a
+  digit is a decimal point and one after a word is a sentence ending.** Both
+  others are left as separators, which is what keeps `1.0.0` a version string.
+
+`normalise` also scores titles, so the change reaches the title half as well, and
+the 36 title-and-author pairs the project tests with all score exactly what they
+scored before — which follows from no title key moving. The one title-side pair
+of this shape, `J.R.R. Tolkien` against a record spelling it `JRR Tolkien`,
+already agrees through `_name` and is unaffected either way.
 
 **`matching._name` already does this, more aggressively, and needs no change.**
 The author half of the comparison runs names together entirely — `LJ Ross`,
@@ -264,10 +267,11 @@ The author half of the comparison runs names together entirely — `LJ Ross`,
 above and why the ticket's consistency problem was never about *matching*. It is
 about the spelling that gets **written**, which is the name key's job, and the
 name key needs a key that is stable and readable rather than a bag of characters.
-The two normalisers stay separate for that reason: `_name` decides whether two
-names are the same name, `normalise` decides what the standard is keyed by. The
-difference is real and worth stating: `Ursula LeGuin` matches `Ursula K. Le Guin`
-through `_name` (author score 1.0) and would not match it through `normalise`.
+The two normalisers stay separate for that reason, and the note that says so is
+in `record.py` beside the key function: **`_name` is for scoring and may
+over-merge; the record key is durable identity and must not.** The difference is
+concrete: `Ursula LeGuin` matches `Ursula K. Le Guin` through `_name` (author
+score 1.0) and would not match it through `normalise`.
 
 ### 3. The two sources spell the same author differently, and each is stable
 
