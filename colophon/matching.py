@@ -56,7 +56,14 @@ _GENERIC_SUBTITLE = re.compile(
     r"\b(mystery|mysteries|novel|thriller|story|stories|romance|crime|saga|detective)\b",
     re.IGNORECASE,
 )
-_WORDS = re.compile(r"\w+", re.UNICODE)
+_WORD = re.compile(r"(\w+)", re.UNICODE)
+# One letter, as opposed to one character: a digit on its own is not an initial.
+_LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
+# A full stop that sits between two letters, or after one at the end of a word,
+# is part of an initial. One after a digit is a decimal point, and one after a
+# closing bracket or quote ends a sentence; neither is touched.
+_INITIAL_DOT = re.compile(r"(?<=[^\W\d_])\.(?=[^\W\d_])")
+_TRAILING_DOT = re.compile(r"(?<=\b[^\W\d_])\.(?=\s|$)")
 
 
 @dataclass(frozen=True)
@@ -94,6 +101,12 @@ class Candidate:
     rule can write is here and defaults to None, which is how a source spells
     "I have nothing for this one" - a source with no publisher has not offered a
     blank one, and the two must not be written the same way.
+
+    `author_ids` and `series_id` are the source's own identities for the names
+    above them, in the same order, and they are **not values to write**: they
+    exist so the record can recognise a name it has already settled on when the
+    same source spells it differently. A source with no ids leaves them empty,
+    which is every Google Books match.
     """
 
     title: str | None
@@ -107,6 +120,8 @@ class Candidate:
     publisher: str | None = None
     date: str | None = None
     cover: str | None = None
+    author_ids: tuple = ()
+    series_id: int | str | None = None
 
 
 @dataclass(frozen=True)
@@ -284,10 +299,62 @@ def normalise(text):
     """Text stripped of everything that is spelling rather than substance.
 
     Case, punctuation and symbols all go, so `L. J. Ross`, `L.J. Ross` and
-    `lj ross` are one name. This is for comparison only: the values written
-    into a file are the source's own, symbols and accents and all.
+    `LJ Ross` are one name. A run of initials is then joined into one token,
+    because initials are what a library spells inconsistently and the whole
+    point is that `J.R.R. Tolkien` and `JRR Tolkien` come out the same. Written
+    words never join, so `Ursula K. Le Guin` keeps its words and never becomes
+    `ursulakleguin`: a one-letter word only ever joins a run that is already
+    initials, never the word beside it. Digits are left alone for the same
+    reason — a version string is not initials, and `1.0.0` is `1 0 0`, not
+    `10 0`.
+
+    This is for comparison only: the values written into a file are the source's
+    own, symbols and accents and all. CBO-41 also keys the record's name
+    standard by this, which is why its output has to be stable and readable —
+    see `colophon/record.py`, and `_name` below for why that one is separate.
     """
-    return " ".join(_WORDS.findall(str(text or "").casefold()))
+    return " ".join(_join_initials(_words(text)))
+
+
+def _join_initials(words):
+    """The words, with each run of initials joined into one token.
+
+    A one-letter word joins the token before it **only when that token is itself
+    a one-letter run**; otherwise it starts a run of its own. That single
+    condition is the whole rule, and it is what tells `L. J. Ross` from `Ursula
+    K. Le Guin`: `j` joins the `l` beside it and makes a run, while the `k` in
+    `K. Le` has the word `ursula` before it and so never becomes one, which is
+    why `le` and `guin` keep their own letters. The same condition is what stops
+    `I am` becoming `Iam` — the `i` has nothing before it, and `am` is not a
+    one-letter run to join.
+
+    What a run may take next is fixed when it is born rather than recomputed: a
+    token carries whether it is a run, so a word that merely happens to be one
+    letter long by this point — `k` in `K. Le Guin` — cannot be mistaken for one
+    and swallow the word after it.
+    """
+    joined = []
+    for word in words:
+        single = _LETTER.fullmatch(word) is not None
+        if single and joined and joined[-1][1]:
+            joined[-1][0] += word
+        else:
+            joined.append([word, single])
+    return [word for word, _ in joined]
+
+
+def _words(text):
+    """The words in the text, with the full stops that make initials taken out.
+
+    A full stop between two letters is part of an initial rather than a break, so
+    `J.R.R.` is one word; one after a digit is a decimal point and one at the end
+    of a sentence is an ending, and neither is touched. Every other kind of
+    punctuation is a break, and `_WORD.split` keeps the separators between the
+    groups it splits on, so the words are the odd-numbered parts. The text is
+    casefolded here, so every reader of these words compares the same thing.
+    """
+    cleaned = _INITIAL_DOT.sub("", _TRAILING_DOT.sub("", str(text or "").casefold()))
+    return _WORD.split(cleaned)[1::2]
 
 
 def _title_score(cleaned, title):
@@ -333,12 +400,18 @@ def _name(author):
     word characters are joined up as they came, which is what makes the stops
     and the spacing stop mattering: `L.J. Ross`, `L. J. Ross`, `LJ Ross` and
     `Ross, L. J.` all come out as `ljross`.
+
+    Deliberately separate from `normalise` and deliberately more aggressive: this
+    one runs the whole name together, so it also treats `Ursula LeGuin` and
+    `Ursula Le Guin` as one name. That is what a comparison wants — over-merging
+    costs one rejected candidate — while `normalise` is also the record's durable
+    key, where over-merging would write a spelling into a library for good.
     """
     text = str(author or "").casefold()
     surname, comma, given = text.partition(",")
     if comma:
         text = f"{given} {surname}"
-    return "".join(_WORDS.findall(text))
+    return "".join(_WORD.findall(text))
 
 
 def _split_subtitle(raw):

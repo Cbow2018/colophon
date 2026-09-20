@@ -10,6 +10,8 @@ from pathlib import Path
 
 import tomllib
 
+from colophon.matching import normalise
+
 DEFAULT_CONFIG_PATH = "/config/config.toml"
 
 # Endings that mean a download or copy is still in progress. Files whose names
@@ -23,6 +25,14 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 # takes its values from the first source that matches it. Leaving a name out is
 # how a source is disabled. The order is also the default order a user gets.
 KNOWN_SOURCES = ("hardcover", "google_books")
+
+# Where Colophon's own record lives: the SQLite file holding the author and
+# series spellings a library has settled on. It cannot live beside `config.toml`
+# because that folder is mounted read-only, so it goes in the backups folder,
+# which is the one place this program is already sure it can write and whose
+# cleanup leaves a dotted name alone. It should point at local disk: SQLite's
+# locking is unreliable over SMB or NFS.
+DEFAULT_RECORD_PATH = "/backups/.colophon.db"
 
 # The rules a metadata field can be given, in the order the design spec lists
 # them, and what each means: leave the file's value alone, write the source's
@@ -107,6 +117,15 @@ class Config:
     # `fill` or `overwrite`. Every field is present, so a rule is never missing
     # at the point it is applied.
     fields: tuple = FIELD_DEFAULTS
+    # The spellings the user insists on, as (normalised spelling, what to write)
+    # pairs: `[authors]` `"LJ Ross" = "L.J. Ross"`. The keys are normalised so
+    # that every way of writing one name reaches the same entry, and these beat
+    # whatever the record settled on — which is what lets a person fix a
+    # spelling in their library app and have it stick.
+    authors: tuple = ()
+    # Where the record is kept. See `DEFAULT_RECORD_PATH` for why it is not
+    # beside `config.toml`.
+    record_path: Path = Path(DEFAULT_RECORD_PATH)
     # Whether to add a cover to a book that has none. A book that already has
     # one keeps it: that is what the setting means, so there is no rule to set.
     add_cover: bool = True
@@ -163,6 +182,8 @@ def load_config(env=None):
     )
     values["sources"] = _to_sources(_setting(env, values, "sources", list))
     values["fields"] = _to_fields(values.pop("fields", {}))
+    values["authors"] = _to_authors(values.pop("authors", {}))
+    values["record_path"] = Path(_setting(env, values, "record_path", str))
     values["add_cover"] = _to_bool(
         _setting(env, values, "add_cover", bool), "add_cover"
     )
@@ -328,6 +349,46 @@ def _to_sources(value):
         repeated = next(name for name in sources if sources.count(name) > 1)
         raise ConfigError(f"sources names {repeated!r} more than once")
     return sources
+
+
+def _to_authors(given):
+    """The `[authors]` overrides, keyed by the normalised spelling of a name.
+
+    A name is written half a dozen ways across the sources and the files, and
+    the user should only have to name it once, so the key is `normalise`'s
+    output rather than the characters they typed. Two keys that normalise to the
+    same name are one name with two answers, and TOML gives no order to appeal
+    to — so which one won would be the parser's business, and it is refused
+    instead. A key that normalises to nothing is refused for the same reason: it
+    could never match a name at all.
+    """
+    if not isinstance(given, dict):
+        raise ConfigError('authors should be a table, e.g. [authors]\n"LJ" = "..."')
+
+    overrides = {}
+    written_as = {}
+    for key, value in given.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(
+                f'authors names {key!r} as {value!r}, which is not a spelling to '
+                "write; expected a non-empty string"
+            )
+        normalised = normalise(key)
+        if not normalised:
+            raise ConfigError(
+                f"authors has a key {key!r} that is not a name, so it could never "
+                "match one"
+            )
+        if normalised in overrides and overrides[normalised] != value:
+            raise ConfigError(
+                f"authors names {written_as[normalised]!r} and {key!r} as two "
+                f"different spellings, {overrides[normalised]!r} and {value!r}; "
+                "they are the same name, so which one wins would depend on the "
+                "order they were written in"
+            )
+        overrides[normalised] = value
+        written_as[normalised] = key
+    return tuple(overrides.items())
 
 
 def _to_fields(given):

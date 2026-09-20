@@ -17,6 +17,7 @@ from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.llm import Llm
 from colophon.matching import Candidate
+from colophon.record import AUTHOR, BY_NAME, Record
 from colophon.relay import Relay, RelayError
 from tests.opf import calibre_series, epub3_series, subjects
 from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, ISBN, write_epub
@@ -830,6 +831,117 @@ class ARealNoMatchThroughTheRelayTests(RelayTestCase):
         line = "\n".join(captured.output)
         self.assertIn(ISBN_THE_SPEC_NAMES, line, "the ISBN that was tried is named")
         self.assertIn("marked colophon:unverified", line)
+
+
+class RecordingWhatWasDeliveredTests(RelayTestCase):
+    """The record is written by the relay, and only for a book that arrived.
+
+    The corrector decides what a book settled on; the relay is what knows the
+    book reached the output folder. A correction that never landed must not
+    teach a standard, which is the whole reason the two are separate.
+    """
+
+    def setUp(self):
+        super().setUp()
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.record = Record.open(f"{folder.name}/.colophon.db")
+        self.addCleanup(self.record.close)
+        self.source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                author_ids=(318638,),
+                series="DCI Ryan Mysteries",
+                series_number="6",
+                language="en",
+                isbn=ISBN,
+            )
+        )
+        self.relay = Relay(
+            self.config,
+            record=self.record,
+            corrector=Corrector(
+                sources=[self.source],
+                backups=Backups(self.backups),
+                dry_run=False,
+                fetch=no_network,
+                record=self.record,
+            ),
+        )
+
+    def drop_a_book(self):
+        return write_epub(self.ingest / "Cragside.epub", AS_DOWNLOADED, version="2.0")
+
+    def standard(self, kind, source, key):
+        """The standard the record filed under one key, read from the table."""
+        row = self.record.connection.execute(
+            "SELECT standard FROM names WHERE kind = ? AND source = ? AND key = ?",
+            (kind, source, key),
+        ).fetchone()
+        return row["standard"] if row is not None else None
+
+    def recorded_match(self, book_key, column):
+        """One column of the match the relay wrote for a book, or None."""
+        row = self.record.connection.execute(
+            f"SELECT {column} FROM matches WHERE book_key = ?", (book_key,)
+        ).fetchone()
+        return row[column] if row is not None else None
+
+    def test_a_delivered_book_settles_the_spelling_the_library_will_use(self):
+        self.drop_a_book()
+
+        self.settle()
+
+        self.assertEqual(
+            self.standard(AUTHOR, BY_NAME, "lj ross"),
+            "L.J. Ross",
+            "recorded once the book was in the output folder",
+        )
+
+    def test_the_match_is_recorded_beside_the_names(self):
+        self.drop_a_book()
+
+        self.settle()
+
+        self.assertEqual(self.recorded_match(ISBN, "source"), "hardcover")
+
+    def test_a_dry_run_delivers_nothing_and_records_nothing(self):
+        self.config = Config(
+            ingest_dir=self.ingest,
+            output_dir=self.output,
+            backup_dir=self.backups,
+            dry_run=True,
+            stable_checks=2,
+        )
+        self.relay = Relay(
+            self.config,
+            record=self.record,
+            corrector=Corrector(
+                sources=[self.source],
+                backups=Backups(self.backups),
+                dry_run=True,
+                fetch=no_network,
+                record=self.record,
+            ),
+        )
+        self.drop_a_book()
+
+        self.settle()
+
+        self.assertEqual(self.record.names(), ())
+
+    def test_the_record_is_left_alone_when_the_book_could_not_be_moved(self):
+        """A book still in the ingest folder is not one the library has."""
+        self.drop_a_book()
+
+        with mock.patch(
+            "colophon.relay.copy_into_place", side_effect=OSError("no space left")
+        ):
+            self.settle()
+
+        self.assertEqual(self.record.names(), ())
 
 
 if __name__ == "__main__":

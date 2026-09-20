@@ -161,9 +161,108 @@ class NormalisingTests(unittest.TestCase):
 
     def test_normalise_keeps_the_words_apart(self):
         """Punctuation is a word break, not something to glue words with."""
-        self.assertEqual(normalise("L. J. Ross"), "l j ross")
-        self.assertEqual(normalise("L.J. Ross"), "l j ross")
-        self.assertEqual(normalise("Ross, L. J."), "ross l j")
+        self.assertEqual(normalise("L. J. Ross"), "lj ross")
+        self.assertEqual(normalise("L.J. Ross"), "lj ross")
+        self.assertEqual(normalise("Ross, L. J."), "ross lj")
+
+    def test_a_run_of_single_letters_is_one_token(self):
+        """`J.R.R. Tolkien` and `JRR Tolkien` are one name, however it is spaced.
+
+        The initials are what a library spells inconsistently; the surname is
+        not, so only the one-letter run is joined up.
+        """
+        for written in ("J.R.R. Tolkien", "J. R. R. Tolkien", "JRR Tolkien"):
+            with self.subTest(written=written):
+                self.assertEqual(normalise(written), "jrr tolkien")
+
+    def test_a_single_letter_run_stops_at_the_word_gap(self):
+        """`Le Guin` is two words; only the initials before it ever join up.
+
+        A tokeniser that made every character its own token would run across the
+        space and give `ursulakleguin`, which merges every multi-word name with
+        its unspaced spelling — and, over a description, concatenates sentences.
+        """
+        self.assertEqual(normalise("Ursula K. Le Guin"), "ursula k le guin")
+        self.assertEqual(normalise("Ursula LeGuin"), "ursula leguin")
+        self.assertNotEqual(
+            normalise("Ursula K. Le Guin"), normalise("Ursula LeGuin")
+        )
+
+    def test_digits_are_never_joined_up(self):
+        """A version string is not initials, and `1.0.0` must not become `10 0`.
+
+        The sources put version numbers in their own metadata, so this is a
+        title-side hazard rather than a name-side one.
+        """
+        self.assertEqual(normalise("1.0.0"), "1 0 0")
+        self.assertEqual(normalise("0.1.1.0.preview.2"), "0 1 1 0 preview 2")
+
+    def test_the_keys_the_name_standard_depends_on(self):
+        """The spellings CBO-41's record keys a standard by, pinned as a table.
+
+        A tweak to the normalising rules shows up here as a diff rather than as
+        two standards quietly merging — or a new one quietly appearing — in
+        someone's library. The first three have to be one key or the ticket's
+        consistency test only passes because of a config entry, and the last two
+        have to stay apart or the record merges two unrelated authors.
+
+        Measured against `git show HEAD:colophon/matching.py`: these three names
+        are the only strings in the whole fixture set whose key changes, and no
+        title in it moves at all.
+        """
+        keys = {
+            "L.J. Ross": "lj ross",
+            "L. J. Ross": "lj ross",
+            "LJ Ross": "lj ross",
+            "l-j-ross": "lj ross",
+            "Ross, L. J.": "ross lj",
+            "J.R.R. Tolkien": "jrr tolkien",
+            "J. R. R. Tolkien": "jrr tolkien",
+            "JRR Tolkien": "jrr tolkien",
+            "Ursula K. Le Guin": "ursula k le guin",
+            "Ursula LeGuin": "ursula leguin",
+            "Terry Pratchett": "terry pratchett",
+            "Terry David John Pratchett": "terry david john pratchett",
+            "O'Brien": "o brien",
+            "1.0.0": "1 0 0",
+            "0.1.1.0.preview.2": "0 1 1 0 preview 2",
+            # Titles, because `normalise` scores them too: these are the cleaned
+            # forms the corrector actually computes, and none of them may move.
+            "Cragside": "cragside",
+            "The DCI Ryan Mysteries": "the dci ryan mysteries",
+            "The Masque of the Red Death": "the masque of the red death",
+            "Good Omens": "good omens",
+            "The Hobbit": "the hobbit",
+            "Normal People": "normal people",
+            "Mistborn: The Final Empire": "mistborn the final empire",
+        }
+        for written, expected in keys.items():
+            with self.subTest(written=written):
+                self.assertEqual(normalise(written), expected)
+
+    def test_initials_do_not_swallow_the_word_after_them(self):
+        """`I am` is two words, and `K. Le` is an initial and a word.
+
+        The failure this guards is the one the rule is one step away from: join
+        every one-letter word to whatever follows it and half a title runs
+        together. What stops it is that a one-letter word only joins a token
+        that is *already* initials — the `k` in `K. Le` has the word `ursula`
+        before it, so it never becomes one, and `le` is therefore never offered
+        anything to join.
+        """
+        self.assertEqual(normalise("I am here"), "i am here")
+        self.assertEqual(normalise("Music by J. S. Bach"), "music by js bach")
+
+    def test_a_lone_initial_before_a_word_stays_on_its_own(self):
+        """`K.` is not a run, however short it is, so it takes nothing with it.
+
+        The trap this pins: by the time `le` is looked at, the token before it is
+        one letter long, and a rule that asked "is the token before me short?"
+        instead of "is the token before me a run?" would glue `Kle` together.
+        """
+        self.assertEqual(normalise("Ursula K. Le Guin"), "ursula k le guin")
+        self.assertEqual(normalise("Robert F. Jones"), "robert f jones")
+        self.assertEqual(normalise("J. R. R. Tolkien"), "jrr tolkien")
 
     def test_normalising_never_touches_the_value_it_was_given(self):
         """Symbols and accents are stripped for comparison, never for writing."""

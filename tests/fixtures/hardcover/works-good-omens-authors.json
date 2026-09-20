@@ -1,0 +1,56 @@
+{
+  "data": {
+    "books": [
+      {
+        "id": 2955939,
+        "title": "Good Omens",
+        "contributions": [
+          {
+            "contribution": "Author",
+            "author": {
+              "id": 1566154,
+              "name": "Terry David John Pratchett",
+              "slug": "terry-david-john-pratchett"
+            }
+          }
+        ]
+      },
+      {
+        "id": 315038,
+        "title": "Good Omens",
+        "contributions": [
+          {
+            "contribution": "Author",
+            "author": {
+              "id": 227859,
+              "name": "Terry Pratchett",
+              "slug": "terry-pratchett"
+            }
+          },
+          {
+            "contribution": "Author",
+            "author": {
+              "id": 106235,
+              "name": "Neil Gaiman",
+              "slug": "neil-gaiman"
+            }
+          }
+        ]
+      },
+      {
+        "id": 438096,
+        "title": "Good Omens",
+        "contributions": [
+          {
+            "contribution": "Author",
+            "author": {
+              "id": 227859,
+              "name": "Terry Pratchett",
+              "slug": "terry-pratchett"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

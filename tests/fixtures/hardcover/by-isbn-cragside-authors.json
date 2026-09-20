@@ -1,0 +1,33 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9781521748831",
+        "isbn_10": "1521748837",
+        "title": "Cragside",
+        "book": {
+          "title": "Cragside",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 318638,
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 6,
+              "series": {
+                "id": 23832,
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

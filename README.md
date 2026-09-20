@@ -41,6 +41,12 @@ through untouched.
 - Writes into the output folder under a hidden temporary name and renames it
   only once the copy is complete, so your library app cannot import a partial
   file
+- Keeps its own record of the author and series spellings your library has
+  settled on, in a SQLite file, so one author is not spelt two ways across the
+  shelf: the first source to match an author fixes the spelling and every later
+  book by that author is given the same one. `[authors]` in `config.toml`
+  overrides it, and it is never cleared on its own — `python -m colophon
+  --reset-record` empties it, and asks before it does
 - Never overwrites: an identical book already in output means the new copy goes
   to the backups folder; a *different* book of the same name is saved as
   `Name (2).epub`
@@ -311,6 +317,7 @@ the same name in capitals, prefixed with `COLOPHON_`:
 | `llm_key_file` | `COLOPHON_LLM_KEY_FILE` | `/run/secrets/llm_key` |
 | `llm_daily_limit` | `COLOPHON_LLM_DAILY_LIMIT` | `200` |
 | `add_cover` | `COLOPHON_ADD_COVER` | `true` |
+| `record_path` | `COLOPHON_RECORD_PATH` | `/backups/.colophon.db` |
 | `confidence` | `COLOPHON_CONFIDENCE` | `0.85` |
 | `dry_run` | `COLOPHON_DRY_RUN` | `true` |
 | `poll_seconds` | `COLOPHON_POLL_SECONDS` | `5` |
@@ -319,7 +326,22 @@ the same name in capitals, prefixed with `COLOPHON_`:
 | `log_level` | `COLOPHON_LOG_LEVEL` | `INFO` |
 
 The `[fields]` table has no environment variable: it is nine keys, and nine
-environment variables would be a worse way to set them.
+environment variables would be a worse way to set them. `[authors]` is a table
+for the same reason: it says which spelling to write for a name the sources
+disagree about, and every way of writing that name reaches the same entry.
+
+The record is the one file Colophon writes that is not a book. It holds the
+author and series spellings your library has settled on, which is why
+`record_path` should point at local disk: SQLite's locking is unreliable over
+SMB or NFS. It is never cleared on its own. To start the standards again:
+
+```
+python -m colophon --reset-record          # asks first
+python -m colophon --reset-record --yes    # for a script
+```
+
+It empties the record and nothing else: books already in your library keep the
+spellings they were given, because rewriting a shelf is a different job.
 
 The keys themselves never go in any of these: `hardcover_token_file` and
 `google_books_key_file` are *paths* to the secrets, not the secrets.

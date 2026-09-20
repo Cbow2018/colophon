@@ -26,6 +26,7 @@ from colophon.epub import EpubError, read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.matching import Candidate
+from colophon.record import AUTHOR, BY_NAME, Record
 from colophon.sources import SourceError
 from tests.coverimage import COVER as COVER_FIXTURE
 
@@ -3083,6 +3084,224 @@ class FragmentsTests(CorrectionTestCase):
 
         self.assertIn("changed", fragment)
         self.assertNotIn("would change", fragment)
+
+
+class RecordTests(CorrectionTestCase):
+    """What the record does to a correction, and what a correction does to it.
+
+    The ticket's consistency criterion, driven through the pass that writes the
+    files rather than through the record alone: a library is only consistent if
+    the books on the shelf are.
+    """
+
+    def record(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        opened = Record.open(f"{folder.name}/.colophon.db")
+        self.addCleanup(opened.close)
+        return opened
+
+    def standard(self, record, kind, source, key):
+        """The standard the record filed under one key, read from the table."""
+        row = record.connection.execute(
+            "SELECT standard FROM names WHERE kind = ? AND source = ? AND key = ?",
+            (kind, source, key),
+        ).fetchone()
+        return row["standard"] if row is not None else None
+
+    def deliver(self, path, record, **kwargs):
+        """Correct a book the way the relay does, record write and all.
+
+        The corrector decides and the relay persists, so a test that wants the
+        record to have learnt something has to do both halves. Doing the second
+        half here is what makes these the same assertions the running program
+        makes, rather than a shortcut through an interface nothing calls.
+        """
+        outcome = self.corrector(record=record, **kwargs).correct(path)
+        if outcome.decision is not None:
+            record.save(
+                outcome.decision.resolutions,
+                match=outcome.decision.match,
+            )
+        return outcome
+
+    def source_saying(self, authors, author_ids=(), series="DCI Ryan Mysteries"):
+        return FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=authors,
+                author_ids=author_ids,
+                series=series,
+                series_number="6",
+                language="en",
+                isbn=ISBN,
+            )
+        )
+
+    def test_a_matched_book_is_recorded_under_the_standard_it_was_given(self):
+        record = self.record()
+
+        self.deliver(
+            self.book(), record, source=self.source_saying(("L.J. Ross",), (318638,))
+        )
+
+        self.assertEqual(self.standard(record, AUTHOR, BY_NAME, "lj ross"), "L.J. Ross")
+
+    def test_the_second_book_by_that_author_gets_the_same_spelling(self):
+        """The file says `L. J. Ross`; the shelf has already settled on `L.J. Ross`."""
+        record = self.record()
+        self.deliver(
+            self.book("First.epub"),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+        )
+
+        self.deliver(
+            self.book("Second.epub"),
+            record,
+            source=self.source_saying(("L. J. Ross",), (350233,)),
+        )
+
+        self.assertEqual(read(self.folder / "Second.epub").authors, ("L.J. Ross",))
+
+    def test_a_new_row_is_anchored_to_the_standard_it_resolved_to(self):
+        """So the next book from that row is recognised by its id alone."""
+        record = self.record()
+        self.deliver(
+            self.book("First.epub"),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+        )
+
+        self.deliver(
+            self.book("Second.epub"),
+            record,
+            source=self.source_saying(("L. J. Ross",), (350233,)),
+        )
+
+        self.assertEqual(
+            self.standard(record, AUTHOR, "hardcover", "350233"), "L.J. Ross"
+        )
+
+    def test_an_override_beats_the_recorded_standard(self):
+        record = self.record()
+        self.deliver(
+            self.book("First.epub"),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+        )
+
+        self.deliver(
+            self.book("Second.epub"),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+            overrides={"lj ross": "L J Ross"},
+        )
+
+        self.assertEqual(read(self.folder / "Second.epub").authors, ("L J Ross",))
+        self.assertEqual(
+            self.standard(record, AUTHOR, BY_NAME, "lj ross"),
+            "L.J. Ross",
+            "and the record is left as it was",
+        )
+
+    def test_a_dry_run_records_nothing(self):
+        """It writes nothing to a book, so it must not write a standard either."""
+        record = self.record()
+
+        self.deliver(
+            self.book(),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+            dry_run=True,
+        )
+
+        self.assertEqual(record.names(), ())
+
+    def test_a_corrector_with_no_record_still_corrects(self):
+        """The record is optional: a pass without one behaves as it always did."""
+        outcome = self.corrector(
+            source=self.source_saying(("L.J. Ross",), (318638,))
+        ).correct(self.book())
+
+        self.assertTrue(outcome.applied)
+        self.assertEqual(read(self.folder / "Cragside.epub").authors, ("L.J. Ross",))
+
+    def test_a_book_nothing_matched_records_nothing(self):
+        record = self.record()
+
+        self.deliver(
+            self.book(), record, source=FakeSource(found=None, candidates=[])
+        )
+
+        self.assertEqual(record.names(), ())
+
+    def test_a_rewrite_the_file_refused_records_nothing(self):
+        """The book that reaches the library is the one it arrived as.
+
+        `epub.correct` decides everything before it writes anything, so a book
+        whose rewrite is refused is untouched - and a standard learnt from the
+        spelling this pass chose would be one nothing on the shelf has. The
+        rewrite is the only call that fails: answering the "what would move"
+        question still works, which is what puts the pass on the writing branch.
+        """
+        record = self.record()
+        real = colophon_epub.correct
+
+        def refuse_the_write(path, edits, write=True, **kwargs):
+            if write:
+                raise EpubError("the file will not take it")
+            return real(path, edits, write=False, **kwargs)
+
+        with mock.patch.object(colophon_epub, "correct", side_effect=refuse_the_write):
+            self.deliver(
+                self.book(), record, source=self.source_saying(("L.J. Ross",), (318638,))
+            )
+
+        self.assertEqual(record.names(), ())
+
+    def test_the_series_is_standardised_the_same_way_an_author_is(self):
+        record = self.record()
+        self.deliver(
+            self.book("First.epub"),
+            record,
+            source=self.source_saying(
+                ("L.J. Ross",), (318638,), series="DCI Ryan Mysteries"
+            ),
+        )
+
+        self.deliver(
+            self.book("Second.epub"),
+            record,
+            source=self.source_saying(
+                ("L.J. Ross",), (318638,), series="DCI RYAN MYSTERIES"
+            ),
+        )
+
+        self.assertEqual(read(self.folder / "Second.epub").series, "DCI Ryan Mysteries")
+
+    def test_an_author_override_does_not_reach_the_series(self):
+        """`[authors]` is a table of author spellings; a series is not an author.
+
+        A key only collides with a series name because both are resolved through
+        the same normaliser, so a user writing an author's name twice cannot be
+        taken to have asked for the series to be renamed with it.
+        """
+        record = self.record()
+
+        self.deliver(
+            self.book(),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+            overrides={"dci ryan mysteries": "L J Ross"},
+        )
+
+        self.assertEqual(
+            read(self.folder / "Cragside.epub").series,
+            "DCI Ryan Mysteries",
+            "the series as the source spelt it",
+        )
 
 
 if __name__ == "__main__":
