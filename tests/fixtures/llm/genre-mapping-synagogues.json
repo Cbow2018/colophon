@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"genre\": null, \"reason\": \"\\\"Synagogues\\\" is a topic/place, not a genre; no allowed genre fits.\"}",
+        "reasoning_content": "The source genre is \"Synagogues\" which is not a genre in the allowed list. No allowed genre fits. Answer null.\n\nReason: \"Synagogues\" is a topic/place, not a fiction genre; no match."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 186,
+    "completion_tokens": 79,
+    "total_tokens": 265,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 48
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 186
+  }
+}

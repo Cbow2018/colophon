@@ -87,6 +87,47 @@ before any of that ticket's code exists, so that the note it produced argues fro
 captured replies rather than from the docs — and so the session that builds the
 record has the same ids the live API gave.
 
+## CBO-42: the genres
+
+CBO-42 (genre mapping) maps a source's genres onto the user's own tag list, so a
+library does not collect `Murder`, `Crime`, `Thriller` and `Mystery` as four tags
+for one kind of book. Hardcover keeps genres in `books.cached_tags`, reached from
+a work, so these are the **ISBN query widened to ask for `cached_tags`** —
+recorded with the shipped query plus that one field, so a test can replay them
+through a real `Hardcover` client.
+
+| File | ISBN | What it is | How |
+| --- | --- | --- | --- |
+| `by-isbn-9781521748831-genres.json` | 9781521748831 | *Cragside*, Genre `Murder`, `Crime`, `Thriller`, `Mystery` | recorded |
+| `by-isbn-9781799729945-genres.json` | 9781799729945 | *The Infirmary*, Genre `Thriller`, `Crime`, `Suspense`, `Mystery` | recorded |
+| `by-isbn-9781529978940-genres.json` | 9781529978940 | *Berwick*, Genre **`Fiction`** alone | recorded |
+| `by-isbn-9780575064843-packed-genres.json` | 9780575064843 | *Pyramids*, ten Genre tags including the packed `Fantasy:Humour` and `Humor` beside `Humour` | recorded |
+| `by-isbn-9781529196382-packed-genres.json` | 9781529196382 | *The Trial*, Genre `Mystery`, `Thriller & Suspense:Crime Fiction`, `Fiction` | recorded |
+| `by-isbn-9781473225374-genres.json` | 9781473225374 | `{"data": {"editions": []}}` with `cached_tags` asked for | recorded |
+
+`cached_tags` has four keys — `Tag`, `Mood`, `Genre` and `Content Warning` — and
+only `Genre` is a genre; `Mood` is `dark`, `fast-paced` and so on. The
+`tag_categories` root field, asked separately, says `Genre` is id 1 and that mood,
+pace and content warnings are other categories. **`cached_tags` is asked for
+whole** because a jsonb column's inner keys are not selectable one at a time, so
+`_genres` picks `Genre` out of the reply.
+
+The two `packed-genres` recordings are the ones worth reading. A genre string is
+sometimes a **BISAC path** (`Fantasy:Humour`,
+`Thriller & Suspense:Crime Fiction`) and sometimes, in an earlier probe, a
+**semicolon list** (`Classics; Fantasy; Horror`) — so the client splits on `:` and
+`;` before asking about anything. No recording of the semicolon shape is kept: the
+works carrying it have no ISBNs on their editions, and reaching one through the
+title query costs a 120 KB reply of unrelated editions.
+
+The first three are the ticket's own case in miniature: four genres that mean one
+thing, and one book whose only genre is `Fiction`. `Berwick` is why a `null` from
+the model is the right answer rather than a failure.
+
+**These six are the only recordings here that ask for genres**, so a recording
+made before CBO-42 has no `cached_tags` at all and a client must read that as
+absent rather than as a bug — the same stated difference as the ids above.
+
 ## By ISBN — the query that walks from an edition to its work
 
 | File | ISBN | What it is | How |

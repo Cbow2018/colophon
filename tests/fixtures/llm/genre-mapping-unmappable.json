@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"genre\": null, \"reason\": \"Source is a character heading, not a genre.\"}",
+        "reasoning_content": "We need answer JSON only. Source genre is \"Finlay-Ryan, Maxwell (Fictitious character)\" This is not a genre, it's a character heading maybe. Need map to allowed genre or null. No allowed genre fits. Need reply {\"genre\": null, \"reason\": \"...\"} short. Must be JSON object only. Reason short. Ensure no extra."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 194,
+    "completion_tokens": 97,
+    "total_tokens": 291,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 76
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 194
+  }
+}

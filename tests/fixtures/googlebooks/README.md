@@ -136,6 +136,34 @@ nothing else, because that is what Google answered.
 the two files carry a blurb, and the 1084-character one is byte-for-byte what
 Hardcover has for the same book.
 
+## CBO-42: `categories`, which the shipped mask no longer asks for
+
+CBO-42 (genre mapping) needs Google's genres, and they are `volumeInfo.categories`.
+The CBO-37 recording above, `by-title-cragside.json`, was made through an older
+request and **already carries them** — its two volumes are CBO-42's two cases in
+one file:
+
+```
+7kMMzgEACAAJ  'Cragside'  ->  categories: ['Finlay-Ryan, Maxwell (Fictitious character)']
+RASDtAEACAAJ  'Cragside'  ->  categories: ['Murder']
+```
+
+One is a library subject heading — a character, not a genre — and the other is a
+genre. **The shipped `FIELDS` mask returns neither**: it enumerates the fields to
+return, and `items/volumeInfo/categories` is not among them, so the field is
+absent from every reply the current client gets. CBO-42 appends it to the mask.
+
+| File | Query | What came back | How |
+| --- | --- | --- | --- |
+| `isbn-cragside-categories.json` | `isbn:9781521748831`, the shipped mask with `items/volumeInfo/categories` appended | 1 volume, *Cragside*, `categories: ["Murder"]` | recorded |
+
+Two volumes disagreeing about one book's genre is not a defect to fix: the
+character heading is Google's own catalogue data, and the same probe shows the
+genre path is best-effort by nature. Google's ISBN query is a relevance search, so
+`isbn:9781799729945` answered with no item at all and `isbn:9781529978940` answered
+with a volume titled *Raby* — `by_isbn` already filters those out by identifier,
+and a book Google cannot confirm simply has no genres to map.
+
 ## Failures
 
 | File | Status | What it is |

@@ -45,3 +45,48 @@ The candidates in the three contract recordings are the real Hardcover records f
 numbers them. The prompt carries each candidate's title, authors, series, series
 position, year, publisher, ISBN and language, and deliberately does **not** carry
 the source the record came from.
+
+## CBO-42: genre mapping
+
+CBO-42 asks the same endpoint a different question — which of the user's allowed
+genres this one source genre is, or none of them — and these are its recordings.
+Unlike the four above, **these are read by tests.**
+
+Two prompt shapes were recorded, and which is which matters:
+
+| File | The request | The reply | How |
+| --- | --- | --- | --- |
+| `genre-mapping-murder.json` | `Murder`, allowed list holding `Crime` too | `{"genre": "Crime", …}` | recorded |
+| `genre-mapping-case.json` | `crime`, lower-cased | `{"genre": "Crime", …}` | recorded |
+| `genre-mapping-packed.json` | `Fantasy:Humour`, a packed BISAC path | `{"genre": "Fantasy", …}` | recorded |
+| `genre-mapping-fiction.json` | `Fiction` | `{"genre": null, …}` | recorded |
+| `genre-mapping-synagogues.json` | `Synagogues` | `{"genre": null, …}` | recorded |
+| `genre-mapping-unmappable.json` | `Finlay-Ryan, Maxwell (Fictitious character)` | `{"genre": null, …}` | recorded |
+| `genre-mapping-empty-allowed.json` | `Murder`, allowed list empty | `{"genre": null, …}` | recorded |
+| `genre-mapping-batch.json` | four genres in one object (**rejected shape**) | partial JSON, `finish_reason: length` | recorded |
+| `genre-mapping-truncated.json` | four genres, no shared vocabulary (**rejected shape**) | `finish_reason: length`, empty body | recorded |
+
+The first seven are the shape the shipped `Llm.map_genre` sends: **one genre per
+call**. The last two are the shape it does **not** send, kept as the evidence
+against it — the batch object straddled the 256-token cap in two runs out of five
+at only four genres, and a truncated reply is a `null` under CBO-40's rule, so a
+book would silently get no genres. `genre-mapping-batch.json` is one of those
+truncated replies: it carries **partial JSON with `finish_reason: length`**, which
+is exactly why the parser must not read it. Do not "fix" it into a complete
+answer.
+
+`usage` **is** kept in these nine, unlike the four above. The completion and
+reasoning token counts are the whole reason the batch shape was rejected and
+CBO-42's note quotes them; `id`, `created` and `system_fingerprint` are still
+removed, as they differ on every request.
+
+The allowed list in every recording but `genre-mapping-empty-allowed.json` is
+`["Crime", "Mystery", "Thriller", "Historical Fiction", "Science Fiction",
+"Fantasy"]`, and `genre-mapping-murder.json` is the one that shows the model's
+judgement rather than an echo: `Murder` is on that list too, and it answers
+`Crime` as the nearer allowed word.
+
+`genre-mapping-fiction.json` is the one to read before changing the drop rule.
+`Fiction` is *Berwick*'s only source genre, and the model answers `null` — a
+correct answer that leaves the book with no genres at all. A null is a success,
+not a failure, and the two must not be made to look alike in the log.

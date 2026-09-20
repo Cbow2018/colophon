@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"genre\": \"Fantasy\", \"reason\": \"Source genre's primary component 'Fantasy' matches an allowed genre.\"}",
+        "reasoning_content": "The source genre is \"Fantasy:Humour\". The allowed list includes \"Fantasy\". So map to Fantasy.\n\nReply JSON only."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 188,
+    "completion_tokens": 55,
+    "total_tokens": 243,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 28
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 188
+  }
+}

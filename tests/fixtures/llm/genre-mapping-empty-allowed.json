@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"genre\": null, \"reason\": \"The allowed genre list is empty, so no genre can be mapped.\"}",
+        "reasoning_content": "The allowed list is empty. So no allowed genre fits. Answer null."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 160,
+    "completion_tokens": 40,
+    "total_tokens": 200,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 15
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 160
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"genre\": null, \"reason\": \"Source genre 'Fiction' is too broad to map to a specific allowed genre.\"}",
+        "reasoning_content": "The source genre \"Fiction\" is too broad to map to any specific allowed genre. So null."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 185,
+    "completion_tokens": 49,
+    "total_tokens": 234,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 21
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 185
+  }
+}

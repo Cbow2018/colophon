@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"map\": [{\"source\": \"Murder\", \"genre\": \"Crime\", \"reason\": \"Murder is a subset of crime\"}, {\"source\": \"Crime\", \"genre\": \"Crime\", \"reason\": \"Exact match\"}, {\"source\": \"Thriller\", \"genre\": \"Thriller\", \"reason\": \"Exact match\"}, {\"source\": \"Mystery\", \"genre\": \"Mystery\", \"reason",
+        "reasoning_content": "The user wants mapping. Source: \"Murder\", \"Crime\", \"Thriller\", \"Mystery\".\n\nMurder — no allowed genre \"Murder\". Could map to Crime? Hmm. Murder is a theme, not a genre in allowed list. Closest allowed... Crime? Murder is a crime. But instruction: never invent a genre, map onto allowed list. Murder could reasonably map to \"Crime\". I think mapping Murder → Crime is reasonable. Alternatively null. I'll map to Crime with reason \"murder is a crime\". Hmm, but is it too loose? The allowed list includes Crime. Murder is a subset of crime. I'll say Crime.\n\nOthers: Crime→Crime, Thriller→Thriller, Mystery→Mystery."
+      },
+      "logprobs": null,
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 211,
+    "completion_tokens": 256,
+    "total_tokens": 467,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 161
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 211
+  }
+}
