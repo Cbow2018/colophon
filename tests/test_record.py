@@ -1,0 +1,341 @@
+"""The record: the spellings a library settles on, and the matches behind them."""
+
+import os
+import unittest
+
+from colophon.record import AUTHOR, BY_NAME, SERIES, Match, Record, RecordError
+from tests.tempdir import TemporaryDirectory
+
+HARDCOVER = "hardcover"
+GOOGLE = "google_books"
+
+# The three rows Hardcover holds for one person, and the two ids for a second.
+LJ = "L.J. Ross"
+SPACED = "L. J. Ross"
+PLAIN = "LJ Ross"
+ROSS_ID = 318638
+SPACED_ID = 350233
+PLAIN_ID = 350235
+
+
+class RecordTestCase(unittest.TestCase):
+    def setUp(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.path = f"{folder.name}/.colophon.db"
+        self.record = Record.open(self.path)
+        self.addCleanup(self.record.close)
+
+    def resolve(self, names, source=HARDCOVER, identities=(), overrides=None):
+        return self.record.resolve(
+            AUTHOR, names, source, identities=identities, overrides=overrides
+        )
+
+    def spellings(self, names, **kwargs):
+        return [found.spelling for found in self.resolve(names, **kwargs)]
+
+
+class FirstSightTests(RecordTestCase):
+    def test_a_new_author_keeps_the_spelling_its_source_gave(self):
+        self.assertEqual(self.spellings((LJ,)), [LJ])
+
+    def test_nothing_is_written_until_the_book_lands(self):
+        """Resolving is a question, not a decision; only saving changes anything."""
+        self.resolve((LJ,))
+
+        self.assertEqual(self.record.names(), ())
+
+    def test_saving_files_the_standard_under_the_name(self):
+        resolutions = self.resolve((LJ,))
+        self.record.save(resolutions)
+
+        self.assertEqual(self.record.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+
+    def test_what_the_source_wrote_is_kept_beside_the_standard(self):
+        """The standard and the spelling that produced it, kept together.
+
+        Where they differ is what tells a standard apart from the spelling that
+        happened to arrive, which is the question a person asks when their
+        library says `L.J. Ross` and the book they dropped in said something
+        else.
+        """
+        self.record.save(self.resolve((LJ,)))
+
+        self.record.save(
+            self.resolve((PLAIN,), overrides={"lj ross": "L J Ross"})
+        )
+
+        rows = {
+            (source, key): (standard, seen)
+            for _, source, key, standard, seen in self.record.names()
+        }
+        self.assertEqual(
+            rows[(BY_NAME, "lj ross")], (LJ, LJ), "the first spelling, and the standard"
+        )
+
+
+class ConsistencyTests(RecordTestCase):
+    """The ticket's own acceptance test, and the two ways it can be satisfied."""
+
+    def test_a_name_already_recorded_is_reused_across_sources(self):
+        """Hardcover sets `L.J. Ross`; Google Books spells it `L. J. Ross`."""
+        self.record.save(self.resolve((LJ,)))
+
+        self.assertEqual(self.spellings((SPACED,), source=GOOGLE), [LJ])
+
+    def test_the_three_hardcover_rows_reach_one_standard_by_name(self):
+        """All three spellings normalise to one key, so no config is needed."""
+        self.record.save(self.resolve((LJ,), identities=(ROSS_ID,)))
+
+        self.assertEqual(
+            self.spellings((SPACED, PLAIN), identities=(SPACED_ID, PLAIN_ID)),
+            [LJ, LJ],
+        )
+
+    def test_a_second_book_by_a_recorded_author_keeps_its_spelling(self):
+        """The standard is the first one; a later source does not move it."""
+        self.record.save(self.resolve((LJ,)))
+
+        self.record.save(self.resolve((SPACED,), source=GOOGLE))
+
+        self.assertEqual(self.record.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+
+
+class IdentityTests(RecordTestCase):
+    def test_the_sources_own_id_resolves_a_name_never_seen_before(self):
+        """One row, two spellings: the id is what knows they are the same."""
+        self.record.save(self.resolve((LJ,), identities=(ROSS_ID,)))
+
+        found = self.resolve(("L. J. Ross-Smith",), identities=(ROSS_ID,))
+
+        self.assertEqual([one.spelling for one in found], [LJ])
+        self.assertTrue(found[0].by_id, "the id is what answered")
+
+    def test_a_new_id_is_anchored_to_the_standard_it_resolved_to(self):
+        """So the next book from that row is an id lookup, not a name one."""
+        self.record.save(self.resolve((LJ,), identities=(ROSS_ID,)))
+
+        self.record.save(
+            self.resolve((SPACED,), identities=(SPACED_ID,))
+        )
+
+        self.assertEqual(self.record.standard(AUTHOR, HARDCOVER, str(SPACED_ID)), LJ)
+
+    def test_a_name_resolved_by_its_id_is_not_anchored_again(self):
+        """It was anchored when it was first seen; a second row would be noise."""
+        self.record.save(self.resolve((LJ,), identities=(ROSS_ID,)))
+
+        self.record.save(self.resolve((LJ,), identities=(ROSS_ID,)))
+
+        self.assertEqual(len(self.record.names()), 2, "the name and one id, once each")
+
+
+class OverrideTests(RecordTestCase):
+    def test_an_override_wins_over_a_recorded_standard(self):
+        self.record.save(self.resolve((LJ,)))
+
+        self.assertEqual(
+            self.spellings((LJ,), overrides={"lj ross": "L J Ross"}), ["L J Ross"]
+        )
+
+    def test_an_override_matches_however_the_key_is_spelt(self):
+        """The table is keyed by the normalised name, not by the characters."""
+        self.record.save(self.resolve((LJ,)))
+
+        for key in ("lj ross", "L.J. Ross", "L. J. Ross", "LJ  Ross"):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    self.spellings((PLAIN,), overrides={key: "L J Ross"}), ["L J Ross"]
+                )
+
+    def test_an_override_is_never_written_into_the_record(self):
+        """Taking it back out of the config has to restore the spelling."""
+        self.record.save(self.resolve((LJ,)))
+
+        self.record.save(self.resolve((LJ,), overrides={"lj ross": "L J Ross"}))
+
+        self.assertEqual(self.record.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+
+    def test_an_override_is_one_hop_and_is_not_followed_again(self):
+        """`A -> B` and `B -> C` writes B; a chain is not a thing to guess at."""
+        overrides = {"a": "b", "b": "c"}
+
+        self.assertEqual(self.spellings(("A",), overrides=overrides), ["b"])
+
+
+class MatchTests(RecordTestCase):
+    def test_a_book_already_recorded_takes_a_more_confident_match(self):
+        self.record.save((), Match("9781521748831", GOOGLE, 0.9))
+
+        self.record.save((), Match("9781521748831", HARDCOVER, 0.95))
+
+        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+
+    def test_a_less_confident_match_does_not_replace_the_one_held(self):
+        self.record.save((), Match("9781521748831", HARDCOVER, 0.95))
+
+        self.record.save((), Match("9781521748831", GOOGLE, 0.9))
+
+        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+
+    def test_a_draw_goes_to_the_source_the_user_trusts_more(self):
+        self.record.save((), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE))
+
+        self.record.save(
+            (),
+            Match("9781521748831", HARDCOVER, 0.95),
+            priority=(HARDCOVER, GOOGLE),
+        )
+
+        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+
+    def test_a_draw_does_not_promote_a_source_the_user_ranked_lower(self):
+        self.record.save((), Match("9781521748831", HARDCOVER, 0.95), priority=(HARDCOVER, GOOGLE))
+
+        self.record.save((), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE))
+
+        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+
+    def test_the_same_source_looking_again_refreshes_the_record(self):
+        """A source is not ranked against itself, so a re-lookup is not a draw."""
+        self.record.save((), Match("9781521748831", HARDCOVER, 0.9))
+
+        self.record.save((), Match("9781521748831", HARDCOVER, 0.95))
+
+        self.assertEqual(self.record.match("9781521748831").confidence, 0.95)
+
+
+class SeriesTests(RecordTestCase):
+    def test_a_series_is_kept_the_same_way_an_author_is(self):
+        self.record.save(
+            self.record.resolve(SERIES, ("DCI Ryan Mysteries",), HARDCOVER)
+        )
+
+        found = self.record.resolve(SERIES, ("DCI Ryan mysteries",), GOOGLE)
+
+        self.assertEqual([one.spelling for one in found], ["DCI Ryan Mysteries"])
+
+    def test_the_record_has_nowhere_to_put_a_series_number(self):
+        """The one thing it must never work out, refused by the layout itself."""
+        columns = {
+            row["name"]
+            for row in self.record.connection.execute("PRAGMA table_info(names)")
+        } | {
+            row["name"]
+            for row in self.record.connection.execute("PRAGMA table_info(matches)")
+        }
+
+        self.assertNotIn("series_number", columns)
+        self.assertNotIn("position", columns)
+
+
+class FileTests(RecordTestCase):
+    def test_a_new_file_is_stamped_with_the_schema_it_was_written_to(self):
+        version = self.record.connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertEqual(version, 1)
+
+    def test_a_record_from_a_newer_colophon_is_refused(self):
+        """Reading a newer layout is how a column somebody added gets dropped."""
+        self.record.connection.execute("PRAGMA user_version = 99")
+        self.record.connection.commit()
+        self.record.close()
+
+        with self.assertRaises(RecordError):
+            Record.open(self.path)
+
+    def test_the_parent_folder_is_made_if_it_is_missing(self):
+        nested = f"{self.path}.d/inner/.colophon.db"
+
+        opened = Record.open(nested)
+        self.addCleanup(opened.close)
+
+        self.assertTrue(opened.path.exists())
+
+    def test_a_record_reopened_finds_what_the_last_one_knew(self):
+        self.record.save(self.resolve((LJ,)))
+        self.record.close()
+
+        reopened = Record.open(self.path)
+        self.addCleanup(reopened.close)
+
+        found = reopened.resolve(AUTHOR, (SPACED,), GOOGLE)
+        self.assertEqual([one.spelling for one in found], [LJ])
+
+    def test_an_unusable_path_is_a_record_error(self):
+        with self.assertRaises(RecordError):
+            Record.open(self.path + "/not-a-folder/here.db")
+
+
+class ResetTests(RecordTestCase):
+    def test_a_reset_empties_the_record(self):
+        self.record.save(self.resolve((LJ,)), Match("9781521748831", HARDCOVER, 1.0))
+
+        self.record.reset()
+
+        self.assertEqual(self.record.names(), ())
+        self.assertEqual(self.record.match("9781521748831"), None)
+
+    def test_the_next_book_starts_a_fresh_standard(self):
+        self.record.save(self.resolve((LJ,)))
+        self.record.reset()
+
+        self.assertEqual(self.spellings((SPACED,), source=GOOGLE), [SPACED])
+
+    def test_nothing_clears_it_on_its_own(self):
+        """Opening and closing a record is not a reason to lose the library's spellings."""
+        self.record.save(self.resolve((LJ,)))
+        self.record.close()
+
+        reopened = Record.open(self.path)
+        self.addCleanup(reopened.close)
+
+        self.assertEqual(reopened.resolve(AUTHOR, (LJ,), HARDCOVER)[0].spelling, LJ)
+
+
+class GenresTests(RecordTestCase):
+    def test_the_genre_table_exists_and_is_empty(self):
+        """CBO-42 fills it; this ticket only makes room, so nothing may fill it."""
+        self.assertEqual(self.record.genres(), ())
+
+    def test_a_reset_empties_the_genres_too(self):
+        self.record.connection.execute("INSERT INTO genres (genre) VALUES ('Crime')")
+        self.record.connection.commit()
+
+        self.record.reset()
+
+        self.assertEqual(self.record.genres(), ())
+
+
+class FileNameTests(unittest.TestCase):
+    def test_the_record_is_a_single_file(self):
+        """Default journal mode, so no `-wal` or `-shm` appears beside it.
+
+        The default lives in the backups folder, where a sibling file would be
+        one more thing to keep `Backups.expire()` away from and one more thing to
+        explain. One connection and one writer needs nothing more than this.
+        """
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = f"{folder.name}/.colophon.db"
+
+        record = Record.open(path)
+        record.save(record.resolve(AUTHOR, (LJ,), HARDCOVER))
+        names = sorted(os.listdir(folder.name))
+        record.close()
+
+        self.assertEqual(names, [".colophon.db"])
+
+    def test_the_file_really_is_sqlite(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = f"{folder.name}/.colophon.db"
+        record = Record.open(path)
+        record.close()
+
+        with open(path, "rb") as handle:
+            self.assertEqual(handle.read(16), b"SQLite format 3\x00")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    unittest.main()
