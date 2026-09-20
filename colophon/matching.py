@@ -122,6 +122,12 @@ class Candidate:
     cover: str | None = None
     author_ids: tuple = ()
     series_id: int | str | None = None
+    # The genres the source tagged this book with, as `(genre, the source's own
+    # string it came from)` pairs, in the source's order. They are what the
+    # source said rather than values to write: genres are mapped onto the user's
+    # own list before any reach a file, and nothing about that mapping belongs
+    # here.
+    genres: tuple = ()
 
 
 @dataclass(frozen=True)

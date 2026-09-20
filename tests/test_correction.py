@@ -25,6 +25,7 @@ from colophon.correction import SOURCE_SETUP, Corrector
 from colophon.epub import EpubError, read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
+from colophon.llm import Llm
 from colophon.matching import Candidate
 from colophon.record import AUTHOR, BY_NAME, Record
 from colophon.sources import SourceError
@@ -78,6 +79,8 @@ from tests.tempdir import TemporaryDirectory
 from tests.test_googlebooks import Replay as GoogleReplay
 from tests.test_googlebooks import ReplayByQuery
 from tests.test_hardcover import Replay
+from tests.test_llm import Replay as LlmReplay
+from tests.test_llm import today
 
 # A book that already says everything the source says - every field the rules
 # write, in both series formats, with a cover of its own - so there is genuinely
@@ -3301,6 +3304,607 @@ class RecordTests(CorrectionTestCase):
             read(self.folder / "Cragside.epub").series,
             "DCI Ryan Mysteries",
             "the series as the source spelt it",
+        )
+
+
+class GenreMappingTests(CorrectionTestCase):
+    """CBO-42: a source's genres are mapped onto the user's own list, or dropped.
+
+    Every reply here is a recording from `tests/fixtures/llm`, replayed through a
+    real `Llm`, and the source replies are the real Hardcover recordings. So the
+    whole path is the shipped one: the reply's shape decides what a genre is, the
+    config decides what may be written, and the record decides what is asked
+    twice.
+    """
+
+    # The allowed list the recordings were made against, which holds `Murder` as
+    # well as `Crime` - so a mapping is a judgement rather than an echo.
+    ALLOWED = (
+        "Crime",
+        "Mystery",
+        "Thriller",
+        "Historical Fiction",
+        "Science Fiction",
+        "Fantasy",
+    )
+
+    CRAGSIDE_GENRES = "by-isbn-9781521748831-genres.json"
+    PYRAMIDS = "by-isbn-9780575064843-packed-genres.json"
+
+    def record(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        opened = Record.open(f"{folder.name}/.colophon.db")
+        self.addCleanup(opened.close)
+        return opened
+
+    def llm(self, *names, **kwargs):
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key="llm-secret-key-4242",
+            counter=self.folder / "llm.json",
+            transport=LlmReplay(*names),
+            **kwargs,
+        )
+
+    def spent(self, *names):
+        """The same client with the UTC day's only call already spent."""
+        counter = self.folder / "llm-spent.json"
+        counter.write_text(
+            json.dumps({"date": today(), "calls": 1}), encoding="utf-8"
+        )
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key="llm-secret-key-4242",
+            daily_limit=1,
+            counter=counter,
+            transport=LlmReplay(*names),
+        )
+
+    def source_saying(self, genres):
+        """A source offering Cragside with these genres on its record."""
+        return FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                series="DCI Ryan Mysteries",
+                series_number="6",
+                language="en",
+                isbn=ISBN,
+                genres=genres,
+            )
+        )
+
+    def hardcover_over(self, name):
+        """A real Hardcover client, replaying a recorded reply."""
+        return Hardcover("hardcover-token", transport=Replay(name))
+
+    def deliver(self, path, corrector, record=None):
+        """Correct a book the way the relay does, record write and all."""
+        outcome = corrector.correct(path)
+        if record is not None and outcome.decision is not None:
+            record.save(
+                outcome.decision.resolutions,
+                match=outcome.decision.match,
+                genres=outcome.decision.genres,
+            )
+        return outcome
+
+    def asked(self, corrector):
+        """The source genres the model was asked about, in order."""
+        return [line.rsplit("Source genre: ", 1)[1] for line in self.prompts(corrector)]
+
+    def prompts(self, corrector):
+        return [
+            sent["body"]["messages"][1]["content"]
+            for sent in corrector.llm._transport.sent
+        ]
+
+    # The ticket's own two cases -------------------------------------------
+
+    def test_messy_genres_map_onto_the_allowed_list_and_are_deduped(self):
+        """Four Hardcover genres, three of them one shelf label.
+
+        The recording behind the source reply really carries `Murder`, `Crime`,
+        `Thriller` and `Mystery`, and one reply is replayed for each of the four:
+        what the transport answers is what it answers, and the point here is what
+        the corrector makes of four source genres arriving as one allowed genre.
+        """
+        corrector = self.corrector(
+            source=self.hardcover_over(self.CRAGSIDE_GENRES),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+        )
+
+        outcome = self.deliver(self.book(), corrector)
+
+        self.assertEqual(self.asked(corrector), ["Murder", "Crime", "Thriller", "Mystery"])
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ("Crime",))
+        self.assertEqual(
+            [
+                change.value
+                for change in outcome.changed
+                if change.field == "genres"
+            ],
+            ["Crime"],
+            "one entry per allowed genre, not one per source genre",
+        )
+
+    def test_an_unmappable_genre_is_dropped(self):
+        """A character heading is not a genre, and the model says so."""
+        for name, genre in (
+            (
+                "genre-mapping-unmappable.json",
+                "Finlay-Ryan, Maxwell (Fictitious character)",
+            ),
+            ("genre-mapping-synagogues.json", "Synagogues"),
+        ):
+            with self.subTest(name=name):
+                corrector = self.corrector(
+                    source=self.source_saying(((genre, genre),)),
+                    genres=self.ALLOWED,
+                    llm=self.llm(name),
+                )
+
+                self.deliver(self.book(), corrector)
+
+                self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    def test_a_genre_that_does_not_fit_leaves_the_book_with_none(self):
+        corrector = self.corrector(
+            source=self.source_saying((("Fiction", "Fiction"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-fiction.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    def test_a_truncated_reply_drops_rather_than_writes(self):
+        for name in ("genre-mapping-batch.json", "genre-mapping-truncated.json"):
+            with self.subTest(name=name):
+                corrector = self.corrector(
+                    source=self.source_saying((("Murder", "Murder"),)),
+                    genres=self.ALLOWED,
+                    llm=self.llm(name),
+                )
+
+                self.deliver(self.book(), corrector)
+
+                self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    # What is written, and how -------------------------------------------------
+
+    def test_the_target_is_written_as_the_config_spells_it(self):
+        """The model answers `Crime`; the match against the list is case-insensitive."""
+        corrector = self.corrector(
+            source=self.source_saying((("crime", "crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ("Crime",))
+
+    def test_an_off_list_target_is_dropped(self):
+        """The allowed list is the only authority; the model is not trusted with it."""
+        corrector = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=("Fantasy",),
+            llm=self.llm("genre-mapping-murder.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    def test_the_book_s_own_subjects_are_kept(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            AS_DOWNLOADED + "    <dc:subject>Northumberland</dc:subject>",
+            version="2.0",
+        )
+        corrector = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+        )
+
+        self.deliver(path, corrector)
+
+        self.assertEqual(read(path).subjects, ("Northumberland", "Crime"))
+
+    def test_a_genre_the_book_already_carries_is_not_written_again(self):
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            AS_DOWNLOADED + "    <dc:subject>Crime</dc:subject>",
+            version="2.0",
+        )
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+        )
+
+        self.deliver(path, corrector)
+
+        self.assertEqual(read(path).subjects, ("Crime",), "one tag, not two")
+
+    # The list, and what it costs ---------------------------------------------
+
+    def test_an_empty_allowed_list_costs_no_call(self):
+        """No list means there is no question to ask, so none is asked."""
+        corrector = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=(),
+            llm=self.llm("genre-mapping-murder.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    def test_a_book_with_no_genres_asks_nothing(self):
+        corrector = self.corrector(
+            source=self.source_saying(()),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+
+    def test_a_recording_made_before_this_ticket_has_no_genres_to_ask_about(self):
+        """A reply with no `cached_tags` is absent, not a bug."""
+        corrector = self.corrector(
+            source=self.hardcover_over("by-isbn-found.json"),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+
+    def test_no_llm_set_up_means_the_genres_are_dropped(self):
+        corrector = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+        )
+
+        outcome = self.deliver(self.book(), corrector)
+
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+        self.assertFalse(outcome.waiting, "a book is not held for a model nobody set up")
+
+    def test_a_genre_call_that_could_not_be_made_does_not_hold_the_book(self):
+        """The wait belongs to a match the LLM was needed for, not to a tag.
+
+        The day's calls are spent, so the question cannot be put. The book was
+        resolved by its ISBN without the model, and it lands exactly as it would
+        have with no genres configured - corrected, minus the tags.
+        """
+        corrector = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.spent("genre-mapping-murder.json"),
+        )
+
+        with self.assertLogs("colophon", level="WARNING") as caught:
+            outcome = self.deliver(self.book(), corrector)
+
+        self.assertFalse(outcome.waiting, "the book is not held for a tag")
+        self.assertTrue(outcome.applied, "and it is corrected and delivered")
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+        line = "\n".join(caught.output)
+        self.assertIn("Murder", line)
+        self.assertIn("could not be asked", line)
+        self.assertNotIn("does not fit", line, "not the model saying no")
+
+    def test_a_genre_that_could_not_be_asked_is_not_recorded_and_is_asked_again(self):
+        """Absent, not decided: nothing is cached, so the next run asks it again."""
+        record = self.record()
+        spent = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.spent("genre-mapping-murder.json"),
+            record=record,
+        )
+
+        self.deliver(self.book("First.epub"), spent, record=record)
+
+        self.assertEqual(record.genres(), (), "no row, positive or null")
+
+        later = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+            record=record,
+        )
+        self.deliver(self.book("Second.epub"), later, record=record)
+
+        self.assertEqual(len(later.llm._transport.sent), 1, "asked again")
+        self.assertEqual(read(self.folder / "Second.epub").subjects, ("Crime",))
+
+    def test_a_book_that_needed_the_chooser_and_could_not_ask_it_still_waits(self):
+        """The two paths are pinned apart: only the match's own wait survives."""
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        corrector = self.corrector(
+            source=FakeSource(found=None, candidates=[A_NEAR_MISS]),
+            genres=self.ALLOWED,
+            llm=self.spent("genre-mapping-murder.json"),
+        )
+
+        outcome = self.deliver(path, corrector)
+
+        self.assertTrue(outcome.waiting)
+        self.assertIn("daily limit", outcome.note)
+
+    # The packed forms ---------------------------------------------------------
+
+    def test_a_packed_form_is_asked_about_as_its_parts(self):
+        """`Fantasy:Humour` is two questions, and the packed string is never one."""
+        corrector = self.corrector(
+            source=self.hardcover_over(self.PYRAMIDS),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-packed.json", "genre-mapping-fiction.json"),
+        )
+
+        self.deliver(self.book(), corrector)
+
+        asked = self.asked(corrector)
+        self.assertIn("Fantasy", asked)
+        self.assertIn("Humour", asked)
+        for genre in asked:
+            with self.subTest(genre=genre):
+                self.assertNotIn(":", genre)
+
+    def test_a_key_two_strings_collide_on_gets_one_row_and_the_first_wins(self):
+        """`Fantasy` arrives alone and again inside `Fantasy:Humour`."""
+        record = self.record()
+        corrector = self.corrector(
+            source=self.hardcover_over(self.PYRAMIDS),
+            genres=("Fantasy", "Humour"),
+            llm=self.llm("genre-mapping-packed.json", "genre-mapping-fiction.json"),
+            record=record,
+        )
+
+        self.deliver(self.book(), corrector, record=record)
+
+        rows = {
+            (row[0], row[1]): row for row in record.genres()
+        }
+        self.assertEqual(
+            set(rows),
+            {
+                ("hardcover", "Fantasy"),
+                ("hardcover", "Adventure"),
+                ("hardcover", "Science Fiction"),
+                ("hardcover", "General"),
+                ("hardcover", "Humor"),
+                ("hardcover", "Humour"),
+                ("hardcover", "Satire"),
+                ("hardcover", "Science Fiction & Fantasy"),
+                ("hardcover", "Comedy & Humor"),
+            },
+        )
+        self.assertEqual(
+            rows[("hardcover", "Fantasy")][2:],
+            ("Fantasy", "Fantasy"),
+            "one row, and the first string it came out of wins",
+        )
+        for row in record.genres():
+            with self.subTest(seen=row[3]):
+                self.assertNotIn(":", row[3], "the packed path is not recoverable")
+
+    # The cache and the memo --------------------------------------------------
+
+    def test_two_books_carrying_one_genre_spend_one_call(self):
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+        )
+
+        self.deliver(self.book("First.epub"), corrector)
+        self.deliver(self.book("Second.epub"), corrector)
+
+        self.assertEqual(len(corrector.llm._transport.sent), 1)
+
+    def test_a_run_where_nothing_lands_still_asks_each_genre_once(self):
+        """The memo is on the run, so a book that never arrives still teaches it."""
+        record = self.record()
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+
+        self.deliver(self.book("First.epub"), corrector)
+        self.deliver(self.book("Second.epub"), corrector)
+
+        self.assertEqual(len(corrector.llm._transport.sent), 1)
+        self.assertEqual(record.genres(), (), "and the record learnt nothing")
+
+    def test_a_second_run_spends_nothing(self):
+        record = self.record()
+        first = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+        self.deliver(self.book("First.epub"), first, record=record)
+
+        second = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+        self.deliver(self.book("Second.epub"), second, record=record)
+
+        self.assertEqual(second.llm._transport.sent, [])
+        self.assertEqual(read(self.folder / "Second.epub").subjects, ("Crime",))
+
+    def test_a_positive_hit_that_is_still_allowed_is_not_asked_again(self):
+        record = self.record()
+        record.save_genres((("hardcover", "Crime", "Crime", "Crime"),))
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+
+        self.deliver(self.book(), corrector, record=record)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ("Crime",))
+
+    def test_a_positive_hit_that_is_no_longer_allowed_is_asked_again(self):
+        record = self.record()
+        record.save_genres((("hardcover", "Crime", "True Crime", "Crime"),))
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+
+        self.deliver(self.book(), corrector, record=record)
+
+        self.assertEqual(len(corrector.llm._transport.sent), 1, "it was asked again")
+        self.assertEqual(record.mapping("hardcover", "Crime"), "Crime")
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ("Crime",))
+
+    def test_the_re_ask_is_stored_and_the_next_book_pays_nothing(self):
+        """A `DO NOTHING` upsert would leave the stale target and re-ask for ever."""
+        record = self.record()
+        record.save_genres((("hardcover", "Crime", "True Crime", "Crime"),))
+        first = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+
+        self.deliver(self.book("First.epub"), first, record=record)
+        self.deliver(self.book("Second.epub"), first, record=record)
+
+        self.assertEqual(len(first.llm._transport.sent), 1, "once for the run")
+        rows = {row[1]: row for row in record.genres()}
+        self.assertEqual(rows["Crime"][2], "Crime", "the new answer is stored")
+        self.assertEqual(rows["Crime"][3], "Crime", "and the provenance is not")
+
+    def test_a_stored_null_is_not_asked_again(self):
+        """A null is an answer: the model has already said this genre does not fit."""
+        record = self.record()
+        record.save_genres((("hardcover", "Fiction", "", "Fiction"),))
+        corrector = self.corrector(
+            source=self.source_saying((("Fiction", "Fiction"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-fiction.json"),
+            record=record,
+        )
+
+        self.deliver(self.book(), corrector, record=record)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    def test_the_mapping_is_not_written_down_for_a_book_that_never_landed(self):
+        """The decision travels to the relay, and the relay persists it on arrival."""
+        record = self.record()
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+        )
+
+        outcome = self.deliver(self.book(), corrector)
+
+        self.assertIsNotNone(outcome.decision)
+        self.assertEqual(record.genres(), (), "nothing was persisted")
+
+    def test_a_book_that_needs_no_rewrite_still_teaches_the_record(self):
+        """The mapping is about the source's vocabulary, not about this file.
+
+        Nothing is planned for a book whose every field already matches and which
+        already carries the genre it maps to, so there is no rewrite to hang a
+        decision on - but the genre was asked about and answered, and the record
+        is what stops the next book paying for the same question.
+        """
+        record = self.record()
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            AS_DOWNLOADED + "    <dc:subject>Crime</dc:subject>",
+            version="2.0",
+        )
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+            fields={name: "skip" for name in KNOWN_FIELDS},
+        )
+
+        outcome = self.deliver(path, corrector, record=record)
+
+        self.assertEqual(outcome.changed, (), "nothing was written")
+        self.assertEqual(len(corrector.llm._transport.sent), 1, "the genre was asked")
+        self.assertEqual(record.mapping("hardcover", "Crime"), "Crime")
+
+    # A dry run ----------------------------------------------------------------
+
+    def test_a_dry_run_asks_nothing_and_says_what_it_does_not_know(self):
+        corrector = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+            dry_run=True,
+        )
+
+        with self.assertLogs("colophon", level="INFO") as caught:
+            outcome = self.deliver(self.book(), corrector)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+        self.assertIn("Murder", "\n".join(caught.output))
+        self.assertTrue(outcome.dry_run)
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+
+    def test_a_dry_run_uses_a_cached_answer_and_reports_the_genre_it_would_add(self):
+        record = self.record()
+        record.save_genres((("hardcover", "Crime", "Crime", "Crime"),))
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+            dry_run=True,
+        )
+
+        outcome = self.deliver(self.book(), corrector)
+
+        self.assertEqual(corrector.llm._transport.sent, [])
+        self.assertEqual(
+            [
+                (change.field, change.value)
+                for change in outcome.changed
+                if change.field == "genres"
+            ],
+            [("genres", "Crime")],
         )
 
 

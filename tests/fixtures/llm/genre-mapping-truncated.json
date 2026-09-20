@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "reasoning_content": "The user wants mapping of source genres onto allowed genre list [\"Cozy Mystery\"]. Source genres: Murder, Crime, Thriller, Mystery.\n\nWe map only if an allowed genre fits. \"Mystery\" could map to \"Cozy Mystery\"? Hmm. Cozy Mystery is a subgenre of mystery. But is \"Mystery\" a fit? The instruction: \"You map a book's source genres onto the user's own allowed genre list, and nothing else.\" A source genre that no allowed genre fits gets null. \"Murder\" - not a genre really, no. \"Crime\" - no. \"Thriller\" - no. \"Mystery\" - could be considered fitting Cozy Mystery? Cozy Mystery is a type of mystery, but not all mysteries are cozy. Mapping \"Mystery\" to \"Cozy Mystery\" would be inventing/overreaching? The guidance: never invent a genre. The safest: Mystery → Cozy Mystery? Hmm, arguably a cozy mystery is a mystery, so the source \"Mystery\" fits within the allowed \"Cozy Mystery\"? No—mapping should go the other direction: the source genre should be matched to an allowed genre that fits. \"Co"
+      },
+      "logprobs": null,
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 190,
+    "completion_tokens": 256,
+    "total_tokens": 446,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 256
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 190
+  }
+}

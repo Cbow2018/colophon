@@ -420,5 +420,59 @@ class TheOtherFieldsTests(unittest.TestCase):
         self.assertIsNone(book.cover)
 
 
+class GenreTests(unittest.TestCase):
+    """Google carries genres as `categories`, which the shipped mask never asked for.
+
+    The recording is the ISBN request with `items/volumeInfo/categories` appended,
+    and its one matching volume is the genre; the pre-CBO-37 title recording holds
+    both cases in one file: a library subject heading, and a genre.
+    """
+
+    def source(self, name="isbn-cragside-categories.json"):
+        return GoogleBooks(KEY, transport=Replay(name))
+
+    def test_the_mask_now_asks_for_the_categories(self):
+        replay = Replay("isbn-cragside-categories.json")
+
+        GoogleBooks(KEY, transport=replay).by_isbn(CRAGSIDE)
+        asked = urllib.parse.parse_qs(
+            urllib.parse.urlparse(replay.sent["url"]).query
+        )["fields"][0]
+
+        self.assertIn("items/volumeInfo/categories", asked)
+
+    def test_a_candidate_carries_the_category_as_a_genre(self):
+        book = self.source().by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.genres, (("Murder", "Murder"),))
+
+    def test_a_character_heading_is_carried_too_and_judged_later(self):
+        """`Finlay-Ryan, Maxwell (Fictitious character)` is the model's to refuse."""
+        candidates = GoogleBooks(KEY, transport=Replay("by-title-cragside.json")).by_title(
+            ["Cragside"], "en", "L. J. Ross"
+        )
+        genres = {book.isbn: book.genres for book in candidates}
+
+        self.assertEqual(genres["9781521748831"], (("Murder", "Murder"),), "a genre")
+        self.assertEqual(
+            genres["9781444846577"],
+            (
+                (
+                    "Finlay-Ryan, Maxwell (Fictitious character)",
+                    "Finlay-Ryan, Maxwell (Fictitious character)",
+                ),
+            ),
+            "a subject heading, carried to the model rather than filtered here",
+        )
+
+    def test_a_candidate_with_no_categories_carries_no_genres(self):
+        """The older recordings were made before the mask asked for any."""
+        book = GoogleBooks(
+            KEY, transport=Replay("by-isbn-cragside-other-fields.json")
+        ).by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.genres, ())
+
+
 if __name__ == "__main__":
     unittest.main()

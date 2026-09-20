@@ -359,7 +359,10 @@ class LoadConfigTests(unittest.TestCase):
         self.assertTrue(config.add_cover)
         self.assertEqual(config.confidence, 0.85, "the example's threshold is the default")
         self.assertTrue(config.dry_run, "the example ships as a dry run")
-        for name in ("add_cover", "confidence", "title", "language"):
+        self.assertEqual(
+            config.allowed_genres, (), "and with no tags list, as it ships"
+        )
+        for name in ("add_cover", "confidence", "title", "language", "allowed_genres"):
             with self.subTest(setting=name):
                 self.assertIn(f"# {name} = ", written, "shown, and commented out")
 
@@ -495,6 +498,67 @@ class AuthorOverrideTests(unittest.TestCase):
     def test_a_key_that_normalises_to_nothing_is_refused(self):
         """`"..."` is not a name, so it could never match one."""
         path = self.write_config('[authors]\n"..." = "L.J. Ross"\n')
+
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+
+class AllowedGenreTests(unittest.TestCase):
+    """The user's own tag list, which a source's genres are mapped onto."""
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def write_config(self, text):
+        path = self.tmp / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_an_empty_list_is_the_default_and_turns_genres_off(self):
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(config.allowed_genres, ())
+
+    def test_the_file_gives_the_list_in_the_order_it_is_written(self):
+        path = self.write_config('allowed_genres = ["Crime", "Mystery"]\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(config.allowed_genres, ("Crime", "Mystery"))
+
+    def test_the_environment_can_set_the_list_too(self):
+        config = load_config(env={"COLOPHON_ALLOWED_GENRES": "Crime, Mystery"})
+
+        self.assertEqual(config.allowed_genres, ("Crime", "Mystery"))
+
+    def test_an_empty_list_is_not_a_mistake(self):
+        """It is how a user says "do not write genres at all"."""
+        path = self.write_config("allowed_genres = []\n")
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(config.allowed_genres, ())
+
+    def test_two_entries_that_are_one_genre_are_refused(self):
+        """There is no order to appeal to, so which won would be the parser's."""
+        path = self.write_config('allowed_genres = ["Crime", "crime"]\n')
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("Crime", str(caught.exception))
+
+    def test_an_entry_that_is_not_a_string_is_refused(self):
+        path = self.write_config("allowed_genres = [6]\n")
+
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+    def test_an_empty_entry_is_refused(self):
+        """No genre trims to nothing, so one that does could never be written."""
+        path = self.write_config('allowed_genres = ["Crime", "  "]\n')
 
         with self.assertRaises(ConfigError):
             load_config(env={"COLOPHON_CONFIG": str(path)})

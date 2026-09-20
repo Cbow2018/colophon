@@ -1,6 +1,7 @@
 """The record: the spellings a library settles on, and the matches behind them."""
 
 import os
+import sqlite3
 import unittest
 
 from colophon.record import (
@@ -337,7 +338,7 @@ class FileTests(RecordTestCase):
     def test_a_new_file_is_stamped_with_the_schema_it_was_written_to(self):
         version = self.record.connection.execute("PRAGMA user_version").fetchone()[0]
 
-        self.assertEqual(version, 1)
+        self.assertEqual(version, 2)
 
     def test_a_record_from_a_newer_colophon_is_refused(self):
         """Reading a newer layout is how a column somebody added gets dropped."""
@@ -400,26 +401,179 @@ class ResetTests(RecordTestCase):
 
 
 class GenresTests(RecordTestCase):
-    def genres(self):
-        """The genre table, which nothing but CBO-42 will ever read."""
-        return tuple(
-            row["genre"]
-            for row in self.record.connection.execute(
-                "SELECT genre FROM genres ORDER BY genre"
+    """What a source's genre was judged to mean, and which list it was judged against."""
+
+    ALLOWED = ("Crime", "Mystery")
+
+    def test_nothing_reads_as_nothing(self):
+        self.assertIsNone(self.record.mapping(HARDCOVER, "Murder"))
+
+    def test_a_saved_mapping_is_read_back(self):
+        self.record.save_genres(((HARDCOVER, "Murder", "Crime", "Murder"),))
+
+        self.assertEqual(self.record.mapping(HARDCOVER, "Murder"), "Crime")
+
+    def test_a_genre_that_does_not_fit_is_stored_as_an_empty_string(self):
+        """SQLite does not treat two nulls as equal, so a null could never be keyed."""
+        self.record.save_genres(((HARDCOVER, "Fiction", "", "Fiction"),))
+
+        self.assertEqual(self.record.mapping(HARDCOVER, "Fiction"), "")
+
+    def test_the_same_word_from_two_sources_is_two_rows(self):
+        self.record.save_genres(
+            (
+                (HARDCOVER, "Crime", "Crime", "Crime"),
+                (GOOGLE, "Crime", "Mystery", "Crime"),
             )
         )
 
-    def test_the_genre_table_exists_and_is_empty(self):
-        """CBO-42 fills it; this ticket only makes room, so nothing may fill it."""
-        self.assertEqual(self.genres(), ())
+        self.assertEqual(self.record.mapping(HARDCOVER, "Crime"), "Crime")
+        self.assertEqual(self.record.mapping(GOOGLE, "Crime"), "Mystery")
 
-    def test_a_reset_empties_the_genres_too(self):
-        self.record.connection.execute("INSERT INTO genres (genre) VALUES ('Crime')")
-        self.record.connection.commit()
+    def test_a_fresh_answer_replaces_the_target_and_leaves_the_provenance(self):
+        """A null re-asked after a config change has to be able to become a hit."""
+        self.record.save_genres(((HARDCOVER, "Murder", "", "True Crime:Murder"),))
+
+        self.record.save_genres(((HARDCOVER, "Murder", "Crime", "Murder"),))
+
+        self.assertEqual(self.record.mapping(HARDCOVER, "Murder"), "Crime")
+        self.assertEqual(self.record.genres(), ((HARDCOVER, "Murder", "Crime", "True Crime:Murder"),))
+
+    def test_nothing_but_a_save_writes_a_mapping(self):
+        self.assertEqual(self.record.genres(), ())
+
+    def test_a_reset_empties_the_genres_and_the_list(self):
+        self.record.save_genres(((HARDCOVER, "Murder", "Crime", "Murder"),))
+        self.record.sweep_genres(self.ALLOWED)
 
         self.record.reset()
 
-        self.assertEqual(self.genres(), ())
+        self.assertEqual(self.record.genres(), ())
+        self.assertIsNone(self.record.fingerprint())
+
+    def test_a_fresh_record_has_no_fingerprint_and_the_sweep_writes_one(self):
+        self.assertIsNone(self.record.fingerprint())
+
+        self.record.sweep_genres(self.ALLOWED)
+
+        self.assertIsNotNone(self.record.fingerprint())
+
+    def test_a_changed_allowed_list_forgets_the_genres_that_did_not_fit(self):
+        self.record.sweep_genres(self.ALLOWED)
+        self.record.save_genres(
+            (
+                (HARDCOVER, "Fiction", "", "Fiction"),
+                (HARDCOVER, "Murder", "Crime", "Murder"),
+            )
+        )
+
+        self.record.sweep_genres(("Crime", "Mystery", "True Crime"))
+
+        self.assertIsNone(self.record.mapping(HARDCOVER, "Fiction"), "askable again")
+        self.assertEqual(
+            self.record.mapping(HARDCOVER, "Murder"),
+            "Crime",
+            "a positive target is not relative to the list, and is re-validated on read",
+        )
+
+    def test_reordering_or_re_casing_the_list_changes_nothing(self):
+        self.record.sweep_genres(("Crime", "Mystery"))
+        self.record.save_genres(((HARDCOVER, "Fiction", "", "Fiction"),))
+
+        self.record.sweep_genres(("mystery", " CRIME "))
+
+        self.assertEqual(self.record.mapping(HARDCOVER, "Fiction"), "")
+        self.assertEqual(self.record.genres(), ((HARDCOVER, "Fiction", "", "Fiction"),))
+
+    def test_the_sweep_is_idempotent(self):
+        self.record.sweep_genres(self.ALLOWED)
+        held = self.record.fingerprint()
+
+        self.record.sweep_genres(self.ALLOWED)
+
+        self.assertEqual(self.record.fingerprint(), held)
+
+    def test_the_genre_tables_are_the_two_the_note_names(self):
+        columns = {
+            table: {
+                row["name"]
+                for row in self.record.connection.execute(f"PRAGMA table_info({table})")
+            }
+            for table in ("genres", "genre_list")
+        }
+
+        self.assertEqual(columns["genres"], {"source", "genre", "mapped", "seen"})
+        self.assertEqual(columns["genre_list"], {"id", "fingerprint"})
+
+    def test_the_list_holds_one_row_however_often_it_is_swept(self):
+        """Without the CHECK this table accumulates a row per sweep."""
+        self.record.sweep_genres(self.ALLOWED)
+        self.record.sweep_genres(("Fantasy",))
+
+        rows = self.record.connection.execute("SELECT * FROM genre_list").fetchall()
+        self.assertEqual(len(rows), 1)
+
+
+class VersionOneTests(unittest.TestCase):
+    """CBO-41's record, carried forward to the mapping schema CBO-42 needs."""
+
+    def setUp(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.path = f"{folder.name}/.colophon.db"
+
+    def version_one(self):
+        """A record as CBO-41 wrote it: a `genres` table with one column."""
+        connection = sqlite3.connect(self.path)
+        connection.executescript(
+            "CREATE TABLE names (kind TEXT NOT NULL, source TEXT NOT NULL, "
+            "key TEXT NOT NULL, standard TEXT NOT NULL, seen TEXT NOT NULL, "
+            "PRIMARY KEY (kind, source, key));"
+            "CREATE TABLE matches (book_key TEXT PRIMARY KEY, source TEXT NOT NULL, "
+            "confidence REAL NOT NULL, matched_at TEXT NOT NULL, "
+            "matched_as TEXT NOT NULL);"
+            "CREATE TABLE genres (genre TEXT PRIMARY KEY);"
+        )
+        connection.execute("PRAGMA user_version = 1")
+        connection.commit()
+        connection.close()
+
+    def test_a_version_one_file_is_carried_forward(self):
+        self.version_one()
+
+        record = Record.open(self.path)
+        self.addCleanup(record.close)
+
+        version = record.connection.execute("PRAGMA user_version").fetchone()[0]
+        self.assertEqual(version, 2)
+        record.save_genres((("hardcover", "Murder", "Crime", "Murder"),))
+
+        self.assertEqual(record.mapping("hardcover", "Murder"), "Crime")
+
+    def test_the_version_one_genre_table_is_replaced_by_the_mapping_one(self):
+        """It held one column and nothing ever wrote a row to it."""
+        self.version_one()
+
+        record = Record.open(self.path)
+        self.addCleanup(record.close)
+
+        columns = {
+            row["name"]
+            for row in record.connection.execute("PRAGMA table_info(genres)")
+        }
+        self.assertEqual(columns, {"source", "genre", "mapped", "seen"})
+
+    def test_what_the_old_record_knew_is_kept(self):
+        self.version_one()
+        first = Record.open(self.path)
+        first.save(first.resolve(AUTHOR, (LJ,), HARDCOVER))
+        first.close()
+
+        record = Record.open(self.path)
+        self.addCleanup(record.close)
+
+        found = record.resolve(AUTHOR, (SPACED,), GOOGLE)
+        self.assertEqual([one.spelling for one in found], [LJ])
 
 
 class FileNameTests(unittest.TestCase):

@@ -123,6 +123,11 @@ class Config:
     # whatever the record settled on — which is what lets a person fix a
     # spelling in their library app and have it stick.
     authors: tuple = ()
+    # The user's own tag list, as the spellings to write. A source's genres are
+    # judged against these and nothing else, so this is the only vocabulary that
+    # ever reaches a book: an empty list means genres are not written at all, and
+    # is a fresh install's state rather than a mistake.
+    allowed_genres: tuple = ()
     # Where the record is kept. See `DEFAULT_RECORD_PATH` for why it is not
     # beside `config.toml`.
     record_path: Path = Path(DEFAULT_RECORD_PATH)
@@ -183,6 +188,9 @@ def load_config(env=None):
     values["sources"] = _to_sources(_setting(env, values, "sources", list))
     values["fields"] = _to_fields(values.pop("fields", {}))
     values["authors"] = _to_authors(values.pop("authors", {}))
+    values["allowed_genres"] = _to_genres(
+        _setting(env, values, "allowed_genres", list)
+    )
     values["record_path"] = Path(_setting(env, values, "record_path", str))
     values["add_cover"] = _to_bool(
         _setting(env, values, "add_cover", bool), "add_cover"
@@ -389,6 +397,38 @@ def _to_authors(given):
         overrides[normalised] = value
         written_as[normalised] = key
     return tuple(overrides.items())
+
+
+def _to_genres(value):
+    """The allowed genres, as the spellings to write, in the order they are given.
+
+    An environment variable arrives as one comma-separated string, config.toml as
+    a list of strings. Two entries that are one genre spelt two ways are refused,
+    for the reason `_to_authors` records: there is no order to appeal to, so
+    which spelling won would be whichever the parser happened to keep.
+    """
+    if isinstance(value, str):
+        parts = value.split(",")
+    else:
+        parts = list(value)
+    genres = []
+    written_as = {}
+    for part in parts:
+        if not isinstance(part, str) or not part.strip():
+            raise ConfigError(
+                f"allowed_genres names {part!r}, which is not a genre to write; "
+                "expected a non-empty string"
+            )
+        key = part.strip().casefold()
+        if key in written_as:
+            raise ConfigError(
+                f"allowed_genres names {written_as[key]!r} and {part!r}, which are "
+                "the same genre spelt two ways; they are one genre, so which one "
+                "wins would depend on the order they were written in"
+            )
+        written_as[key] = part
+        genres.append(part.strip())
+    return tuple(genres)
 
 
 def _to_fields(given):

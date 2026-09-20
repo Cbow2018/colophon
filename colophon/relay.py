@@ -56,6 +56,8 @@ class Relay:
         except OSError as error:
             raise RelayError(f"cannot use {self.config.backup_dir}: {error}") from error
 
+        self._sweep_genres()
+
         # The original is deleted once it has been copied out, so read-only
         # access to the ingest folder would leave every book to arrive twice.
         if not os.access(self.config.ingest_dir, os.W_OK):
@@ -63,6 +65,23 @@ class Relay:
                 f"cannot write to {self.config.ingest_dir}; the ingest folder must "
                 "not be mounted read-only"
             )
+
+    def _sweep_genres(self):
+        """Forget the genres that did not fit, if the allowed list has changed.
+
+        Done once, at startup, rather than by `Record.open`: deleting rows is a
+        write, and a dry run must make none at all. So a dry run skips it
+        entirely and the fingerprint is simply not rewritten - the next real run
+        does the sweep. A record that cannot be swept is logged rather than
+        raised: the worst it does is ask a question the record already has an
+        answer to.
+        """
+        if self.record is None or self.config.dry_run:
+            return
+        try:
+            self.record.sweep_genres(self.config.allowed_genres)
+        except sqlite3.Error as error:
+            LOG.error("could not sweep the genre cache: %s", error)
 
     def scan_once(self):
         """Look at the ingest folder once and deliver whatever has settled."""
@@ -212,6 +231,7 @@ class Relay:
                 match=outcome.decision.match,
                 when=_utc_now(),
                 priority=self.config.sources,
+                genres=outcome.decision.genres,
             )
         except sqlite3.Error as error:
             LOG.error("could not write to the record: %s", error)

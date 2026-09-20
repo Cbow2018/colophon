@@ -35,7 +35,7 @@ from colophon.matching import normalise
 # step that carries an older file forward; refusing a *newer* file is the part
 # that matters, because an old build writing a new table is how a column
 # somebody else added gets dropped.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # The two kinds of name the record keeps. They are one table because they are
 # one question — has this been seen, and how is it spelt — and the kind is the
@@ -65,8 +65,24 @@ CREATE TABLE IF NOT EXISTS matches (
     matched_as TEXT NOT NULL
 );
 
+-- What a source's genre was judged to mean, so each distinct genre costs one
+-- question ever rather than one per book. `mapped` is the allowed genre to
+-- write, or '' for "does not fit": SQLite does not treat two nulls as equal, so
+-- a null target would be neither findable nor writable twice.
 CREATE TABLE IF NOT EXISTS genres (
-    genre TEXT PRIMARY KEY
+    source  TEXT NOT NULL,
+    genre   TEXT NOT NULL,
+    mapped  TEXT NOT NULL,
+    seen    TEXT NOT NULL,
+    PRIMARY KEY (source, genre)
+);
+
+-- One row: the allowed list the genres that did not fit were answered against,
+-- so adding a genre to `config.toml` makes them askable again. The CHECK is the
+-- point: without it this table accumulates a row per sweep.
+CREATE TABLE IF NOT EXISTS genre_list (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    fingerprint TEXT NOT NULL
 );
 """
 
@@ -164,6 +180,14 @@ class Record:
                 f"(version {found}, this build understands {SCHEMA_VERSION}); "
                 "nothing was changed"
             )
+        if found < 2:
+            # Version 1's `genres` was one `genre TEXT PRIMARY KEY` column, which
+            # cannot hold a source, a target or a negative outcome. Nothing in
+            # version 1 ever wrote a row to it - the table was created and
+            # emptied and never filled - so there is nothing to carry across and
+            # the version guard is what makes dropping it a step rather than an
+            # ad-hoc ALTER.
+            self.connection.execute("DROP TABLE IF EXISTS genres")
         self.connection.executescript(SCHEMA)
         self.connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.connection.commit()
@@ -238,7 +262,7 @@ class Record:
 
     # Writing -----------------------------------------------------------------
 
-    def save(self, resolutions, match=None, when="", priority=()):
+    def save(self, resolutions, match=None, when="", priority=(), genres=()):
         """Write what was decided, once the book it was decided for has landed.
 
         Called after the file is in place rather than when the decision was made,
@@ -272,6 +296,7 @@ class Record:
             self._write_id_row(resolution)
         if match is not None:
             self._write_match(match, when, priority)
+        self.save_genres(genres)
         self.connection.commit()
 
     def _write_name(self, resolution):
@@ -338,6 +363,93 @@ class Record:
 
     # The rest ----------------------------------------------------------------
 
+    def mapping(self, source, genre):
+        """What this source's genre was judged to mean, or None if never asked.
+
+        Three answers, and the caller tells them apart: `None` means the question
+        has not been put, `''` means it was put and the genre does not fit, and
+        anything else is the allowed genre to write. A target is not trusted just
+        because it is there — the allowed list may have moved on — so it is the
+        caller that checks it against the list it holds.
+        """
+        row = self.connection.execute(
+            "SELECT mapped FROM genres WHERE source = ? AND genre = ?",
+            (source, genre),
+        ).fetchone()
+        return row["mapped"] if row is not None else None
+
+    def genres(self):
+        """Every mapping, as `(source, genre, mapped, seen)`, in a stable order.
+
+        Public for the same reason `names()` is: a caller holding a record should
+        not have to know the table's name to ask what is in it.
+        """
+        return tuple(
+            (row["source"], row["genre"], row["mapped"], row["seen"])
+            for row in self.connection.execute(
+                "SELECT source, genre, mapped, seen FROM genres "
+                "ORDER BY source, genre"
+            )
+        )
+
+    def save_genres(self, mappings):
+        """Store what each source genre was judged to mean.
+
+        The upsert replaces `mapped` and leaves `seen` alone: a fresh answer is
+        the whole point of re-asking, while `seen` is provenance and the second
+        string a key came out of is not a better account of where it came from
+        than the first. `DO NOTHING` here would be a silent bug — a target that
+        is no longer allowed would be re-asked, not stored, and re-asked for ever.
+        """
+        for source, genre, mapped, seen in mappings:
+            self.connection.execute(
+                "INSERT INTO genres (source, genre, mapped, seen) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (source, genre) DO UPDATE SET mapped = excluded.mapped",
+                (source, genre, mapped, seen),
+            )
+
+    def fingerprint(self):
+        """The allowed list the stored "does not fit" answers were given against."""
+        row = self.connection.execute(
+            "SELECT fingerprint FROM genre_list WHERE id = 1"
+        ).fetchone()
+        return row["fingerprint"] if row is not None else None
+
+    def sweep_genres(self, allowed):
+        """Forget the genres that did not fit, when the allowed list has changed.
+
+        A "does not fit" answer is relative to the list it was given against, so
+        adding `True Crime` to `config.toml` has to make every genre cached as
+        "does not fit" askable again — otherwise the config change silently does
+        nothing for them. A target is not relative in the same way, so positive
+        rows are left alone and re-validated when they are read.
+
+        Driven by the caller rather than by `open`, because deleting rows is a
+        write and a dry run must not make one: a dry run simply does not call
+        this, and the next real run sweeps. A fresh record has no row here at
+        all, which is the same case as a changed list — nothing to compare
+        against means the nulls on file were not answered against this list,
+        and the delete removes nothing because there is nothing there.
+        """
+        wanted = genre_fingerprint(allowed)
+        if self.fingerprint() == wanted:
+            return
+        self.connection.execute("DELETE FROM genres WHERE mapped = ''")
+        self.connection.execute(
+            "INSERT INTO genre_list (id, fingerprint) VALUES (1, ?) "
+            "ON CONFLICT (id) DO UPDATE SET fingerprint = excluded.fingerprint",
+            (wanted,),
+        )
+        self.connection.commit()
+
+    def reset(self):
+        """Empty the record. The only thing that ever does, and never automatic."""
+        self.connection.executescript(
+            "DELETE FROM names; DELETE FROM matches; DELETE FROM genres; "
+            "DELETE FROM genre_list;"
+        )
+        self.connection.commit()
+
     def names(self):
         """Every name the record holds, as `(kind, source, key, standard, seen)`.
 
@@ -353,12 +465,14 @@ class Record:
             )
         )
 
-    def reset(self):
-        """Empty the record. The only thing that ever does, and never automatic."""
-        self.connection.executescript(
-            "DELETE FROM names; DELETE FROM matches; DELETE FROM genres;"
-        )
-        self.connection.commit()
+
+def genre_fingerprint(allowed):
+    """The identity of an allowed list: its genres, sorted and case-folded.
+
+    Sorted and case-folded so that reordering or re-casing `config.toml` is not a
+    change — only a different set of genres is.
+    """
+    return "\n".join(sorted(str(genre).strip().casefold() for genre in allowed or ()))
 
 
 def book_key(isbn, title, authors=()):

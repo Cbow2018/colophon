@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from colophon.matching import Candidate
-from colophon.sources import SourceError
+from colophon.sources import SourceError, genre_parts
 from colophon.sources import text as _text
 
 # `SourceError` is imported from `colophon.sources` for this module's own use and
@@ -55,6 +55,9 @@ query BookByIsbn($isbn: String!) {
       description
       release_date
       image { url }
+      # Asked whole: a jsonb column's inner keys are not selectable one at a
+      # time, and `_genres` is what picks `Genre` out of the four categories.
+      cached_tags
       contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
         contribution
         author { id name }
@@ -104,6 +107,7 @@ query BooksByTitle($titles: [String!]!%s) {
       description
       release_date
       image { url }
+      cached_tags
       contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
         contribution
         author { id name }
@@ -287,6 +291,7 @@ def _candidate(edition, isbn=None):
         series=series,
         series_number=series_number,
         series_id=series_id,
+        genres=_genres(book),
         # A code is what an EPUB wants to be given back; the English name is a fallback.
         language=_text(language.get("code2")) or _text(language.get("language")),
         isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")) or isbn,
@@ -304,6 +309,34 @@ def _candidate(edition, isbn=None):
 def _image(item):
     """The cover URL an edition or a work carries, if it carries one."""
     return _text((item.get("image") or {}).get("url"))
+
+
+def _genres(book):
+    """The genres this work is tagged with, each with the string it came from.
+
+    `cached_tags` holds four categories - `Tag`, `Mood`, `Genre` and `Content
+    Warning` - and only `Genre` is a genre, so the key is the whole filter. A
+    recording made before CBO-42 has no `cached_tags` at all, which is absent
+    rather than a bug, and answers no genres.
+
+    One genre, one pair: a string split into parts the source already lists
+    separately gives the key one entry, and the first string it came out of wins,
+    because that is the provenance and a later string is not a better account of
+    it.
+    """
+    tags = book.get("cached_tags") or {}
+    found = []
+    taken = set()
+    for entry in (tags.get("Genre") or []) if isinstance(tags, dict) else ():
+        if not isinstance(entry, dict):
+            continue
+        written = _text(entry.get("tag"))
+        for part in genre_parts(written) if written else ():
+            if part in taken:
+                continue
+            taken.add(part)
+            found.append((part, written))
+    return tuple(found)
 
 
 def _candidates(editions):

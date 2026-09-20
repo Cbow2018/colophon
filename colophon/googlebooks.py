@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 from colophon.matching import Candidate
-from colophon.sources import SourceError
+from colophon.sources import SourceError, genre_parts
 from colophon.sources import text as _text
 
 __all__ = ["SOURCE", "GoogleBooks"]
@@ -41,14 +41,17 @@ TIMEOUT_SECONDS = 30
 USER_AGENT = "Colophon (+https://github.com/Cbow2018/colophon)"
 REDACTED = "[key]"
 
-# What a candidate is built from. The four fields at the end are the ones
-# CBO-38's rules can write; the rest are CBO-37's. Asking for them costs
-# nothing, since the response is masked to exactly this list either way.
+# What a candidate is built from. `description`, `publishedDate`, `publisher`
+# and `imageLinks` are the ones CBO-38's rules can write; `categories` is CBO-42's
+# genres, which the old mask asked for so little of that it never came back.
+# Asking for them costs nothing, since the response is masked to exactly this
+# list either way.
 FIELDS = (
     "totalItems,items/id,items/volumeInfo/title,items/volumeInfo/authors,"
     "items/volumeInfo/language,items/volumeInfo/industryIdentifiers,"
     "items/volumeInfo/description,items/volumeInfo/publishedDate,"
-    "items/volumeInfo/publisher,items/volumeInfo/imageLinks"
+    "items/volumeInfo/publisher,items/volumeInfo/imageLinks,"
+    "items/volumeInfo/categories"
 )
 
 # Which of the two sizes Google offers to use as the cover. It labels one
@@ -272,7 +275,28 @@ def _candidate(volume):
         publisher=_text(info.get("publisher")),
         date=_text(info.get("publishedDate")),
         cover=_cover(info),
+        genres=_genres(info),
     )
+
+
+def _genres(info):
+    """Google's `categories` as genres, each with the string it came from.
+
+    Google calls a genre a category and mixes library subject headings in among
+    them - a character's name, a place - so nothing is filtered here: which of
+    these is a genre is the judgement CBO-42 pays a model for, and refusing one
+    on Colophon's own say-so would be a rule the model cannot correct.
+    """
+    found = []
+    taken = set()
+    for entry in info.get("categories") or []:
+        written = _text(entry)
+        for part in genre_parts(written) if written else ():
+            if part in taken:
+                continue
+            taken.add(part)
+            found.append((part, written))
+    return tuple(found)
 
 
 def _cover(info):

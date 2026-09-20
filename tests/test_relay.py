@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from colophon.backups import Backups
-from colophon.config import Config
+from colophon.config import KNOWN_FIELDS, Config
 from colophon.correction import Corrector
 from colophon.epub import UNVERIFIED_TAG, read
 from colophon.files import temp_name
@@ -23,6 +23,7 @@ from tests.opf import calibre_series, epub3_series, subjects
 from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, ISBN, write_epub
 from tests.sources import CRAGSIDE_CANDIDATE, NO_COVER_MATCH, FakeSource, no_network
 from tests.tempdir import TemporaryDirectory
+from tests.test_llm import Replay as LlmReplay
 
 # The ISBN CBO-33's design spec names for Cragside. Hardcover has no edition of
 # it, which is the finding CBO-35's recording of this number first recorded.
@@ -942,6 +943,155 @@ class RecordingWhatWasDeliveredTests(RelayTestCase):
             self.settle()
 
         self.assertEqual(self.record.names(), ())
+
+
+class GenreMappingOnTheWayThroughTests(RelayTestCase):
+    """The genre cache is written by the relay, for the same reason a standard is.
+
+    A mapping is what a source genre was judged to mean, and the only thing that
+    makes the second book carrying it free. A book that never reached the output
+    folder must not teach one, and neither must a dry run.
+    """
+
+    ALLOWED = ("Crime", "Mystery")
+
+    def setUp(self):
+        super().setUp()
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.record = Record.open(f"{folder.name}/.colophon.db")
+        self.addCleanup(self.record.close)
+        self.replay = LlmReplay("genre-mapping-case.json")
+        self.source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                series="DCI Ryan Mysteries",
+                series_number="6",
+                language="en",
+                isbn=ISBN,
+                genres=(("Crime", "Crime"),),
+            )
+        )
+
+    def relay_over(self, allowed, dry_run=False, record=True, fields=None):
+        self.config = Config(
+            ingest_dir=self.ingest,
+            output_dir=self.output,
+            backup_dir=self.backups,
+            dry_run=dry_run,
+            stable_checks=2,
+            allowed_genres=tuple(allowed),
+        )
+        relay = Relay(
+            self.config,
+            record=self.record if record else None,
+            corrector=Corrector(
+                sources=[self.source],
+                backups=Backups(self.backups),
+                dry_run=dry_run,
+                fetch=no_network,
+                record=self.record if record else None,
+                genres=allowed,
+                fields=fields,
+                llm=Llm(
+                    provider="deepseek",
+                    model="deepseek-flash",
+                    base_url="https://api.deepseek.com",
+                    key="llm-secret-key-4242",
+                    counter=self.backups / "llm.json",
+                    transport=self.replay,
+                ),
+            ),
+        )
+        relay.prepare()
+        return relay
+
+    def drop_a_book(self, name="Cragside.epub"):
+        return write_epub(self.ingest / name, AS_DOWNLOADED, version="2.0")
+
+    def settle(self, relay):
+        for _ in range(2):
+            relay.scan_once()
+
+    def test_a_delivered_book_records_what_its_genres_mapped_to(self):
+        self.drop_a_book()
+        relay = self.relay_over(self.ALLOWED)
+
+        self.settle(relay)
+
+        self.assertEqual(self.record.mapping("hardcover", "Crime"), "Crime")
+        self.assertEqual(read(self.output / "Cragside.epub").subjects, ("Crime",))
+
+    def test_a_book_that_needs_no_rewrite_still_teaches_the_record(self):
+        """The relay keeps a mapping for a book it delivered but did not change.
+
+        Every field is skipped and the book already carries the genre it maps to,
+        so nothing is written - but the book still reaches the output folder, and
+        the genre question was asked and paid for.
+        """
+        write_epub(
+            self.ingest / "Cragside.epub",
+            AS_DOWNLOADED + "    <dc:subject>Crime</dc:subject>",
+            version="2.0",
+        )
+        relay = self.relay_over(
+            self.ALLOWED, fields={name: "skip" for name in KNOWN_FIELDS}
+        )
+
+        self.settle(relay)
+
+        self.assertEqual(self.record.mapping("hardcover", "Crime"), "Crime")
+        self.assertTrue((self.output / "Cragside.epub").is_file(), "and it arrived")
+        self.assertEqual(read(self.output / "Cragside.epub").subjects, ("Crime",))
+
+    def test_a_book_that_never_moved_teaches_no_mapping(self):
+        self.drop_a_book()
+        relay = self.relay_over(self.ALLOWED)
+
+        with mock.patch(
+            "colophon.relay.copy_into_place", side_effect=OSError("no space left")
+        ):
+            self.settle(relay)
+
+        self.assertEqual(self.record.genres(), ())
+
+    def test_a_dry_run_records_no_mapping(self):
+        self.drop_a_book()
+        relay = self.relay_over(self.ALLOWED, dry_run=True)
+
+        self.settle(relay)
+
+        self.assertEqual(self.record.genres(), ())
+
+    def test_a_changed_allowed_list_forgets_the_genres_that_did_not_fit(self):
+        self.record.sweep_genres(("Fantasy",))
+        self.record.save_genres((("hardcover", "Fiction", "", "Fiction"),))
+
+        self.relay_over(self.ALLOWED)
+
+        self.assertIsNone(self.record.mapping("hardcover", "Fiction"), "askable again")
+        self.assertIsNotNone(self.record.fingerprint())
+
+    def test_the_same_list_leaves_the_genres_that_did_not_fit_alone(self):
+        self.record.sweep_genres(self.ALLOWED)
+        self.record.save_genres((("hardcover", "Fiction", "", "Fiction"),))
+
+        self.relay_over(self.ALLOWED)
+
+        self.assertEqual(self.record.mapping("hardcover", "Fiction"), "")
+
+    def test_a_dry_run_sweeps_nothing_and_rewrites_no_fingerprint(self):
+        """Deleting rows is a write, and a dry run writes nothing at all."""
+        self.record.sweep_genres(("Fantasy",))
+        self.record.save_genres((("hardcover", "Fiction", "", "Fiction"),))
+        held = self.record.fingerprint()
+
+        self.relay_over(self.ALLOWED, dry_run=True)
+
+        self.assertEqual(self.record.mapping("hardcover", "Fiction"), "")
+        self.assertEqual(self.record.fingerprint(), held)
 
 
 if __name__ == "__main__":

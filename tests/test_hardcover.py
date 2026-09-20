@@ -9,8 +9,9 @@ import json
 import unittest
 from pathlib import Path
 
+from colophon import hardcover
 from colophon.hardcover import Hardcover
-from colophon.sources import SourceError
+from colophon.sources import SourceError, genre_parts
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "hardcover"
@@ -514,6 +515,141 @@ class TheOtherFieldsTests(unittest.TestCase):
         self.assertTrue(candidates[0].description.startswith("FROM THE #1 INTERNATIONAL"))
         self.assertEqual(candidates[0].publisher, "Independently Published")
         self.assertTrue(candidates[0].cover.startswith("https://assets.hardcover.app/"))
+
+
+class GenreTests(unittest.TestCase):
+    """What CBO-42 reads: the community tags Hardcover files under `Genre`.
+
+    Every pair is `(genre, the source's own string it came out of)`: the genre is
+    what is asked about and cached, and the string is the provenance the cache
+    keeps. `cached_tags` holds four categories and only `Genre` is a genre.
+    """
+
+    CRAGSIDE_GENRES = "9781521748831"
+    THE_INFIRMARY_GENRES = "9781799729945"
+    PYRAMIDS = "9780575064843"
+    THE_TRIAL = "9781529196382"
+    NO_EDITION = "9781473225374"
+
+    def source(self, name):
+        return Hardcover(TOKEN, transport=Replay(name))
+
+    def test_a_candidate_carries_the_genres_the_source_holds(self):
+        book = self.source("by-isbn-9781521748831-genres.json").by_isbn(
+            self.CRAGSIDE_GENRES
+        )
+
+        self.assertEqual(
+            book.genres,
+            (
+                ("Murder", "Murder"),
+                ("Crime", "Crime"),
+                ("Thriller", "Thriller"),
+                ("Mystery", "Mystery"),
+            ),
+        )
+
+    def test_only_the_genre_category_is_read(self):
+        """`Mood` and `Content Warning` are the same shape and are not genres."""
+        book = self.source("by-isbn-9781521748831-genres.json").by_isbn(
+            self.CRAGSIDE_GENRES
+        )
+
+        for _, written in book.genres:
+            with self.subTest(written=written):
+                self.assertNotIn(written, ("dark", "fast-paced"))
+
+    def test_a_second_book_of_the_same_kind_adds_only_its_new_genre(self):
+        """*The Infirmary*'s `Suspense` is the fifth spelling of one shelf label.
+
+        `Thriller`, `Crime` and `Mystery` are *Cragside*'s too; `Suspense` is the
+        one genre this book brings that the other did not, which is the whole
+        complaint the ticket exists for.
+        """
+        book = self.source("by-isbn-9781799729945-genres.json").by_isbn(
+            self.THE_INFIRMARY_GENRES
+        )
+
+        self.assertEqual(
+            book.genres,
+            (
+                ("Thriller", "Thriller"),
+                ("Crime", "Crime"),
+                ("Suspense", "Suspense"),
+                ("Mystery", "Mystery"),
+            ),
+        )
+
+    def test_a_packed_genre_is_two_genres_keeping_the_string_they_came_from(self):
+        book = self.source("by-isbn-9781529196382-packed-genres.json").by_isbn(
+            self.THE_TRIAL
+        )
+        genres = dict(book.genres)
+
+        self.assertIn("Crime Fiction", genres, "the leaf is its own genre")
+        self.assertEqual(
+            genres["Crime Fiction"],
+            "Thriller & Suspense:Crime Fiction",
+            "and the unsplit string is kept, for the cache's provenance",
+        )
+
+    def test_a_genre_split_twice_over_keeps_the_first_string_it_came_from(self):
+        """`Fantasy` arrives alone and again inside `Fantasy:Humour`."""
+        book = self.source("by-isbn-9780575064843-packed-genres.json").by_isbn(
+            self.PYRAMIDS
+        )
+        genres = [genre for genre, _ in book.genres]
+
+        self.assertEqual(genres.count("Fantasy"), 1, "one genre, one question")
+        self.assertIn("Humour", genres, "and the other half of the path is still new")
+        self.assertEqual(dict(book.genres)["Fantasy"], "Fantasy")
+
+    def test_the_only_genre_can_be_one_the_model_will_refuse(self):
+        """*Berwick*'s single genre is `Fiction`, which is not a shelf label."""
+        book = self.source("by-isbn-9781529978940-genres.json").by_isbn(
+            "9781529978940"
+        )
+
+        self.assertEqual(book.genres, (("Fiction", "Fiction"),))
+
+    def test_a_recording_made_before_this_ticket_carries_none_either(self):
+        """A missing `cached_tags` is absent, not a bug."""
+        book = self.source("by-isbn-found.json").by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.genres, ())
+
+    def test_an_isbn_hardcover_has_no_edition_of_is_an_empty_reply(self):
+        """A different empty from "no genres": there is no book at all."""
+        self.assertIsNone(self.source("by-isbn-9781473225374-genres.json").by_isbn(
+            self.NO_EDITION
+        ))
+
+    def test_both_queries_ask_for_the_genres(self):
+        """The two shipped queries are the whole ask; nothing else fetches a book."""
+        self.assertIn("cached_tags", hardcover.QUERY)
+        self.assertIn("cached_tags", hardcover.TITLE_QUERY)
+
+
+class GenreSplitTests(unittest.TestCase):
+    """The splitter itself, on the shape no recording was kept of."""
+
+    def test_a_semicolon_list_is_several_genres(self):
+        self.assertEqual(
+            genre_parts("Classics; Fantasy; Horror"),
+            ("Classics", "Fantasy", "Horror"),
+        )
+
+    def test_a_colon_path_is_several_genres(self):
+        self.assertEqual(genre_parts("Fantasy:Humour"), ("Fantasy", "Humour"))
+
+    def test_an_ordinary_genre_is_left_alone(self):
+        """`Science Fiction & Fantasy` is one of the spellings the model judges."""
+        self.assertEqual(
+            genre_parts("Science Fiction & Fantasy"), ("Science Fiction & Fantasy",)
+        )
+
+    def test_empties_are_dropped(self):
+        self.assertEqual(genre_parts("Crime; ;"), ("Crime",))
 
 
 if __name__ == "__main__":

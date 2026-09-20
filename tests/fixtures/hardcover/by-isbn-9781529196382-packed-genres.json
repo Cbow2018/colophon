@@ -1,0 +1,171 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9781529196382",
+        "isbn_10": "1529196388",
+        "title": "The Trial",
+        "publisher": {
+          "name": "Century"
+        },
+        "release_date": "2023-01-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/30850134/898abd9e86daf1ae1886c322605d5e3aa6c2599e.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "title": "The Trial",
+          "description": "'Hugely enjoyable' Steve Cavanagh 'Ridiculously entertaining' Tom Hindle 'I did not want it to end' Heidi Perks ______________________ An unputdownable murder mystery by Britain's best-loved criminal barrister Rob Rinder. ONE MURDER. ONE IMPOSSIBLE CASE. WHO IS GUILTY? When hero policeman Grant Cliveden dies from a poisoning in the Old Bailey, it threatens to shake the country to its core. The evidence points to one man. Jimmy Knight has been convicted of multiple offences before and defending him will be no easy task. Not least because this is trainee barrister Adam Green's first case. But it will quickly become clear that Jimmy Knight is not the only person in Cliveden's past with an axe to grind. The only thing that's certain is that this is a trial which will push Adam - and the justice system itself - to the limit . . . ______________________ What readers are saying about THE TRIAL- 'This is a courtroom cracker. Funny, clever and kept me intrigued from start to finish' 'Brilliantly plotted with enough twists and turns to keep you guessing all the way to the end' 'The courtroom scenes and interactions are electric' 'IT IS A MUST READ and hope there will be a sequel - loved it' 'Rinder's own career as criminal barrister shines through' Your favourite authors love THE TRIAL- 'This is a book that takes you to the dark heart of the criminal justice system. They are all here - the good, the bad, the innocent and the guilty. I have not enjoyed a legal thriller this much since Grisham's The Firm' Tony Parsons 'The Trial is in the best tradition of John Mortimer's Rumpole series. A hugely enjoyable British courtroom drama' Steve Cavanagh 'Brilliant courtroom drama, humorous as you would expect from Rob, and one that I had to read slowly because I did not want it to end' Heidi Perks 'The Trial is whip-smart, stylish and gripping, both murder mystery and courtroom drama, shot through with tension, humour and a dark dissection of corruption, status and justice' Gilly Macmillan 'A ridiculously entertaining whodunit. The Trial is sharp, witty and has a huge amount of heart. You're all going to love it when it hits shelves in June' Tom Hindle 'An engrossing read by someone who clearly knows their subject matter well. I didn't see the ending coming!' Faith Martin AVAILABLE FOR PRE-ORDER NOW",
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "A mix driven",
+                "count": 3,
+                "tagSlug": "a-mix-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Loveable Characters",
+                "count": 3,
+                "tagSlug": "loveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Diverse Characters",
+                "count": 3,
+                "tagSlug": "diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Weak Character Development",
+                "count": 1,
+                "tagSlug": "weak-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "legal thriller",
+                "count": 1,
+                "tagSlug": "legal-thriller",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "fiction",
+                "count": 1,
+                "tagSlug": "fiction-ca96607a-64dd-43a9-9ba7-beb93428043e",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Strong Character Development",
+                "count": 1,
+                "tagSlug": "strong-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "mysterious",
+                "count": 2,
+                "tagSlug": "mysterious",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "informative",
+                "count": 1,
+                "tagSlug": "informative",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "tense",
+                "count": 1,
+                "tagSlug": "tense",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "dark",
+                "count": 1,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Thriller & Suspense:Crime Fiction",
+                "count": 1,
+                "tagSlug": "thriller-suspense-crime-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fiction",
+                "count": 1,
+                "tagSlug": "fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Content Warning": []
+          },
+          "release_date": "2023-01-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/30850134/898abd9e86daf1ae1886c322605d5e3aa6c2599e.jpeg"
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 494687,
+                "name": "Rob Rinder"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 1,
+              "series": {
+                "id": 179924,
+                "name": "Adam Green"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

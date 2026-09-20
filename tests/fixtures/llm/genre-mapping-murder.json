@@ -1,0 +1,29 @@
+{
+  "object": "chat.completion",
+  "model": "deepseek-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"genre\": \"Crime\", \"reason\": \"Murder is a crime-themed genre, matching Crime.\"}",
+        "reasoning_content": "The source genre is \"Murder\". Map to one of allowed genres. Murder fits Crime, Mystery, Thriller. Best single: Crime likely. I'll pick Crime.\n\nReason short."
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 185,
+    "completion_tokens": 62,
+    "total_tokens": 247,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 38
+    },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 185
+  }
+}

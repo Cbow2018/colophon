@@ -152,6 +152,36 @@ log_level = "INFO"
 # that table.
 # add_cover = true
 
+# Your own tag list: the genres Colophon is allowed to write. A source's genres
+# are not written as they come - Hardcover files one kind of book under
+# `Murder`, `Crime`, `Thriller` and `Mystery`, and Google Books mixes in
+# library subject headings - so each source genre is judged against this list
+# and either mapped onto one of these spellings or dropped. Nothing outside the
+# list is ever written, so your library collects a shelf label rather than five
+# near-duplicates of it.
+#
+# The spelling here is what ends up on the book, and matching is not fussy
+# about case: a list saying "Crime" means a source's `crime` is written
+# `Crime`. Two entries that are one genre spelt two ways are refused rather than
+# guessed between.
+#
+# An empty list is what the default is, and it means no genres are written at
+# all - it is also how you switch the feature off. An empty list costs no LLM
+# calls either: with nothing to map onto there is no question to ask.
+#
+# Genres are the one field outside the [fields] rules below. They are only ever
+# added to a book's existing tags, never replaced: the `colophon:unverified`
+# mark is a tag too, and so is anything your library already says about the
+# book, so a rule that overwrote tags would eat both. Removing a genre from this
+# list stops it being written on the next book; it does not go back and rewrite
+# the books already in your library.
+#
+# The line below is commented out because an empty list is already what
+# Colophon does. Uncomment it - and change it - to turn genres on. It is written
+# before the [fields] table on purpose: in TOML everything after a table header
+# belongs to that table.
+# allowed_genres = ["Crime", "Mystery", "Thriller", "Historical Fiction"]
+
 # What to do with each metadata field when a source has the book. One rule each:
 #
 #   "overwrite" - write the source's value, whatever the file already says

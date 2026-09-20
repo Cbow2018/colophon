@@ -1,0 +1,300 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9780575064843",
+        "isbn_10": "0575064846",
+        "title": "Pyramids",
+        "publisher": {
+          "name": "Gollancz"
+        },
+        "release_date": "1989-01-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/1054164/d2351bb7cea8510125887f79bfc910e6aac37f31.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "title": "Pyramids",
+          "description": "It's bad enough being new on the job, but Teppic hasn't a clue as to what a pharaoh is supposed to do. After all, he's been trained at Ankh-Morpork's famed assassins' school, across the sea from the Kingdom of the Sun.First, there's the monumental task of building a suitable resting place for Dad -- a pyramid to end all pyramids. Then there are the myriad administrative duties, such as dealing with mad priests, sacred crocodiles, and marching mummies. And to top it all off, the adolescent pharaoh discovers deceit, betrayal -- not to mention aheadstrong handmaiden -- at the heart of his realm.",
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "Loveable Characters",
+                "count": 8,
+                "tagSlug": "loveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Strong Character Development",
+                "count": 7,
+                "tagSlug": "strong-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "A mix driven",
+                "count": 6,
+                "tagSlug": "a-mix-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Diverse Characters",
+                "count": 5,
+                "tagSlug": "diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Weak Character Development",
+                "count": 4,
+                "tagSlug": "weak-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Plot driven",
+                "count": 4,
+                "tagSlug": "plot-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Not Diverse Characters",
+                "count": 4,
+                "tagSlug": "not-diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Unloveable Characters",
+                "count": 3,
+                "tagSlug": "unloveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "fantasy",
+                "count": 2,
+                "tagSlug": "fantasy-706cd3bf-bf58-4a87-9f4e-0e6efff6a30f",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Discworld",
+                "count": 2,
+                "tagSlug": "discworld",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "lighthearted",
+                "count": 17,
+                "tagSlug": "lighthearted",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "funny",
+                "count": 17,
+                "tagSlug": "funny",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Adventurous",
+                "count": 15,
+                "tagSlug": "adventurous",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "reflective",
+                "count": 4,
+                "tagSlug": "reflective",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "relaxing",
+                "count": 3,
+                "tagSlug": "relaxing",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "mysterious",
+                "count": 3,
+                "tagSlug": "mysterious",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "inspiring",
+                "count": 2,
+                "tagSlug": "inspiring",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "informative",
+                "count": 1,
+                "tagSlug": "informative",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "dark",
+                "count": 1,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "hopeful",
+                "count": 1,
+                "tagSlug": "hopeful",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Fantasy",
+                "count": 9,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Adventure",
+                "count": 2,
+                "tagSlug": "adventure",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Science Fiction",
+                "count": 2,
+                "tagSlug": "science-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "General",
+                "count": 2,
+                "tagSlug": "general",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Humor",
+                "count": 2,
+                "tagSlug": "humor",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Humour",
+                "count": 2,
+                "tagSlug": "humour",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy:Humour",
+                "count": 1,
+                "tagSlug": "fantasy-humour",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Satire",
+                "count": 1,
+                "tagSlug": "satire-285bad6e-bc3a-46d9-97ab-a6c1d23b1180",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Science Fiction & Fantasy",
+                "count": 1,
+                "tagSlug": "science-fiction-fantasy-4c14c349-8d52-4893-aaf0-34f7e33bf275",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Comedy & Humor",
+                "count": 1,
+                "tagSlug": "comedy-humor",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "release_date": "1989-01-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31535942/0f6852af0991774597ac442370ec8a0fe7a879fc.jpeg"
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 227859,
+                "name": "Terry Pratchett"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 7,
+              "series": {
+                "id": 1018,
+                "name": "Discworld"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
