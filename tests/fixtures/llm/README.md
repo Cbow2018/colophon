@@ -50,7 +50,8 @@ the source the record came from.
 
 CBO-42 asks the same endpoint a different question — which of the user's allowed
 genres this one source genre is, or none of them — and these are its recordings.
-Unlike the four above, **these are read by tests.**
+Unlike the four above, **eight of these nine are read by tests**; the exception is
+named below.
 
 Two prompt shapes were recorded, and which is which matters:
 
@@ -85,6 +86,14 @@ The allowed list in every recording but `genre-mapping-empty-allowed.json` is
 "Fantasy"]`, and `genre-mapping-murder.json` is the one that shows the model's
 judgement rather than an echo: `Murder` is on that list too, and it answers
 `Crime` as the nearer allowed word.
+
+**`genre-mapping-empty-allowed.json` is the one file here that no test reads, and
+it is kept as probe evidence.** An empty allowed list is a fresh install's state,
+and CBO-42's decision is that it costs **no call at all** — with no list there is
+no question to ask, so the shipped code returns before the request is built. The
+reply is therefore unreachable by the shipped client, and it is here only to
+record what the endpoint answered when the probe asked anyway. The test for that
+state asserts the transport was never called, which no recorded reply can show.
 
 `genre-mapping-fiction.json` is the one to read before changing the drop rule.
 `Fiction` is *Berwick*'s only source genre, and the model answers `null` — a

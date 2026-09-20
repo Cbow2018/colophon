@@ -218,6 +218,13 @@ Checked in the tree rather than assumed:
 - **`Candidate` carries `author_ids` and `series_id`** (`matching.py`), added by
   CBO-41 for the same reason: what a source returned travels beside the values it
   belongs to. `genres` joins them; no second parallel type is needed.
+- **`Candidate` already carries the source name**, as `source: str | None`, and
+  its own docstring says what it is for: "names where it came from, so a candidate
+  can be written into a file without anything else having to remember who offered
+  it." So the cache key `(source, genre)` needs **no new field** — decision 1 adds
+  only `genres`, and the source half of the key is read off the candidate that
+  already has it. Nothing in this ticket reads `source` for any other purpose, and
+  the record's `genres.source` column is written from this same field.
 - **Neither shipped query asks for genres.** `hardcover.QUERY` and
   `hardcover.TITLE_QUERY` ask for `contributions` and `book_series` but not
   `cached_tags`, and `googlebooks.FIELDS` has no `categories`. Both are query
@@ -349,8 +356,10 @@ overturned in review.
    `googlebooks` does the same to `categories`. One place per source decides what
    a genre string is, so the prompt and the cache key cannot disagree about it.
    Splitting keeps the words in order and drops empties, so `Classics; Fantasy;
-   Horror` is three genres and `Fantasy:Humour` is two. **The unsplit string is
-   kept for the cache's `seen` column**, and only the parts are asked about.
+  Horror` is three genres and `Fantasy:Humour` is two. **The unsplit string is
+  kept for the cache's `seen` column**, and only the parts are asked about — see
+  "What `seen` holds when two strings collide" for which string that is when more
+  than one produces the same genre.
 3. **Google's mask gains `items/volumeInfo/categories`**, and Hardcover's two
    queries gain `cached_tags` — asked whole, because a jsonb column's inner keys
    are not selectable one at a time. **This is a stated change to fixtures**, the
@@ -436,7 +445,10 @@ CREATE TABLE genres (
 );
 
 -- One row: the allowed list the nulls above were answered against.
+-- The CHECK is the point: without it this table accumulates a row per sweep,
+-- and "the fingerprint" stops meaning anything.
 CREATE TABLE genre_list (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
     fingerprint TEXT NOT NULL
 );
 ```
@@ -449,11 +461,33 @@ one).
 
 **Why `source` is in the key.** The same word can arrive from two vocabularies
 and mean two things, and keying on the string alone would let one source's answer
-silently answer for the other. It is one more column.
+silently answer for the other. It is one more column, filled from the
+`Candidate.source` the candidate already carries (§4).
 
 **Why `seen` exists.** It is the only record of what the source actually wrote,
 the same role `names.seen` plays for a spelling: it is what a person looks at when
 they wonder why their book says `Crime` and not `Murder`.
+
+#### What `seen` holds when two strings collide
+
+Nothing about a genre string is unique to the genre: `Fantasy` arrives on its own
+from *Pyramids* and again as one half of `Fantasy:Humour` from the same record, and
+**both split to the key `Fantasy`**, so `PRIMARY KEY (source, genre)` gives them
+**one row**. The key is the split part; `seen` is only provenance, and a collision
+must not be allowed to mean two answers to one question.
+
+**The first string seen wins, and a later one leaves the row alone.** The write is
+`ON CONFLICT (source, genre) DO NOTHING`, exactly as `record._write_name` already
+does for a name standard, and for the same reason: the mapping is what the row is
+for, and the second string is not a better answer to a question already answered.
+So a book whose only genre is `Fantasy` records
+`(hardcover, 'Fantasy', <target>, seen='Fantasy')`, and the `Fantasy:Humour`
+record's `Fantasy` half leaves that row as it was — while still adding its own
+`Humour` row, because that key is new. `Fantasy:Humour` is therefore **not**
+recoverable from the table afterwards, which is the deliberate cost of a key that
+has to be one genre: the split string is what is judged, and `seen` is a hint for a
+person, not a second key. `Pyramids` and its packed path are what a test pins this
+with.
 
 ### The fingerprint
 
@@ -464,8 +498,17 @@ fingerprint = "\n".join(sorted(genre.casefold().strip() for genre in allowed))
 Sorted, case-folded and trimmed, so reordering or re-casing `config.toml` is not a
 change (Q7). On load, when the stored fingerprint differs from the current one
 **and the relay is not in dry run**, `DELETE FROM genres WHERE mapped = ''` and
-the fingerprint is rewritten. Positive rows are left as they are and are
-validated when read.
+the row is rewritten. Positive rows are left as they are and are validated when
+read.
+
+**A fresh database has no `genre_list` row at all, and that is not an error.**
+There is no stored fingerprint to compare against, and the table is empty by
+definition, so the sweep is a no-op that simply writes the current fingerprint. It
+is deliberately the same code path as a changed list rather than a special case:
+`SELECT` returning `None` and the stored value differing both mean "the nulls on
+file were not answered against this list", and either way the delete removes
+nothing. Treating a missing row as an error would refuse the first book on a new
+install, which is the one case that must work.
 
 ### Resolving one genre
 
@@ -481,6 +524,14 @@ for each (source, genre) the matched candidate carries, in order, deduped:
 Then every non-`None` target is matched against the allowed list
 case-insensitively, mapped onto the config's exact spelling, deduped, and added
 to `dc:subject` in source order if the book does not already carry it.
+
+**An empty `allowed_genres` returns before step 1** (decision 12), and that is the
+one ordering in this list worth stating: with no list there is nothing to map
+onto, so neither a cached target nor a memo hit is a valid answer any more and
+neither is worth looking up. Without the early return the memo would hand back a
+target the empty list cannot accept, and the book would reach the write step with
+a genre that decision 12 says cannot be written. The check belongs at the top of
+the mapping step, not inside step 3.
 
 ### Files this touches
 
@@ -512,7 +563,15 @@ The ticket's two, plus the ones the probes make worth pinning:
   real `finish_reason: length` reply with partial content, and
   `genre-mapping-truncated.json` is the empty-body case; both are a `null`.
 - **An empty allowed list costs no call.** Asserted on the transport never being
-  called, not only on the outcome.
+  called, not only on the outcome. This is why
+  `genre-mapping-empty-allowed.json` is evidence rather than a fixture: the reply
+  exists, but no request can reach it, so the test drives the state directly
+  instead of replaying it.
+- **A genre key that two strings collide on gets one row, and the first wins.**
+  `by-isbn-9780575064843-packed-genres.json` carries `Fantasy` alone *and*
+  `Fantasy:Humour`, so `Fantasy` already has a row when the packed form is split;
+  the test asserts the row is unchanged, that `Humour` is still added, and that
+  the whole packed string is not recoverable afterwards.
 - **A book with no genres asks nothing**, and so does a recording made before
   this ticket — a missing `cached_tags` is absent, not an error.
 - **The packed forms split.** `Fantasy:Humour` is two genres and
@@ -564,7 +623,7 @@ CBO-42's tests**, and each README says so.
 | `llm/genre-mapping-fiction.json` | `Fiction` answered `null` — the drop that leaves a book with no genres |
 | `llm/genre-mapping-synagogues.json` | a real Hardcover Genre tag that is not a genre, answered `null` |
 | `llm/genre-mapping-unmappable.json` | Google's character heading, answered `null` |
-| `llm/genre-mapping-empty-allowed.json` | an empty allowed list answered `null` rather than failing |
+| `llm/genre-mapping-empty-allowed.json` | an empty allowed list answered `null` rather than failing — probe evidence only, **not read by a test**: decision 12 means no call is made in that state, so no test can reach this reply |
 | `llm/genre-mapping-batch.json` | the rejected shape: `finish_reason: length` with partial content, which must drop |
 | `llm/genre-mapping-truncated.json` | the rejected shape at its worst: `finish_reason: length`, empty body |
 
@@ -573,6 +632,12 @@ one file and needs no new recording for the unmappable one — but its `categori
 are invisible to the shipped mask until decision 3 lands, so CBO-42's test for
 Google's genres reads it through a client that asks for the field.
 
-**None of the sixteen new recordings was reconstructed from documentation.** The
-two Google ones and the fourteen LLM ones are live replies; the six Hardcover
-ones are live replies to the shipped query plus `cached_tags`.
+**All sixteen are live replies — none was reconstructed from documentation.** The
+one Google recording and the six Hardcover ones are live replies to the shipped
+request plus the field this ticket adds; the nine LLM ones are live replies from
+DeepSeek. **Fifteen of the sixteen are read by a test**;
+`genre-mapping-empty-allowed.json` is the exception, and it is kept because an
+empty allowed list is the state a fresh install is in and the reply is what the
+probe showed that state answers — not because anything replays it. The test for
+that state asserts the transport was **never called**, which is a stronger claim
+than any recorded reply could make.
