@@ -818,7 +818,12 @@ class Corrector:
             changed=_changes(written, edits, credited),
             applied=True,
             kept=str(kept),
-            decision=self._decision(standards, found, confidence, book),
+            # Nothing is recorded for a rewrite that was refused: the book that
+            # reaches the library is the one it arrived as, so the spelling this
+            # pass chose is not one anything on the shelf has.
+            decision=(
+                self._decision(standards, found, confidence, book) if written else None
+            ),
         )
 
     def _standards(self, found):

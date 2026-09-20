@@ -3227,6 +3227,30 @@ class RecordTests(CorrectionTestCase):
 
         self.assertEqual(record.names(), ())
 
+    def test_a_rewrite_the_file_refused_records_nothing(self):
+        """The book that reaches the library is the one it arrived as.
+
+        `epub.correct` decides everything before it writes anything, so a book
+        whose rewrite is refused is untouched - and a standard learnt from the
+        spelling this pass chose would be one nothing on the shelf has. The
+        rewrite is the only call that fails: answering the "what would move"
+        question still works, which is what puts the pass on the writing branch.
+        """
+        record = self.record()
+        real = colophon_epub.correct
+
+        def refuse_the_write(path, edits, write=True, **kwargs):
+            if write:
+                raise EpubError("the file will not take it")
+            return real(path, edits, write=False, **kwargs)
+
+        with mock.patch.object(colophon_epub, "correct", side_effect=refuse_the_write):
+            self.deliver(
+                self.book(), record, source=self.source_saying(("L.J. Ross",), (318638,))
+            )
+
+        self.assertEqual(record.names(), ())
+
     def test_the_series_is_standardised_the_same_way_an_author_is(self):
         record = self.record()
         self.deliver(
