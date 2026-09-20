@@ -398,5 +398,107 @@ class LoadConfigTests(unittest.TestCase):
             load_config(env={"COLOPHON_CONFIG": str(path)})
 
 
+class RecordPathTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def write_config(self, text):
+        path = self.tmp / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_the_default_is_beside_the_backups(self):
+        """`/config` is mounted read-only, so it cannot live beside config.toml."""
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(config.record_path, Path("/backups/.colophon.db"))
+
+    def test_the_file_can_say_where_it_goes(self):
+        path = self.write_config('record_path = "/data/colophon.db"\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(config.record_path, Path("/data/colophon.db"))
+
+    def test_the_environment_can_say_too(self):
+        config = load_config(env={"COLOPHON_RECORD_PATH": "/somewhere/else.db"})
+
+        self.assertEqual(config.record_path, Path("/somewhere/else.db"))
+
+
+class AuthorOverrideTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def write_config(self, text):
+        path = self.tmp / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_no_table_means_no_overrides(self):
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(dict(config.authors), {})
+
+    def test_a_table_maps_a_spelling_to_the_one_to_write(self):
+        path = self.write_config('[authors]\n"LJ Ross" = "L.J. Ross"\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(dict(config.authors), {"lj ross": "L.J. Ross"})
+
+    def test_the_keys_are_normalised_so_every_spelling_of_one_name_matches(self):
+        """TOML keys are literal strings; `L.J.` and `L. J.` are one name here."""
+        path = self.write_config('[authors]\n"L. J. Ross" = "L.J. Ross"\n')
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("lj ross", dict(config.authors))
+        self.assertNotIn("l j ross", dict(config.authors), "the raw key is not kept")
+
+    def test_two_keys_for_one_name_with_different_values_are_refused(self):
+        """There is no order to appeal to, so which won would be the parser's."""
+        path = self.write_config(
+            '[authors]\n"LJ Ross" = "First"\n"L.J. Ross" = "Second"\n'
+        )
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("LJ Ross", str(caught.exception))
+
+    def test_two_keys_for_one_name_agreeing_are_fine(self):
+        path = self.write_config(
+            '[authors]\n"LJ Ross" = "L.J. Ross"\n"L.J. Ross" = "L.J. Ross"\n'
+        )
+
+        config = load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertEqual(dict(config.authors), {"lj ross": "L.J. Ross"})
+
+    def test_an_empty_value_is_refused(self):
+        path = self.write_config('[authors]\n"LJ Ross" = ""\n')
+
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+    def test_a_value_that_is_not_a_string_is_refused(self):
+        path = self.write_config('[authors]\n"LJ Ross" = 6\n')
+
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+    def test_a_key_that_normalises_to_nothing_is_refused(self):
+        """`"..."` is not a name, so it could never match one."""
+        path = self.write_config('[authors]\n"..." = "L.J. Ross"\n')
+
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+
 if __name__ == "__main__":
     unittest.main()

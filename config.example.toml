@@ -186,4 +186,37 @@ log_level = "INFO"
 # series: the source's number is written only when the series the book ends up
 # in is the source's own. Otherwise the file's own number stays, unless a series
 # was written in place of the one around it, and then it is dropped.
+#
+
+# Colophon's own record: the SQLite file where it remembers the author and
+# series spellings your library has settled on, so one author is not spelt two
+# ways across the shelf. The first source to match an author fixes the spelling,
+# and every later book by that author is given the same one, whichever source
+# matched it.
+#
+# It lives here rather than beside config.toml because that folder is mounted
+# read-only. Point it at local disk: SQLite's locking is unreliable over SMB or
+# NFS, and the backups folder is a plausible thing to put on a NAS.
+#
+# Nothing clears it on its own. `python -m colophon --reset-record` empties it,
+# and asks first.
+#
+# The line below is the default; uncomment and change it to put the file
+# somewhere else.
+# record_path = "/backups/.colophon.db"
+
+# Spellings you insist on, for authors a source gets wrong or spells its own
+# way. Each line means "when you see this name, write it this way": the left
+# side is matched however it is punctuated or spaced, so LJ Ross, L.J. Ross and
+# L. J. Ross are all the same entry here.
+#
+# These always win. They beat whatever the record settled on and they are never
+# written into it, so taking one out restores the recorded spelling — they are
+# how you correct a spelling in your library app and have it stay corrected.
+#
+# Written last on purpose: in TOML everything after a table header belongs to
+# that table, so this one goes at the end of the file.
+#
+# [authors]
+# "LJ Ross" = "L.J. Ross"
 
