@@ -849,7 +849,9 @@ class Corrector:
             [found.series],
             found.source,
             identities=[found.series_id],
-            overrides=self.overrides,
+            # No overrides: `[authors]` is a table of author spellings. A key
+            # only collides with a series name because both are resolved through
+            # one normaliser, which is not a reason to rename a series.
         )
         return Standards(
             authors=tuple(one.spelling for one in authors),

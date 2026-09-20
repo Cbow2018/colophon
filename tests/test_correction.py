@@ -3281,6 +3281,28 @@ class RecordTests(CorrectionTestCase):
 
         self.assertEqual(read(self.folder / "Second.epub").series, "DCI Ryan Mysteries")
 
+    def test_an_author_override_does_not_reach_the_series(self):
+        """`[authors]` is a table of author spellings; a series is not an author.
+
+        A key only collides with a series name because both are resolved through
+        the same normaliser, so a user writing an author's name twice cannot be
+        taken to have asked for the series to be renamed with it.
+        """
+        record = self.record()
+
+        self.deliver(
+            self.book(),
+            record,
+            source=self.source_saying(("L.J. Ross",), (318638,)),
+            overrides={"dci ryan mysteries": "L J Ross"},
+        )
+
+        self.assertEqual(
+            read(self.folder / "Cragside.epub").series,
+            "DCI Ryan Mysteries",
+            "the series as the source spelt it",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
