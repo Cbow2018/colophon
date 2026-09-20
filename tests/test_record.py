@@ -85,13 +85,12 @@ class FirstSightTests(RecordTestCase):
         Where they differ is what tells a standard apart from the spelling that
         happened to arrive, which is the question a person asks when their
         library says `L.J. Ross` and the book they dropped in said something
-        else.
+        else. The row is not rewritten by the second source — the standard does
+        not move — so what the second source wrote is read out of `names()`.
         """
         self.record.save(self.resolve((LJ,)))
 
-        self.record.save(
-            self.resolve((PLAIN,), overrides={"lj ross": "L J Ross"})
-        )
+        self.record.save(self.resolve((SPACED,), source=GOOGLE))
 
         rows = {
             (source, key): (standard, seen)
@@ -99,6 +98,11 @@ class FirstSightTests(RecordTestCase):
         }
         self.assertEqual(
             rows[(BY_NAME, "lj ross")], (LJ, LJ), "the first spelling, and the standard"
+        )
+        self.assertEqual(
+            self.spellings((SPACED,), source=GOOGLE),
+            [LJ],
+            "the second source's spelling follows the standard",
         )
 
 
@@ -176,13 +180,48 @@ class OverrideTests(RecordTestCase):
                     self.spellings((PLAIN,), overrides={key: "L J Ross"}), ["L J Ross"]
                 )
 
-    def test_an_override_is_never_written_into_the_record(self):
+    def test_an_override_never_feeds_the_record_a_standard(self):
+        """The table is a layer over the record, not a thing that writes to it.
+
+        The author here has never been seen, so nothing stands in the way of the
+        override's value becoming the standard — which is exactly the case the
+        old test missed by saving a standard first and letting the second write
+        hit `ON CONFLICT DO NOTHING`. Nothing is filed at all: not the override's
+        value, and not the source's spelling either, because the pass that
+        decided this name was the user's and not the record's.
+        """
+        self.record.save(
+            self.resolve((LJ,), identities=(ROSS_ID,), overrides={"lj ross": "L J Ross"})
+        )
+
+        self.assertEqual(self.record.names(), ())
+
+    def test_the_record_learns_nothing_from_an_overridden_pass(self):
+        """So taking the override back out leaves the next book to set the standard."""
+        self.record.save(
+            self.resolve((LJ,), identities=(ROSS_ID,), overrides={"lj ross": "L J Ross"})
+        )
+
+        self.assertEqual(self.spellings((SPACED,), source=GOOGLE), [SPACED])
+
+    def test_an_override_does_not_stop_the_match_being_recorded(self):
+        """The book still arrived; only the spelling was the user's, not the record's."""
+        self.record.save(
+            self.resolve((LJ,), overrides={"lj ross": "L J Ross"}),
+            Match("9781521748831", HARDCOVER, 1.0),
+        )
+
+        self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
+
+    def test_an_override_does_not_overwrite_a_standard_the_record_holds(self):
         """Taking it back out of the config has to restore the spelling."""
         self.record.save(self.resolve((LJ,)))
 
         self.record.save(self.resolve((LJ,), overrides={"lj ross": "L J Ross"}))
 
         self.assertEqual(self.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+
+        self.assertEqual(self.spellings((LJ,)), [LJ], "and out of the config it is back")
 
     def test_an_override_is_one_hop_and_is_not_followed_again(self):
         """`A -> B` and `B -> C` writes B; a chain is not a thing to guess at."""

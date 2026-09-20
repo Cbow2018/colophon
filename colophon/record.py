@@ -89,6 +89,11 @@ class Resolved:
     what the record files the standard under as well as the spelling. `by_id` is
     whether the decision came from that id rather than from the spelling, which
     is what says the name is already anchored and must not be anchored again.
+
+    `overridden` says the user's config decided this one. An override is a layer
+    over the record, not a value written into it: taking the entry back out of
+    `config.toml` has to restore the spelling the library had before, and it can
+    only do that if nothing was filed under the override's value.
     """
 
     kind: str
@@ -97,6 +102,7 @@ class Resolved:
     seen: str
     identity: int | str | None = None
     by_id: bool = False
+    overridden: bool = False
 
 
 @dataclass(frozen=True)
@@ -171,7 +177,9 @@ class Record:
 
         * **The user's overrides win**, always and first. They exist because a
           person correcting a spelling in their library app should not have to
-          argue with a database.
+          argue with a database — and they are a layer rather than a value:
+          nothing an override decides is written into the record, so taking the
+          entry back out of the config restores the spelling the library had.
         * **The source's own id** answers "this is a row I recorded before",
           which is the only thing that catches one source spelling a name two
           ways.
@@ -202,7 +210,7 @@ class Record:
                         override,
                         name,
                         identity,
-                        by_id=identity is not None,
+                        overridden=True,
                     )
                 )
                 continue
@@ -237,7 +245,8 @@ class Record:
         so a crash part-way through a correction cannot teach a standard for a
         book that never arrived. A name whose standard the record already holds
         is left as it is: a standard does not move because a later book spelt the
-        name differently.
+        name differently. A name the user's overrides decided is not filed at
+        all; the match beside it still is, because the book did arrive.
 
         `when` is when the match happened, written down but never compared: two
         hosts in two time zones must not disagree about the order books arrived
@@ -251,6 +260,12 @@ class Record:
         its own and the order only decides a draw.
         """
         for resolution in resolutions:
+            # An override is the user's own layer over the record. Nothing is
+            # filed for it: a spelling nobody chose for the library would
+            # otherwise become a standard, and survive the entry being taken back
+            # out of the config.
+            if resolution.overridden:
+                continue
             self._write_name(resolution)
             if resolution.by_id:
                 continue
