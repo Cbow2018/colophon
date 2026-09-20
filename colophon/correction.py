@@ -27,6 +27,7 @@ from colophon.matching import (
     score_candidate,
     search_titles,
 )
+from colophon.record import AUTHOR, SERIES, Match
 from colophon.sources import SourceError, fetcher_for
 
 LOG = logging.getLogger("colophon")
@@ -93,6 +94,45 @@ class Change:
 
 
 @dataclass(frozen=True)
+class Standards:
+    """The spellings the record decided on for one book's names.
+
+    Held apart from the corrections because they are not values a source
+    offered: they are the library's own, and the book is written with them so
+    that the same author is not spelt two ways across a shelf. `resolved` is
+    what the record is told once the book has landed, and it is the only thing
+    that ever becomes a new standard.
+    """
+
+    authors: tuple = ()
+    series: str | None = None
+    resolved: tuple = ()
+
+    def applied_to(self, candidate):
+        """This source's record, with the standard spellings in place of its own."""
+        changes = {}
+        if self.authors:
+            changes["authors"] = self.authors
+        if self.series is not None:
+            changes["series"] = self.series
+        return replace(candidate, **changes) if changes else candidate
+
+
+@dataclass(frozen=True)
+class Decision:
+    """A match, and the names it settled on, for the relay to record.
+
+    The corrector decides this, because it is the only thing that knows which
+    names were resolved and under which keys; the relay persists it, because it
+    is the only thing that knows the book was delivered. Passing it between them
+    is what keeps a correction that never landed from teaching a standard.
+    """
+
+    resolutions: tuple = ()
+    match: Match | None = None
+
+
+@dataclass(frozen=True)
 class Outcome:
     """What became of one book, in enough detail for the relay's one log line."""
 
@@ -146,6 +186,10 @@ class Outcome:
     # Which chose the record the book was corrected from: "llm" when the model
     # picked it, None when the rules did.
     chosen_by: str | None = None
+    # What the record should be told once this book has landed, or None when
+    # there is nothing to tell it. The relay is what knows the book arrived, so
+    # the decision travels there rather than being written here.
+    decision: Decision | None = None
 
     def fragment(self):
         """The bracketed part of the log line, or nothing when there is nothing to say."""
@@ -300,6 +344,8 @@ class Corrector:
         fetch=None,
         confidence=DEFAULT_CONFIDENCE,
         llm=None,
+        record=None,
+        overrides=None,
     ):
         self.sources = tuple(sources or ())
         self.backups = backups
@@ -318,6 +364,13 @@ class Corrector:
         # The fallback chooser, or None when the user has not set one up. No LLM
         # means uncertain books take the unverified path rather than waiting.
         self.llm = llm
+        # Colophon's own record of the spellings this library has settled on, or
+        # None when there is none: a missing record means every book is written
+        # with the source's own spelling, exactly as it was before this existed.
+        self.record = record
+        # The `[authors]` overrides, keyed by normalised name, which beat
+        # whatever the record says.
+        self.overrides = dict(overrides or {})
         # Books the LLM could not be asked about, and why, for the UTC day they
         # were left for: a cache, not a decision, so it is in memory and a
         # restart costs one extra round of source queries.
@@ -326,8 +379,13 @@ class Corrector:
         self.fetch = fetch or fetcher_for()
 
     @classmethod
-    def from_config(cls, config, backups):
-        """The pass this configuration asks for, minus any source it cannot build."""
+    def from_config(cls, config, backups, record=None):
+        """The pass this configuration asks for, minus any source it cannot build.
+
+        `record` is Colophon's own record, passed in rather than opened here:
+        one connection to one SQLite file is what `Relay` owns, and a second
+        opener is how `database is locked` starts.
+        """
         sources = []
         for name in config.sources:
             source = _build(name, config)
@@ -360,6 +418,8 @@ class Corrector:
             add_cover=config.add_cover,
             confidence=config.confidence,
             llm=llm,
+            record=record,
+            overrides=dict(config.authors),
         )
 
     def correct(self, path):
@@ -673,6 +733,12 @@ class Corrector:
         # source that matched the book. A book nothing matched has no source, and
         # the only thing written to it is the mark, which is Colophon's.
         credited = COLOPHON if unverified else found.source
+        # What the library's own record says these names are spelt, applied
+        # before anything is decided from them so that the log line, the backup
+        # and the book itself all name the same spelling.
+        standards = self._standards(found)
+        if standards is not None:
+            found = standards.applied_to(found)
         edits = self._edits(found, book, unverified=unverified)
         matched = {
             "isbn": isbn,
@@ -752,6 +818,58 @@ class Corrector:
             changed=_changes(written, edits, credited),
             applied=True,
             kept=str(kept),
+            decision=self._decision(standards, found, confidence),
+        )
+
+    def _standards(self, found):
+        """What the record says these names are spelt, or None without one.
+
+        A book nothing matched has no names to standardise, and no record means
+        every book keeps the spelling its source gave - which is what every
+        version before this one did.
+        """
+        if found is None or self.record is None:
+            return None
+        authors = self.record.resolve(
+            AUTHOR,
+            found.authors,
+            found.source,
+            identities=found.author_ids,
+            overrides=self.overrides,
+        )
+        if not authors:
+            return None
+        series = self.record.resolve(
+            SERIES,
+            [found.series],
+            found.source,
+            identities=[found.series_id],
+            overrides=self.overrides,
+        )
+        return Standards(
+            authors=tuple(one.spelling for one in authors),
+            series=series[0].spelling if series else None,
+            resolved=authors + series,
+        )
+
+    def _decision(self, standards, found, confidence):
+        """What to tell the record once this book has landed, or None.
+
+        Nothing to standardise means nothing to record. The match travels beside
+        the names so a duplicate can be settled later without asking the sources
+        again: what recognised the book, how sure it was, and the identity it was
+        recognised under.
+        """
+        if standards is None:
+            return None
+        return Decision(
+            resolutions=standards.resolved,
+            match=Match(
+                book_key=found.isbn or "",
+                source=found.source,
+                confidence=confidence,
+                matched_as=str(found.isbn or ""),
+            ),
         )
 
     def _edits(self, found, book, unverified=False):

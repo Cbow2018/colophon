@@ -9,6 +9,8 @@ finish with.
 import hashlib
 import logging
 import os
+import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 from colophon.backups import Backups, free_name
@@ -23,10 +25,17 @@ class RelayError(Exception):
 
 
 class Relay:
-    def __init__(self, config, corrector=None):
+    def __init__(self, config, corrector=None, record=None):
         self.config = config
         self.backups = Backups(config.backup_dir, config.backup_retention_days)
-        self.correction = corrector or Corrector.from_config(config, self.backups)
+        # Colophon's own record, or None when there is none. It is held here and
+        # handed to the correction pass, because one connection to one SQLite
+        # file is what this object owns and a second opener is how
+        # `database is locked` starts.
+        self.record = record
+        self.correction = corrector or Corrector.from_config(
+            config, self.backups, record=record
+        )
         # path -> ((size, mtime), how many scans it has looked like that)
         self._seen = {}
         # files already reported in dry-run mode, so each is logged once
@@ -159,6 +168,11 @@ class Relay:
             except OSError as error:
                 LOG.error('could not move "%s": %s', path.name, error)
                 return
+        # The book has arrived, so what was decided about it can be remembered.
+        # Done here rather than when the decision was made, because a correction
+        # that never reached the output folder is not one the library has: a
+        # standard learnt from it would be a spelling nothing on the shelf has.
+        self._remember(outcome)
         LOG.info(
             '%s "%s" -> %s (%s)%s',
             kind,
@@ -182,6 +196,26 @@ class Relay:
                 error,
             )
 
+    def _remember(self, outcome):
+        """Tell the record what this delivered book settled on.
+
+        A failure here is logged rather than raised: the book itself is safely
+        in the output folder, and losing one standard is worth far less than
+        losing the scan. The next book by that author simply sets the spelling
+        instead of following it.
+        """
+        if self.record is None or outcome.decision is None:
+            return
+        try:
+            self.record.save(
+                outcome.decision.resolutions,
+                match=outcome.decision.match,
+                when=_utc_now(),
+                priority=self.config.sources,
+            )
+        except sqlite3.Error as error:
+            LOG.error("could not write to the record: %s", error)
+
     def _destination_for(self, path):
         """Where the file should go, what to call that, and why."""
         try:
@@ -203,6 +237,16 @@ class Relay:
         except OSError as error:
             LOG.error('could not check "%s": %s', path.name, error)
             return None, None, None
+
+
+def _utc_now():
+    """When a match was recorded, in UTC and in a form a log reader can sort.
+
+    The record is compared and shown, never scheduled against, so the format is
+    ISO 8601 with a `Z` rather than anything local: two hosts in two time zones
+    writing one record must not disagree about the order books arrived in.
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _attached(fragment):

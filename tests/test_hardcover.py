@@ -69,6 +69,31 @@ class LookupTests(unittest.TestCase):
 
         self.assertIsNone(source.by_isbn(NO_SUCH_BOOK))
 
+    def test_it_carries_the_author_ids_the_record_keys_a_name_by(self):
+        """The id is what says two spellings are one row, so it is asked for."""
+        book = self.source(Replay("by-isbn-cragside-authors.json")).by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.authors, ("L.J. Ross",))
+        self.assertEqual(book.author_ids, (318638,))
+        self.assertEqual(book.series_id, 23832)
+
+    def test_a_reply_that_does_not_carry_an_id_leaves_it_empty(self):
+        """The older recordings have no ids; a missing one is absent, not a bug."""
+        book = self.source(Replay("by-isbn-found.json")).by_isbn(CRAGSIDE)
+
+        self.assertEqual(book.authors, ("L.J. Ross",))
+        self.assertEqual(book.author_ids, (None,))
+        self.assertIsNone(book.series_id)
+
+    def test_the_ids_are_asked_for(self):
+        replay = Replay("by-isbn-cragside-authors.json")
+
+        self.source(replay).by_isbn(CRAGSIDE)
+
+        query = replay.sent["body"]["query"]
+        self.assertIn("author {", query)
+        self.assertIn("id", query)
+
     def test_it_asks_about_editions_because_books_carry_no_isbn(self):
         replay = Replay()
 

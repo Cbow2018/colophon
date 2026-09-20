@@ -57,12 +57,12 @@ query BookByIsbn($isbn: String!) {
       image { url }
       contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
         contribution
-        author { name }
+        author { id name }
       }
       book_series(order_by: [{featured: desc}, {position: asc}]) {
         featured
         position
-        series { name }
+        series { id name }
       }
     }
   }
@@ -76,6 +76,9 @@ query BookByIsbn($isbn: String!) {
 # is case-sensitive, so the title has to be spelt the way Hardcover spells it.
 # `_eq` on an author's name needs the full name as Hardcover writes it, which
 # is why authors are compared here rather than filtered for on the server.
+#
+# Both forms of the query also ask for `authors.id` and `series.id`. An id is
+# what CBO-41's record keys a name standard by, and it costs nothing to carry.
 #
 # The two placeholders are the language filter and the matching variable
 # declaration, and they are the only things that differ between the two forms:
@@ -103,12 +106,12 @@ query BooksByTitle($titles: [String!]!%s) {
       image { url }
       contributions(where: {contribution: {_eq: "Author"}}, order_by: {id: asc}) {
         contribution
-        author { name }
+        author { id name }
       }
       book_series(order_by: [{featured: desc}, {position: asc}]) {
         featured
         position
-        series { name }
+        series { id name }
       }
     }
   }
@@ -267,15 +270,23 @@ def _candidate(edition, isbn=None):
     """
     book = edition.get("book") or {}
     language = edition.get("language") or {}
-    series, series_number = _series(book)
+    series, series_number, series_id = _series(book)
+    authors = _authors(book)
     return Candidate(
         source=SOURCE,
         # The work's title is the book's name; an edition's title often repeats
         # the series and the subtitle, and is only used when the work has none.
         title=_text(book.get("title")) or _text(edition.get("title")),
-        authors=tuple(_authors(book)),
+        authors=tuple(authors),
+        # The ids travel beside the names they belong to, and are not written
+        # into anything: they are what CBO-41's record recognises an author by.
+        author_ids=tuple(
+            _as_id((contribution.get("author") or {}).get("id"))
+            for contribution in _author_rows(book)
+        ),
         series=series,
         series_number=series_number,
+        series_id=series_id,
         # A code is what an EPUB wants to be given back; the English name is a fallback.
         language=_text(language.get("code2")) or _text(language.get("language")),
         isbn=_text(edition.get("isbn_13")) or _text(edition.get("isbn_10")) or isbn,
@@ -326,14 +337,39 @@ def _authors(book):
     included - so only the authors are taken. The query asks the source to
     filter; this filters again in case the reply is wider than the question.
     """
-    names = []
-    for contribution in book.get("contributions") or []:
-        if contribution.get("contribution") != "Author":
-            continue
-        name = _text((contribution.get("author") or {}).get("name"))
-        if name:
-            names.append(name)
-    return names
+    return [
+        name
+        for name in (
+            _text((contribution.get("author") or {}).get("name"))
+            for contribution in _author_rows(book)
+        )
+        if name
+    ]
+
+
+def _author_rows(book):
+    """The contributions that are authors, in the order the reply lists them.
+
+    One place decides what counts as an author, so the names and the ids read
+    out of a reply cannot end up describing different people or a different
+    order: `_authors` and `_candidate` both walk this.
+    """
+    return [
+        contribution
+        for contribution in book.get("contributions") or []
+        if contribution.get("contribution") == "Author"
+    ]
+
+
+def _as_id(value):
+    """A source's own id, or None when the reply did not carry one.
+
+    An id is only ever passed back to the source that issued it, so it is kept
+    as it arrived: a number stays a number and anything else is text.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    return value if isinstance(value, int) else (_text(value) or None)
 
 
 def _series(book):
@@ -350,13 +386,14 @@ def _series(book):
         if _text((membership.get("series") or {}).get("name"))
     ]
     if not memberships:
-        return None, None
+        return None, None, None
 
     featured = [membership for membership in memberships if membership.get("featured")]
     chosen = (featured or memberships)[0]
     return (
         _text((chosen.get("series") or {}).get("name")),
         _as_position(chosen.get("position")),
+        _as_id((chosen.get("series") or {}).get("id")),
     )
 
 

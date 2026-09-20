@@ -101,6 +101,12 @@ class Candidate:
     rule can write is here and defaults to None, which is how a source spells
     "I have nothing for this one" - a source with no publisher has not offered a
     blank one, and the two must not be written the same way.
+
+    `author_ids` and `series_id` are the source's own identities for the names
+    above them, in the same order, and they are **not values to write**: they
+    exist so the record can recognise a name it has already settled on when the
+    same source spells it differently. A source with no ids leaves them empty,
+    which is every Google Books match.
     """
 
     title: str | None
@@ -114,6 +120,8 @@ class Candidate:
     publisher: str | None = None
     date: str | None = None
     cover: str | None = None
+    author_ids: tuple = ()
+    series_id: int | str | None = None
 
 
 @dataclass(frozen=True)
