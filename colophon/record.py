@@ -241,6 +241,10 @@ class Record:
         is left as it is: a standard does not move because a later book spelt the
         name differently.
 
+        `when` is when the match happened, written down but never compared: two
+        hosts in two time zones must not disagree about the order books arrived
+        in, so the caller passes a UTC stamp and this does not invent one.
+
         `priority` is the user's source order, and it is the tie-break when a
         book is looked up again and the new match is exactly as confident as the
         one already recorded. Confidence itself is comparable across sources —
