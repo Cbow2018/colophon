@@ -3101,6 +3101,14 @@ class RecordTests(CorrectionTestCase):
         self.addCleanup(opened.close)
         return opened
 
+    def standard(self, record, kind, source, key):
+        """The standard the record filed under one key, read from the table."""
+        row = record.connection.execute(
+            "SELECT standard FROM names WHERE kind = ? AND source = ? AND key = ?",
+            (kind, source, key),
+        ).fetchone()
+        return row["standard"] if row is not None else None
+
     def deliver(self, path, record, **kwargs):
         """Correct a book the way the relay does, record write and all.
 
@@ -3138,7 +3146,7 @@ class RecordTests(CorrectionTestCase):
             self.book(), record, source=self.source_saying(("L.J. Ross",), (318638,))
         )
 
-        self.assertEqual(record.standard(AUTHOR, BY_NAME, "lj ross"), "L.J. Ross")
+        self.assertEqual(self.standard(record, AUTHOR, BY_NAME, "lj ross"), "L.J. Ross")
 
     def test_the_second_book_by_that_author_gets_the_same_spelling(self):
         """The file says `L. J. Ross`; the shelf has already settled on `L.J. Ross`."""
@@ -3172,7 +3180,9 @@ class RecordTests(CorrectionTestCase):
             source=self.source_saying(("L. J. Ross",), (350233,)),
         )
 
-        self.assertEqual(record.standard(AUTHOR, "hardcover", "350233"), "L.J. Ross")
+        self.assertEqual(
+            self.standard(record, AUTHOR, "hardcover", "350233"), "L.J. Ross"
+        )
 
     def test_an_override_beats_the_recorded_standard(self):
         record = self.record()
@@ -3191,7 +3201,7 @@ class RecordTests(CorrectionTestCase):
 
         self.assertEqual(read(self.folder / "Second.epub").authors, ("L J Ross",))
         self.assertEqual(
-            record.standard(AUTHOR, BY_NAME, "lj ross"),
+            self.standard(record, AUTHOR, BY_NAME, "lj ross"),
             "L.J. Ross",
             "and the record is left as it was",
         )

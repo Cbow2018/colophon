@@ -42,6 +42,26 @@ class RecordTestCase(unittest.TestCase):
     def spellings(self, names, **kwargs):
         return [found.spelling for found in self.resolve(names, **kwargs)]
 
+    def standard(self, kind, source, key):
+        """The standard filed under one key, read straight out of the table.
+
+        The record exposes the whole table through `names()` and nothing per
+        key, deliberately: a method that exists only for a test to call is a
+        second way into the record that production never takes.
+        """
+        row = self.record.connection.execute(
+            "SELECT standard FROM names WHERE kind = ? AND source = ? AND key = ?",
+            (kind, source, key),
+        ).fetchone()
+        return row["standard"] if row is not None else None
+
+    def held(self, book_key, column):
+        """One column of the match recorded for a book, or None if there is none."""
+        row = self.record.connection.execute(
+            f"SELECT {column} FROM matches WHERE book_key = ?", (book_key,)
+        ).fetchone()
+        return row[column] if row is not None else None
+
 
 class FirstSightTests(RecordTestCase):
     def test_a_new_author_keeps_the_spelling_its_source_gave(self):
@@ -57,7 +77,7 @@ class FirstSightTests(RecordTestCase):
         resolutions = self.resolve((LJ,))
         self.record.save(resolutions)
 
-        self.assertEqual(self.record.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+        self.assertEqual(self.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
 
     def test_what_the_source_wrote_is_kept_beside_the_standard(self):
         """The standard and the spelling that produced it, kept together.
@@ -106,7 +126,7 @@ class ConsistencyTests(RecordTestCase):
 
         self.record.save(self.resolve((SPACED,), source=GOOGLE))
 
-        self.assertEqual(self.record.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+        self.assertEqual(self.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
 
 
 class IdentityTests(RecordTestCase):
@@ -127,7 +147,7 @@ class IdentityTests(RecordTestCase):
             self.resolve((SPACED,), identities=(SPACED_ID,))
         )
 
-        self.assertEqual(self.record.standard(AUTHOR, HARDCOVER, str(SPACED_ID)), LJ)
+        self.assertEqual(self.standard(AUTHOR, HARDCOVER, str(SPACED_ID)), LJ)
 
     def test_a_name_resolved_by_its_id_is_not_anchored_again(self):
         """It was anchored when it was first seen; a second row would be noise."""
@@ -162,7 +182,7 @@ class OverrideTests(RecordTestCase):
 
         self.record.save(self.resolve((LJ,), overrides={"lj ross": "L J Ross"}))
 
-        self.assertEqual(self.record.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
+        self.assertEqual(self.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
 
     def test_an_override_is_one_hop_and_is_not_followed_again(self):
         """`A -> B` and `B -> C` writes B; a chain is not a thing to guess at."""
@@ -214,14 +234,14 @@ class MatchTests(RecordTestCase):
 
         self.record.save((), Match("9781521748831", HARDCOVER, 0.95))
 
-        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+        self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
     def test_a_less_confident_match_does_not_replace_the_one_held(self):
         self.record.save((), Match("9781521748831", HARDCOVER, 0.95))
 
         self.record.save((), Match("9781521748831", GOOGLE, 0.9))
 
-        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+        self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
     def test_a_draw_goes_to_the_source_the_user_trusts_more(self):
         self.record.save((), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE))
@@ -232,14 +252,14 @@ class MatchTests(RecordTestCase):
             priority=(HARDCOVER, GOOGLE),
         )
 
-        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+        self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
     def test_a_draw_does_not_promote_a_source_the_user_ranked_lower(self):
         self.record.save((), Match("9781521748831", HARDCOVER, 0.95), priority=(HARDCOVER, GOOGLE))
 
         self.record.save((), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE))
 
-        self.assertEqual(self.record.match("9781521748831").source, HARDCOVER)
+        self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
     def test_the_same_source_looking_again_refreshes_the_record(self):
         """A source is not ranked against itself, so a re-lookup is not a draw."""
@@ -247,7 +267,7 @@ class MatchTests(RecordTestCase):
 
         self.record.save((), Match("9781521748831", HARDCOVER, 0.95))
 
-        self.assertEqual(self.record.match("9781521748831").confidence, 0.95)
+        self.assertEqual(self.held("9781521748831", "confidence"), 0.95)
 
 
 class SeriesTests(RecordTestCase):
@@ -319,7 +339,9 @@ class ResetTests(RecordTestCase):
         self.record.reset()
 
         self.assertEqual(self.record.names(), ())
-        self.assertEqual(self.record.match("9781521748831"), None)
+        self.assertEqual(
+            self.record.connection.execute("SELECT * FROM matches").fetchall(), []
+        )
 
     def test_the_next_book_starts_a_fresh_standard(self):
         self.record.save(self.resolve((LJ,)))
@@ -339,9 +361,18 @@ class ResetTests(RecordTestCase):
 
 
 class GenresTests(RecordTestCase):
+    def genres(self):
+        """The genre table, which nothing but CBO-42 will ever read."""
+        return tuple(
+            row["genre"]
+            for row in self.record.connection.execute(
+                "SELECT genre FROM genres ORDER BY genre"
+            )
+        )
+
     def test_the_genre_table_exists_and_is_empty(self):
         """CBO-42 fills it; this ticket only makes room, so nothing may fill it."""
-        self.assertEqual(self.record.genres(), ())
+        self.assertEqual(self.genres(), ())
 
     def test_a_reset_empties_the_genres_too(self):
         self.record.connection.execute("INSERT INTO genres (genre) VALUES ('Crime')")
@@ -349,7 +380,7 @@ class GenresTests(RecordTestCase):
 
         self.record.reset()
 
-        self.assertEqual(self.record.genres(), ())
+        self.assertEqual(self.genres(), ())
 
 
 class FileNameTests(unittest.TestCase):

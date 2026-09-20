@@ -874,13 +874,28 @@ class RecordingWhatWasDeliveredTests(RelayTestCase):
     def drop_a_book(self):
         return write_epub(self.ingest / "Cragside.epub", AS_DOWNLOADED, version="2.0")
 
+    def standard(self, kind, source, key):
+        """The standard the record filed under one key, read from the table."""
+        row = self.record.connection.execute(
+            "SELECT standard FROM names WHERE kind = ? AND source = ? AND key = ?",
+            (kind, source, key),
+        ).fetchone()
+        return row["standard"] if row is not None else None
+
+    def recorded_match(self, book_key, column):
+        """One column of the match the relay wrote for a book, or None."""
+        row = self.record.connection.execute(
+            f"SELECT {column} FROM matches WHERE book_key = ?", (book_key,)
+        ).fetchone()
+        return row[column] if row is not None else None
+
     def test_a_delivered_book_settles_the_spelling_the_library_will_use(self):
         self.drop_a_book()
 
         self.settle()
 
         self.assertEqual(
-            self.record.standard(AUTHOR, BY_NAME, "lj ross"),
+            self.standard(AUTHOR, BY_NAME, "lj ross"),
             "L.J. Ross",
             "recorded once the book was in the output folder",
         )
@@ -890,9 +905,7 @@ class RecordingWhatWasDeliveredTests(RelayTestCase):
 
         self.settle()
 
-        held = self.record.match(ISBN)
-        self.assertIsNotNone(held)
-        self.assertEqual(held.source, "hardcover")
+        self.assertEqual(self.recorded_match(ISBN, "source"), "hardcover")
 
     def test_a_dry_run_delivers_nothing_and_records_nothing(self):
         self.config = Config(

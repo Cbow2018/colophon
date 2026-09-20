@@ -158,8 +158,6 @@ class Record:
                 f"(version {found}, this build understands {SCHEMA_VERSION}); "
                 "nothing was changed"
             )
-        # Steps that carry an older file forward go here, guarded by `found`, so
-        # the next ticket to change the schema adds one rather than a rebuild.
         self.connection.executescript(SCHEMA)
         self.connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.connection.commit()
@@ -338,33 +336,6 @@ class Record:
                 "SELECT kind, source, key, standard, seen FROM names "
                 "ORDER BY kind, source, key"
             )
-        )
-
-    def standard(self, kind, source, key):
-        """The one standard filed under this exact key, or None."""
-        return self._standard(kind, source, key)
-
-    def match(self, book_key):
-        """What the record holds for this book, or None if it has never seen it."""
-        row = self.connection.execute(
-            "SELECT book_key, source, confidence, matched_at, matched_as "
-            "FROM matches WHERE book_key = ?",
-            (book_key,),
-        ).fetchone()
-        if row is None:
-            return None
-        return Match(
-            book_key=row["book_key"],
-            source=row["source"],
-            confidence=row["confidence"],
-            matched_as=row["matched_as"],
-        )
-
-    def genres(self):
-        """The allowed genres, which CBO-42 fills in and this ticket only makes room for."""
-        return tuple(
-            row["genre"]
-            for row in self.connection.execute("SELECT genre FROM genres ORDER BY genre")
         )
 
     def reset(self):
