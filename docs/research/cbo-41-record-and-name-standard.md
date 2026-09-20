@@ -139,60 +139,135 @@ carries 318638. Nothing in the API ties 318638 to 350233 or 350235: no
 `canonical_id`, no `alias_id`, no `alternate_names`, no link of any kind. So the
 id **does not merge those rows**, and no amount of asking the same source will.
 
-**The name key merges two of the three, and that is the correction to this
-section's first draft.** Grouping the committed spellings through
-`matching.normalise` (run over the fixtures, not read off by eye):
+**The name key merges all three, and that is the decision this section records.**
+Grouping the committed spellings through `matching.normalise` (run over the
+fixtures, not read off by eye):
 
 | id | spelling | normalised key |
 | --- | --- | --- |
-| 318638 | `L.J. Ross` | `l j ross` |
-| 350233 | `L. J. Ross` | `l j ross` |
+| 318638 | `L.J. Ross` | `lj ross` |
+| 350233 | `L. J. Ross` | `lj ross` |
 | 350235 | `LJ Ross` | `lj ross` |
 | 806228 | `Ross` | `ross` |
 | 227859 | `Terry Pratchett` | `terry pratchett` |
 | 1566154 | `Terry David John Pratchett` | `terry david john pratchett` |
 
-`L.J. Ross` and `L. J. Ross` are **one key**, so the name-keyed lookup merges
-those two rows with no help from `[authors]` at all. `LJ Ross` is a second key
-and `Ross` a third, and `Terry Pratchett` / `Terry David John Pratchett` are two
-more. The finding, stated exactly:
+Those first three keys are **one key only after the change described in "The
+normaliser change" below**; before it, `normalise` gave `l j ross` for the first
+two and `lj ross` for the third, so the name key merged two of the three and
+`[authors]` was needed for the third. The ticket's own acceptance test —
+"LJ Ross vs L.J. Ross consistency" — is what forced the change: a test that only
+passes because of a config entry is testing the config, not the design.
 
-> **`[authors]` is the only merge for spellings that do not normalise together.**
+The finding, stated exactly:
 
-So the two mechanisms answer two questions, and the first is narrower than the
-first draft claimed:
+> **The name key merges spellings that differ only in punctuation and initial
+> spacing. `[authors]` is the merge for spellings that differ in their words** —
+> `Terry Pratchett` against `Terry David John Pratchett`, or a bare `Ross`
+> against `LJ Ross`.
+
+So the three mechanisms answer three questions:
 
 | Question | Answered by |
 | --- | --- |
 | Are these two spellings the same name? | `matching.normalise`, in the name-keyed lookup |
-| Are these two rows one person, spelt too differently to normalise together? | `[authors]` — nothing else |
-| Has this *source row* been seen before, whatever it was spelt as? | the source's own id — see below |
+| Are these two *rows* one person, spelt with different words? | `[authors]` — nothing else |
+| Has this *source row* been seen before, whatever it was spelt as? | the source's own id |
 
 An earlier cut of this note proposed using the LLM for the second question. It is
 dropped; §5 is why.
 
-#### Does step 2 earn its place?
+#### Does the id-keyed read earn its place?
 
-The resolution order has an id-keyed lookup before the name-keyed one. The rule
-is real and the maintainer asked for it, but the evidence for it is not in any
-fixture, so it is worth being plain about what it is for:
+The resolution order has an id-keyed lookup before the name-keyed one.
+**Confirmed by the maintainer: the id is both read and written.** Writing it and
+never reading it was rejected — "dead data is worse than either alternative" — so
+the read stays.
 
-- **It is not needed for the Ross rows.** Any spelling they are written under
-  resolves through the name key first, and `L.J. Ross` / `L. J. Ross` merge there.
-- **It is not needed for the Pratchett rows.** Two ids, two keys; the id row
-  would hold `227859 → Terry Pratchett` and the next book spelling it `Terry
-  Pratchett` finds the same standard by name anyway.
-- **It is needed only if a source ever returns one row under two spellings** —
-  the `david john` case on one id rather than two. Not observed here.
+**No fixture reaches it.** Checked over every committed recording: none shows one
+author id under two spellings, and none shows one series id under two names. The
+read is therefore **not an evidence-backed path**: it is cheap insurance against
+a source renaming an author under a stable id, which is a thing sources do and
+which the fixtures have simply not caught yet. It is one indexed lookup on a
+column that is already there, and it is what stops the id row being data nothing
+reads.
 
-This is the same shape as a finding CBO-36's review already acted on: the
+This is the same shape as a finding CBO-36's review already acted on — the
 edit-distance decay was dropped because *no fixture could reach it*. The
-difference is that the id-keyed row is not only a lookup — it is also **where a
-new spelling is anchored**, which the next section needs, so it is kept as a
-store. Whether it also stays as a *read* is the one thing here a reviewer should
-decide, and the note proceeds on **yes, kept**, because it is one indexed lookup
-and it is what makes the id mean something rather than being written and never
-read.
+difference is that this one is one query rather than a branch of scoring logic,
+and the maintainer's call is that the insurance is worth more than the tidiness.
+
+#### The normaliser change
+
+**Decided by the maintainer, and it is a change to `matching.normalise`, not just
+to this ticket's use of it.** Today `normalise` keeps the words and drops
+everything between them, so `L.J. Ross` gives `l j ross` while `LJ Ross` gives
+`lj ross` — one name, two keys, and the ticket's own acceptance test would pass
+only because of an `[authors]` entry. The rule becomes:
+
+> casefold, strip punctuation, collapse whitespace, then **collapse runs of single
+> letters into one token**.
+
+Measured against the committed spellings:
+
+| spelling | today | after the change |
+| --- | --- | --- |
+| `L.J. Ross` | `l j ross` | `lj ross` |
+| `L. J. Ross` | `l j ross` | `lj ross` |
+| `LJ Ross` | `lj ross` | `lj ross` |
+| `Ross, L. J.` | `ross l j` | `ross lj` |
+| `J.R.R. Tolkien` | `j r r tolkien` | `jrr tolkien` |
+| `JRR Tolkien` | `jrr tolkien` | `jrr tolkien` |
+| `Ursula K. Le Guin` | `ursula k le guin` | `ursula k le guin` |
+
+**Two implementation choices, both measured, both needing a nod rather than a
+decision** — they are refinements of the rule above and neither changes what it
+is for:
+
+1. **Digits are not collapsed.** "Runs of single letters" read literally as "runs
+   of single characters" turns `1.0.0` into `10 0` and `0.1.1.0.preview.2` into
+   `01 10 preview 2`. Those strings are version numbers in the source's own
+   metadata, and `normalise` is used on titles as well as names, so collapsing
+   them is a behaviour change nothing asked for. The rule skips anything that is
+   not a letter (`[^\W\d_]`), which on every committed fixture changes **the same
+   6 of 394 strings as the literal reading does** — the extra safety costs
+   nothing today and stops a version string being mangled later.
+2. **Only one separator is crossed, not two.** The collapsing happens over the
+   token list, so `J. R. R.` (spaces) collapses to `jrr` and `J.R.R.` (dots) also
+   gives `jrr`, because the dots are already gone by then. It stops there. A
+   tokeniser that treats every character as its own token — `\w` rather than
+   `\w+` — would let the run walk across the space and merge `Ursula K. Le Guin`
+   into `ursulakleguin`, and over a description it concatenates whole sentences;
+   measured, that variant changes **343 of 394** fixture strings. The word-shaped
+   tokeniser is the one to keep.
+
+**This is a change to `normalise`, so it touches the title comparison too, and
+that was measured rather than waved at.** Scoring every file title the project
+tests with against every candidate in every committed Hardcover title recording —
+36 pairs — **no score, and no `agrees` verdict, moves.** What it does change is a
+gap of the same shape the title half has been carrying:
+
+```
+file "J.R.R. Tolkien"  vs  record "JRR Tolkien"   title score 0.0 -> 1.0
+```
+
+Today that pair scores 0.0 on the title — `j r r tolkien` against `jrr tolkien` —
+and is carried entirely by the author. After the change it is an exact title, so
+the initial-spacing tolerance `_name` already gives authors is extended to titles
+as well. It is the same class of fix as the one this ticket needed, arriving
+through the same function.
+
+**`matching._name` already does this, more aggressively, and needs no change.**
+The author half of the comparison runs names together entirely — `LJ Ross`,
+`L.J. Ross` and `L. J. Ross` are all `ljross`, and `J.R.R. Tolkien` is
+`jrrtolkien` — which is why the author comparison already accepts every variant
+above and why the ticket's consistency problem was never about *matching*. It is
+about the spelling that gets **written**, which is the name key's job, and the
+name key needs a key that is stable and readable rather than a bag of characters.
+The two normalisers stay separate for that reason: `_name` decides whether two
+names are the same name, `normalise` decides what the standard is keyed by. The
+difference is real and worth stating: `Ursula LeGuin` matches `Ursula K. Le Guin`
+through `_name` (author score 1.0) and would not match it through `normalise`.
 
 ### 3. The two sources spell the same author differently, and each is stable
 
@@ -334,19 +409,23 @@ because the answer above is a decision and the corrections are facts.**
 
 1. **The Pratchett case is not a same-id case.** It is two ids — 227859 `Terry
    Pratchett` and 1566154 `Terry David John Pratchett` — with two normalised keys
-   (`terry pratchett`, `terry david john pratchett`). So it demonstrates the same
-   residual case as the Ross rows and not the id rule. The id rule stands;
-   the example that was given for it does not, and §2 now says so.
-2. **`[authors]` is not the only merge.** `L.J. Ross` (318638) and `L. J. Ross`
-   (350233) normalise to one key, `l j ross`, so the name-keyed lookup merges
-   those two rows with no override at all. The corrected finding, which is the
-   one the build inherits, is **`[authors]` is the only merge for spellings that
-   do not normalise together.**
+   (`terry pratchett`, `terry david john pratchett`). So it demonstrates a
+   `[authors]` case and not the id rule. The id rule stands; the example that was
+   given for it does not, and §2 now says so.
+2. **The name key is stronger than `normalise` made it.** Under the old rule
+   `LJ Ross` and `L.J. Ross` were different keys, so `[authors]` was carrying the
+   ticket's own consistency test — which is the acceptance criterion, not a
+   design that satisfies it. The maintainer's decision is to change `normalise`
+   so runs of single letters collapse into one token: **all three Ross rows then
+   reach one standard on the name key alone**, and `[authors]` is left as the
+   merge for spellings that differ in their words. See "The normaliser change".
 
-Neither correction changes the order in the first paragraph; the first narrows
-what the id is demonstrated to do, and the second narrows what `[authors]` is
+Neither correction changes the order in the first paragraph. The first narrows
+what the id is demonstrated to do; the second narrows what `[authors]` is
 required for. No committed recording shows one author id under two spellings, so
-§2 asks the reviewer to confirm whether the id-keyed lookup stays as a read.
+§2 records that the id-keyed read is insurance rather than an evidence-backed
+path — and the maintainer confirmed it stays, because writing an id nothing reads
+is worse than either alternative.
 
 **Q2. Does the LLM recognise name variants?** → **No, dropped from this
 ticket.** The maintainer's reason is stronger than the token measurement and is
@@ -422,14 +501,17 @@ and `read_only: true` is on the container, so the record cannot live beside
 `config.toml`. CBO-40 already put its daily counter at
 `/backups/.colophon-llm.json` for exactly this reason and explicitly left "where
 durable state lives" to this ticket (its Q13); this is that ticket's answer, and
-it reuses the folder rather than adding a mount. Three additions:
+it reuses the folder rather than adding a mount. Three additions, the first
+corrected by the maintainer after an earlier draft of this note got it wrong:
 
-- **`.colophon.db-wal` and `.colophon.db-shm` appear beside it** in SQLite's
-  default journal mode. Both begin with a dot, so `Backups.expire()`'s existing
-  skip still protects them, and a test must assert that rather than assume it.
+- **The default journal mode, and therefore no `-wal` or `-shm` siblings.** The
+  earlier draft assumed WAL; the maintainer's decision is not to enable it — one
+  connection and one writer does not need it — so nothing appears beside the
+  record except the record. The file itself begins with a dot, so
+  `Backups.expire()`'s existing skip covers it, and a test asserts that.
 - **`record_path` should be documented as local disk.** On an SMB or NFS share
   SQLite's locking is unreliable, and `backup_dir` is a plausible thing for a
-  user to point at a NAS.
+  user to point at a NAS. The line goes in `config.example.toml` beside the key.
 - **A `record_path` setting rather than a constant**, so the path follows the
   same shape as every other one, and so a user who wants it elsewhere can say so.
 
@@ -470,32 +552,66 @@ overturned in review.
    with the strongest identity available and fall back to the name. Resolution is
    therefore one table and two queries, not a table per source.
 5. **The reset is a flag, not a subcommand**: `python -m colophon
-   --reset-record`, which is what `__main__` already is. No confirmation prompt —
-   it is documented as the command that wipes it, and an interactive prompt in a
-   container is a prompt nobody can answer. **It wipes the record only.** Books
+   --reset-record`, which is what `__main__` already is. **It asks for
+   confirmation, and `--yes` skips it for scripted use** (the maintainer's
+   amendment): the record is never cleared automatically and a typo in a
+   container's command line would otherwise wipe the spelling history of a whole
+   library with nothing to recover from. The prompt reads the record's path and
+   what is about to be lost, so the answer is informed rather than reflexive, and
+   a non-interactive stdin is treated as "no" — but `--yes` is what a script
+   should pass rather than relying on that. **It wipes the record only.** Books
    already in the library keep the spellings they were given; rewriting them is
    the "fixing an existing library" the design spec puts out of scope for v1, and
    a reset that silently rewrote a library would be a much bigger command than
-   the ticket asks for. This needs `main()` to parse an argument it does not
-   parse today, and the config must be loaded first because `record_path` is
-   where the file is.
-6. **Overrides are validated loudly.** A `[authors]` value that is empty, or a
-   key that is not a string, is a `ConfigError` at startup like every other
-   setting — a table that silently does nothing is the failure mode this project
-   refuses elsewhere.
+   the ticket asks for. This needs `main()` to parse arguments it does not parse
+   today, and the config must be loaded first because `record_path` is where the
+   file is.
+6. **Overrides are validated loudly, in three ways.** A `[authors]` value that is
+   empty, or a key that is not a string, is a `ConfigError` at startup like every
+   other setting — a table that silently does nothing is the failure mode this
+   project refuses elsewhere. **And two keys that normalise to the same key with
+   different values are a `ConfigError`, not a silent last-wins** (added by the
+   maintainer): `"LJ Ross" = "A"` beside `"L.J. Ross" = "B"` is one name with two
+   answers, and TOML gives no order to appeal to, so which one wins would depend
+   on the parser. The check reuses `matching.normalise`, so it catches exactly the
+   collisions the resolution itself would. **The resolution rule that goes with
+   the table: one hop only — an override value is never re-resolved as a key.**
+   `"A" = "B"` beside `"B" = "C"` writes `B`, not `C`; the second hop is the
+   user's to write if they meant it, and a chain is a config nobody can read back
+   off the page.
 7. **`config.py` learns the `[authors]` table.** `_read_file` refuses unknown
    top-level settings, so `[authors]` is a `ConfigError` today. It becomes a
    field on `Config`, normalised and checked, like `fields`.
 8. **The record is opened once and passed down**, from `Relay` to `Corrector`,
    the way `Backups` already is. Two connections to one SQLite file is how
-   `database is locked` starts.
+   `database is locked` starts. **Confirmed by reading the code, because the
+   maintainer asked: the relay is single-threaded.** `scan_once` walks the ingest
+   folder and corrects each book in turn on the thread that called it, and
+   `__main__.run` is a plain `while` loop over it; the only `threading` in the
+   package is the `threading.Event` that stops that loop. No book is corrected in
+   a worker thread, so one connection on the calling thread is safe and
+   `check_same_thread=False` is **not** used — turning it off would hide exactly
+   the mistake worth catching. **Written into the note so nobody adds a thread
+   later without noticing**: if a worker thread is ever introduced, the
+   connection has to move with it or be created per thread, and the tests will
+   not catch it because a single-threaded test never trips the check.
 9. **The record write is the relay's, after the file lands** (Q5). The correction
    returns a small record-ready value on the `Outcome` — the match's confidence
    and source, and each name written with the keys it resolved under — and the
    relay persists it on the one path where `copy_into_place` succeeded. The relay
    stores the decision; it does not re-derive it.
 10. **`record_path` is a top-level config key**, so `COLOPHON_RECORD_PATH` works
-    like every other setting.
+    like every other setting, and it **should be documented as local disk**:
+    SQLite's locking is unreliable on SMB and NFS, and `backup_dir` is a
+    plausible thing for a user to point at a NAS. The note in `config.example.toml`
+    says so beside the setting.
+11. **SQLite's default journal mode, not WAL** (the maintainer's decision, and it
+    supersedes an earlier draft of this note). One connection and one writer needs
+    nothing more, and the default mode means **no `.colophon.db-wal` or
+    `.colophon.db-shm` siblings in the backups folder at all** — nothing to
+    protect from `Backups.expire()` and nothing to explain to a user looking at
+    their backup folder. The record file itself still begins with a dot, so the
+    existing skip covers it, and that is the one thing the test asserts.
 
 ## The build shape
 
@@ -538,13 +654,15 @@ Books has no author ids, so a Google Books match could never find a row keyed by
 Hardcover's 318638, and the standard would not carry across — which is the whole
 of what this ticket is for. So a name is looked up **twice**: under the source's
 own identity (`source='hardcover', key='318638'`), and under the name itself
-(`source='', key=normalise('L. J. Ross')`). The first answers "the same record,
-spelt differently"; the second is what a source with no ids has, and what every
-source falls back to. Both land on **one `standard` per name**, so the first
-source to match an author fixes the spelling every later source reuses.
+(`source='', key=normalise('L.J. Ross')`). The first says "this is a source row
+the record already knows"; the second is what a source with no ids has, and what
+every source falls back to. Both land on **one `standard` per name**, so the
+first source to match an author fixes the spelling every later source reuses.
 
 The rows are written together: the id row and the spelling row for one author
-carry the same `standard`, so whichever lookup finds it gives the same answer.
+carry the same `standard`, so whichever lookup finds it gives the same answer. A
+name that resolves at step 3 under a **new** id is written as an id row too, so
+the row is always there for the next book — see "The write-side rule" below.
 
 ### Resolving one name
 
@@ -563,8 +681,8 @@ reused, and a new author takes the top-priority source's spelling — which is s
 4 reached by the first source, in priority order, that matched the book. Step 3 is
 what makes the standard follow an author from Hardcover to Google Books, and it is
 the step the fixtures exercise (§2). Step 2 fires only when the source supplies an
-id and the record already has that id; no fixture reaches it, and §2 asks the
-reviewer to confirm it stays.
+id the record already has; no fixture reaches it, and §2 records why it is kept
+anyway.
 
 Series is the same shape with `kind='series'` and one difference: Google Books
 has no series at all, so it reaches step 4 with nothing and can never introduce a
@@ -574,43 +692,54 @@ series name.
 
 Step 3 resolving a name is not the end of it. **When a book arrives under a
 source id the record has never seen, and the name lookup resolves to an existing
-standard, the record stores that id against that standard.** So the three Ross
-rows behave like this:
+standard, the record stores that id against that standard.** With `normalise`
+collapsing single-letter runs (§2), all three Ross rows now walk like this:
 
 ```
 book A  hardcover, author id 318638 "L.J. Ross"
-        step 3 misses, step 4 records:  standard 'L.J. Ross'
-                                        keys: (hardcover, 318638), ('', 'l j ross')
+        step 2 misses, step 3 misses, so step 4 records:  standard 'L.J. Ross'
+        keys: (hardcover, 318638), ('', 'lj ross')
 
 book B  hardcover, author id 350233 "L. J. Ross"
         step 2 misses (350233 is new)
-        step 3 finds ('', 'l j ross') -> standard 'L.J. Ross'
-        writes 'L.J. Ross', and records (hardcover, 350233) -> standard 'L.J. Ross'
+        step 3 finds ('', 'lj ross') -> standard 'L.J. Ross'
+        writes 'L.J. Ross', and records (hardcover, 350233) -> 'L.J. Ross'
 
 book C  hardcover, author id 350235 "LJ Ross"
-        step 2 misses; step 3 misses too ('lj ross' is a different key)
-        step 4 records a *second* standard, 'LJ Ross'
+        step 2 misses (350235 is still new)
+        step 3 finds ('', 'lj ross') -> standard 'L.J. Ross'
+        writes 'L.J. Ross', and records (hardcover, 350235) -> 'L.J. Ross'
 ```
 
-Book B is the rule the maintainer asked for, and it is what makes an id row mean
-something: the row is written the first time a *new* id is seen, so every later
-book from that row is resolved by id rather than by re-normalising the name. It is
-also why the id-keyed lookup stays in the order at all — without it the row would
-be written and never read.
+**All three rows reach one standard on the name key alone, and each new row is
+anchored to it by id as it arrives.** That is the ticket's consistency test
+passing by design rather than by config, and it is why the id-keyed read stays:
+book C resolving at step 3 and being *written* at step 2 is what makes the next
+book from 350235 an id lookup instead of another normalise.
 
-Book C is the honest limit, and it is the corrected finding stated as behaviour:
-`LJ Ross` does not normalise to `l j ross`, so the record ends up with two
-standards for one human. **`[authors]` is the only merge for spellings that do not
-normalise together**, and a config entry mapping `LJ Ross` to `L.J. Ross` is what
-collapses C onto A. Nothing about the id changes that: 350235 and 318638 are
-different rows and the record is told so by the only part of the API that could
-tell it otherwise — which is nowhere, since `canonical_id` and `alias_id` are
-null.
+The id read still changes no outcome here — step 3 would have found the same
+standard — and that is the honest statement of what it is for. It is reached the
+first time a book arrives from an id whose spelling has drifted from the one the
+record holds, which the fixtures do not yet contain. What `[authors]` is left for
+is the shape the name key cannot reach at all:
 
-So of the three rows §2 found for one human, name resolution merges two and
-leaves one, the id merges none of them, and `[authors]` is what merges all three.
-That is what the ticket's test has to demonstrate, and it has to demonstrate the
-non-merge first.
+```
+book D  hardcover, author id 1566154 "Terry David John Pratchett"
+        step 2 misses, step 3 misses ('terry david john pratchett')
+        step 4 records a *second* standard: 'Terry David John Pratchett'
+
+book E  hardcover, author id 227859 "Terry Pratchett"
+        step 2 misses, step 3 misses ('terry pratchett')
+        step 4 records a *third* standard: 'Terry Pratchett'
+```
+
+`[authors]` mapping `Terry David John Pratchett` to `Terry Pratchett` is what
+collapses D onto E. Nothing about the id can: they are different rows, and the
+only part of the API that could say otherwise — `canonical_id`, `alias_id` — is
+null on both. So of the fixtures' two shapes, the name key merges one completely
+and `[authors]` is needed for the other, which is what the tests have to
+demonstrate — the non-merge first, so a later change that starts merging
+different-words spellings fails rather than passing silently.
 
 ### The query change
 
@@ -661,40 +790,62 @@ The ticket's three, plus the ones the probes make worth pinning:
   resolved at step 3 of the next section. The first half is
   `by-isbn-cragside-authors.json` or `by-isbn-berwick-authors.json`, the second is
   `googlebooks/by-isbn-cragside-authors.json`.
-- **The same, within one source, through the name key alone.** `L.J. Ross`
-  (318638) then `L. J. Ross` (350233) from `authors-spelling-variants.json` reach
-  one standard with no override and no id helping — `l j ross` either way. This is
-  the test that pins the corrected finding, so a change that stops normalising the
-  two together fails here.
+- **All three Ross rows reach one standard through the name key, with no config.**
+  `L.J. Ross` (318638), `L. J. Ross` (350233) and `LJ Ross` (350235) from
+  `authors-spelling-variants.json` all give `lj ross`, so the third book is
+  written `L.J. Ross` with an empty `[authors]` table. **This is the test that
+  makes the acceptance criterion pass by design**, and it is the one that fails
+  today.
 - **A new source id is anchored to the standard it resolved to.** A book whose
   author id the record has never seen, whose spelling resolves by name, stores
-  that id against the standard — and the next book from that id resolves by id.
-  `authors-spelling-variants.json` supplies 350233 for it.
-- **The residual case, as the maintainer asked for it.** `LJ Ross` (350235) does
-  not merge with `L.J. Ross` (318638) through the id or through the name key —
-  `lj ross` and `l j ross` are different keys — and `[authors]` is what merges
-  them. The test asserts the non-merge first, so a later change that "helpfully"
-  starts merging them fails rather than passing silently. The Pratchett pair
-  (`terry pratchett` / `terry david john pratchett`) is the same test with a
-  second pair of keys.
-- **`normalise` is what decides a key.** A test pins `L.J. Ross` and
-  `L. J. Ross` to `l j ross` and `LJ Ross` to `lj ross`, because the whole
-  cross-source behaviour rests on that and it is not obvious from reading the
-  function. It is the one place a change to `normalise` shows up as a failure
-  rather than as a quietly different library.
+  that id against the standard — and the next book from that id resolves at step
+  2. `authors-spelling-variants.json` supplies 350233 for it.
+- **The id read is exercised.** No fixture reaches it through a spelling
+  difference, so the test drives it directly: a record holding `(hardcover,
+  318638) → L.J. Ross` resolves a candidate carrying that id even when the name
+  key would miss. Without this the id column is written and never read, which is
+  the thing the maintainer rejected.
+- **The `[authors]` case, as the maintainer asked for it.** `Terry David John
+  Pratchett` (1566154) and `Terry Pratchett` (227859) do not merge through the id
+  or through the name key — `terry david john pratchett` against `terry
+  pratchett` — and an `[authors]` entry is what merges them. The test asserts the
+  non-merge first, so a later change that "helpfully" starts merging
+  different-words spellings fails rather than passing silently.
+- **`normalise` is what decides a key.** A test pins `L.J. Ross`, `L. J. Ross`
+  and `LJ Ross` to one key, and `J.R.R. Tolkien` and `JRR Tolkien` to another, and
+  pins the words that must **not** collapse: `Ursula K. Le Guin` stays
+  `ursula k le guin`, and `1.0.0` stays `1 0 0` rather than becoming `10 0`. The
+  whole cross-source behaviour rests on this and it is not obvious from reading
+  the function.
+- **The normaliser change does not move the title scores it already had.** The 36
+  file-title/candidate pairs in the committed Hardcover recordings score exactly
+  what they scored before, and `J.R.R. Tolkien` against `JRR Tolkien` goes from
+  0.0 to 1.0. A regression test on the 36 is cheap and it is the guard that says
+  the change was surgical.
 - **Override precedence.** An `[authors]` entry beats a recorded standard; the
   record is unchanged afterwards; a two-hop chain resolves one hop only; a
   differently-punctuated key matches.
+- **Two override keys that normalise together with different values are a
+  `ConfigError`**, not a silent last-wins.
 - **Duplicate re-lookup.** A recorded book, re-matched at a higher confidence,
   takes the new match and can raise a standard; at an equal confidence the
   configured source priority decides; at a lower one nothing changes.
 - **The record has no series number.** Asserted against the schema, so a later
   ticket cannot add one quietly.
-- **`Backups.expire()` never deletes the record, its `-wal` or its `-shm`.**
+- **`Backups.expire()` never deletes the record**, and the record has no `-wal`
+  or `-shm` sibling to worry about because WAL is not enabled — asserted as "the
+  backups folder holds exactly the record", not by naming a file that should not
+  exist.
 - **A record a build does not know the version of is refused**, not upgraded.
 - **The reset wipes it**, and the next book starts a fresh standard.
+- **The reset asks before wiping**, and `--yes` skips the question; a reset with
+  no stdin and no `--yes` changes nothing.
 - **Nothing is recorded on a dry run, on an unmatched book, or on a correction
   the relay never delivered.**
+- **One connection on one thread.** A test that calls the record from a second
+  thread is asserting nothing about production, but a test that constructs the
+  record and drives a whole `Relay` passes only while `check_same_thread` stays
+  at its default — which is the reminder the note asks for.
 
 ## Fixtures this session recorded
 
@@ -705,7 +856,7 @@ not. No test reads any of them yet.
 | --- | --- |
 | `hardcover/by-isbn-{cragside,berwick,the-infirmary}-authors.json` | same author id, same series id, three books, and the same spelling on each |
 | `hardcover/author-lj-ross.json` | the row itself: no alternate names, no canonical, no alias |
-| `hardcover/authors-spelling-variants.json` | one human, three rows, unrelated to each other — and two of the three merging through `normalise` |
+| `hardcover/authors-spelling-variants.json` | one human, three rows, unrelated to each other — and all three merging through `normalise` once it collapses single-letter runs |
 | `hardcover/works-good-omens-authors.json` | two rows for one human under two keys, one of them a fuller spelling, and authors in two orders |
 | `googlebooks/by-isbn-cragside-authors.json` | Google's own spelling, `L. J. Ross` |
 
