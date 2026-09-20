@@ -436,11 +436,12 @@ are untouched.
 
 ```sql
 -- What a source's genre was judged to mean.
+-- The row is upserted: `mapped` is replaced with a fresh answer, `seen` is not.
 CREATE TABLE genres (
     source  TEXT NOT NULL,   -- which source's vocabulary the string came from
     genre   TEXT NOT NULL,   -- the source's own string, split and trimmed
     mapped  TEXT NOT NULL,   -- the allowed genre written, or '' for "does not fit"
-    seen    TEXT NOT NULL,   -- the unsplit string it came out of, for a person reading
+    seen    TEXT NOT NULL,   -- the first unsplit string this key came out of
     PRIMARY KEY (source, genre)
 );
 
@@ -473,21 +474,45 @@ they wonder why their book says `Crime` and not `Murder`.
 Nothing about a genre string is unique to the genre: `Fantasy` arrives on its own
 from *Pyramids* and again as one half of `Fantasy:Humour` from the same record, and
 **both split to the key `Fantasy`**, so `PRIMARY KEY (source, genre)` gives them
-**one row**. The key is the split part; `seen` is only provenance, and a collision
-must not be allowed to mean two answers to one question.
+**one row**. The key is the split part, `seen` only records where it came from, and a
+collision must not be allowed to mean two answers to one question.
 
-**The first string seen wins, and a later one leaves the row alone.** The write is
-`ON CONFLICT (source, genre) DO NOTHING`, exactly as `record._write_name` already
-does for a name standard, and for the same reason: the mapping is what the row is
-for, and the second string is not a better answer to a question already answered.
-So a book whose only genre is `Fantasy` records
-`(hardcover, 'Fantasy', <target>, seen='Fantasy')`, and the `Fantasy:Humour`
-record's `Fantasy` half leaves that row as it was — while still adding its own
-`Humour` row, because that key is new. `Fantasy:Humour` is therefore **not**
-recoverable from the table afterwards, which is the deliberate cost of a key that
-has to be one genre: the split string is what is judged, and `seen` is a hint for a
-person, not a second key. `Pyramids` and its packed path are what a test pins this
-with.
+**The first unsplit string wins; the answer is always the current one.**
+
+```
+INSERT INTO genres (source, genre, mapped, seen) VALUES (?, ?, ?, ?)
+ON CONFLICT (source, genre) DO UPDATE SET mapped = excluded.mapped
+```
+
+The upsert touches **`mapped` only, never `seen`**:
+
+- **`seen` is first-write-wins**, because it is provenance and the second string is
+  not a better account of where the key came from. So a book whose only genre is
+  `Fantasy` records `(hardcover, 'Fantasy', <target>, seen='Fantasy')`, and the
+  `Fantasy:Humour` record's `Fantasy` half leaves `seen` as it was — while still
+  adding its own `Humour` row, because that key is new. `Fantasy:Humour` is
+  therefore **not** recoverable from the table afterwards, which is the deliberate
+  cost of a key that has to be one genre. `Pyramids` and its packed path are what a
+  test pins this with.
+- **`mapped` must be updatable, and `DO NOTHING` would have been a silent bug.**
+  Q7 says a positive hit whose target is no longer on the allowed list is treated as
+  a **miss** and re-asked. Under `DO NOTHING` the new answer would then be thrown
+  away by the very write that was supposed to store it: the row would keep the
+  target that is not allowed, the next lookup would miss again, and **every later
+  book carrying that genre would re-ask for the rest of the record's life**. The
+  cache would be dead for that genre and nothing would say so.
+
+  `DO UPDATE SET mapped = excluded.mapped` is what makes "re-ask and store" the
+  outcome Q7 intends. It cannot resurrect a stale target either: §"Resolving one
+  genre" validates every stored target against the allowed list on the way out, so a
+  row is never trusted just because it exists.
+
+The consequence worth stating, because it is the price of a single key: a row's
+`seen` can name a string the current `mapped` was not answered for — the
+`Fantasy:Humour` case, once `Fantasy` alone is re-asked and re-answered. `seen`
+answers "where did this key first come from", not "what is this target's
+provenance", and the log line is the place where a mapping's own reason is
+recorded.
 
 ### The fingerprint
 
@@ -585,6 +610,13 @@ The ticket's two, plus the ones the probes make worth pinning:
   first never lands still spend one call in that run.
 - **A positive cache hit that is no longer allowed is re-asked**, and a positive
   hit that is still allowed is not.
+- **The re-ask is stored, and the next book pays nothing.** The same case driven
+  one step further: the new target is written, the row's `seen` is unchanged, and a
+  second book carrying that genre **in the same run** spends no call. This is the
+  assertion that catches a `DO NOTHING` upsert, under which the row would keep the
+  target that is no longer allowed and every later book would re-ask for ever —
+  silently, because a re-ask that works looks exactly like a cache hit that
+  works.
 - **Nulls are invalidated when the allowed list changes**, and **not** when it is
   merely reordered or re-cased.
 - **A dry run does not write the fingerprint and does not sweep**, asserted
