@@ -637,6 +637,12 @@ overturned in review.
     protect from `Backups.expire()` and nothing to explain to a user looking at
     their backup folder. The record file itself still begins with a dot, so the
     existing skip covers it, and that is the one thing the test asserts.
+12. **The record's public surface is what production reads** (added in the review
+    session, applied). `standard()`, `match()` and `genres()` were deleted because
+    no caller outside the tests used them; the tests read the table directly.
+    `names()` stays, because the reset command counts what it is about to wipe
+    with it. The migration marker comment went with them; the `user_version` guard
+    stayed, because refusing a newer file is the mechanism and not the marker.
 
 ## The build shape
 
