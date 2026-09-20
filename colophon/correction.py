@@ -19,7 +19,14 @@ from colophon.config import DEFAULT_CONFIDENCE, FIELD_DEFAULTS, KNOWN_FIELDS
 from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
-from colophon.llm import Llm, LlmError, LlmLimited, needs_key, utc_today
+from colophon.llm import (
+    Llm,
+    LlmError,
+    LlmLimited,
+    allowed_spelling,
+    needs_key,
+    utc_today,
+)
 from colophon.matching import (
     FileBook,
     nearest_candidate,
@@ -130,6 +137,12 @@ class Decision:
 
     resolutions: tuple = ()
     match: Match | None = None
+    # What each of this book's source genres was judged to mean, as
+    # `(source, genre, mapped, seen)`: the genre cache the record keeps, which
+    # travels here for the same reason the resolutions do - the relay is what
+    # knows the book arrived, and a mapping learnt from a book that never landed
+    # is a mapping nothing on the shelf has.
+    genres: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -346,6 +359,7 @@ class Corrector:
         llm=None,
         record=None,
         overrides=None,
+        genres=(),
     ):
         self.sources = tuple(sources or ())
         self.backups = backups
@@ -371,6 +385,14 @@ class Corrector:
         # The `[authors]` overrides, keyed by normalised name, which beat
         # whatever the record says.
         self.overrides = dict(overrides or {})
+        # The user's own tag list. A source genre is mapped onto one of these or
+        # dropped, so this is the only vocabulary that ever reaches a book, and
+        # an empty list means genres are not written at all.
+        self.allowed_genres = tuple(genres or ())
+        # What each source genre was judged to mean, for this run only. The record
+        # is the durable cache; this is what makes a run that never lands still
+        # ask each genre once, rather than once per book carrying it.
+        self._genre_memo = {}
         # Books the LLM could not be asked about, and why, for the UTC day they
         # were left for: a cache, not a decision, so it is in memory and a
         # restart costs one extra round of source queries.
@@ -420,6 +442,7 @@ class Corrector:
             llm=llm,
             record=record,
             overrides=dict(config.authors),
+            genres=config.allowed_genres,
         )
 
     def correct(self, path):
@@ -740,6 +763,16 @@ class Corrector:
         if standards is not None:
             found = standards.applied_to(found)
         edits = self._edits(found, book, unverified=unverified)
+        # The genres are mapped before anything is decided, because the answer is
+        # part of what the book is written with - and because a genre the model
+        # could not be asked about leaves the book waiting, which must happen
+        # before the backup rather than after it.
+        genres, mappings = (), ()
+        if found is not None:
+            waiting, genres, mappings = self._map_genres(path, found, book)
+            if waiting is not None:
+                return waiting
+            edits = replace(edits, genres=genres)
         matched = {
             "isbn": isbn,
             "sought": None if isbn or unverified else found.title,
@@ -822,9 +855,99 @@ class Corrector:
             # reaches the library is the one it arrived as, so the spelling this
             # pass chose is not one anything on the shelf has.
             decision=(
-                self._decision(standards, found, confidence, book) if written else None
+                self._decision(standards, found, confidence, book, mappings)
+                if written
+                else None
             ),
         )
+
+    def _map_genres(self, path, found, book):
+        """The allowed genres this book should be given, and how each was decided.
+
+        Returns `(waiting, genres, mappings)`, and `waiting` is not None only when
+        a genre could not be asked about: the model is unreachable, its key was
+        refused, or the day's calls are spent. That is the same rule the chooser
+        follows - the book is left for tomorrow rather than finished with a
+        question unasked - and it is why this is checked before the backup.
+
+        With no allowed list there is no question to ask at all, so nothing is
+        looked up: not the memo, not the record, and not the model. That early
+        return is load-bearing, because a memo or a cache hit would otherwise
+        hand back a target the empty list cannot accept.
+
+        A genre the book already carries is left out of what is written: the list
+        is add-only, so a book that already says `Crime` is not rewritten for it.
+        """
+        if not self.allowed_genres:
+            return None, (), ()
+        carried = {subject.strip().casefold() for subject in book.subjects}
+        wanted = []
+        mappings = []
+        for genre, seen in found.genres:
+            try:
+                target = self._one_genre(found.source, genre)
+            except (LlmError, LlmLimited) as error:
+                return self._wait(path, error), (), ()
+            mappings.append((found.source, genre, target or "", seen))
+            if target and target.strip().casefold() not in carried:
+                wanted.append(target)
+        return None, tuple(wanted), tuple(mappings)
+
+    def _one_genre(self, source, genre):
+        """What this source genre maps to, or None, asking only when it must.
+
+        Three places are tried in order, and the first that answers wins: this
+        run's own memo, then the record, then the model. A stored target is not
+        trusted because it is there - the allowed list may have moved on - so it
+        is put through the same membership check a fresh answer is, and a target
+        the list no longer holds is a miss rather than an answer.
+        """
+        key = (source, genre)
+        if key in self._genre_memo:
+            return self._genre_memo[key]
+
+        if self.record is not None:
+            held = self.record.mapping(source, genre)
+            if held == "":
+                # Asked before, and the answer was that it does not fit.
+                return None
+            if held is not None:
+                target = allowed_spelling(self.allowed_genres, held)
+                if target is not None:
+                    return target
+
+        if self.llm is None:
+            LOG.info(
+                "%s's genre %r cannot be mapped: no LLM is set up to judge it, so "
+                "the book does not get it",
+                source,
+                genre,
+            )
+            return None
+        if self.dry_run:
+            # A dry run spends no call, so a genre with no stored answer has no
+            # answer to report. Saying so is the honest preview; going quiet
+            # would read as a book that has no genres.
+            LOG.info(
+                "dry run: %s's genre %r is not in the record, so whether it maps to "
+                "one of the allowed genres was not asked and is not known",
+                source,
+                genre,
+            )
+            return None
+
+        target = self.llm.map_genre(self.allowed_genres, genre)
+        self._genre_memo[key] = target
+        if target is None:
+            LOG.info(
+                "%s's genre %r does not fit any allowed genre, so the book does not "
+                "get it",
+                source,
+                genre,
+            )
+        else:
+            LOG.info("%s's genre %r is written as %r", source, genre, target)
+        return target
 
     def _standards(self, found):
         """What the record says these names are spelt, or None without one.
@@ -859,27 +982,32 @@ class Corrector:
             resolved=authors + series,
         )
 
-    def _decision(self, standards, found, confidence, book):
+    def _decision(self, standards, found, confidence, book, genres=()):
         """What to tell the record once this book has landed, or None.
 
-        Nothing to standardise means nothing to record. The match travels beside
-        the names so a duplicate can be settled later without asking the sources
-        again: what recognised the book, how sure it was, and the identity it was
-        recognised under.
+        Nothing to standardise and nothing mapped means nothing to record. The
+        match travels beside the names so a duplicate can be settled later without
+        asking the sources again: what recognised the book, how sure it was, and
+        the identity it was recognised under.
         """
-        if standards is None:
+        if standards is None and not genres:
             return None
         return Decision(
-            resolutions=standards.resolved,
-            match=Match(
-                # The file's own title and authors, not the record's: a book
-                # whose ISBN no source has is recognised by those, and the ones
-                # it is recognised by are the ones the file carries.
-                book_key=book_key(found.isbn, book.title, book.authors),
-                source=found.source,
-                confidence=confidence,
-                matched_as=str(found.isbn or ""),
+            resolutions=standards.resolved if standards is not None else (),
+            match=(
+                Match(
+                    # The file's own title and authors, not the record's: a book
+                    # whose ISBN no source has is recognised by those, and the ones
+                    # it is recognised by are the ones the file carries.
+                    book_key=book_key(found.isbn, book.title, book.authors),
+                    source=found.source,
+                    confidence=confidence,
+                    matched_as=str(found.isbn or ""),
+                )
+                if standards is not None
+                else None
             ),
+            genres=tuple(genres),
         )
 
     def _edits(self, found, book, unverified=False):
@@ -1173,7 +1301,9 @@ def _credited(field, edits, source):
     because a source repeating the file's own blurb is the same characters as the
     file's own blurb.
     """
-    ours = field == "tag" or (field == "description" and edits.notes_taken_off)
+    ours = field in ("tag", "genres") or (
+        field == "description" and edits.notes_taken_off
+    )
     return COLOPHON if ours else source
 
 
@@ -1189,6 +1319,6 @@ def _value(field, edits):
     if field == "tag":
         return UNVERIFIED_TAG if edits.unverified else ""
     value = getattr(edits, field, None)
-    if field == "authors":
+    if field in ("authors", "genres"):
         return ", ".join(value or ())
     return "" if value is None else str(value)

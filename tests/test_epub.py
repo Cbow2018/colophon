@@ -844,5 +844,110 @@ class TheUnverifiedMarkTests(EpubTestCase):
         )
 
 
+class TheGenresTests(EpubTestCase):
+    """The second writer of `dc:subject`, and the one rule it is held to.
+
+    Genres are the one field outside the `skip`/`fill`/`overwrite` system: the
+    `colophon:*` mark lives in `dc:subject` too, so anything that replaced
+    subjects would eat it. The rule is therefore add-only, and it is decided
+    here rather than in the corrector because this is where the file is.
+    """
+
+    def a_book(self, metadata=SIMPLE):
+        return write_epub(self.folder / "Cragside.epub", metadata)
+
+    def test_it_reads_the_books_own_subjects(self):
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:subject>Detective and mystery stories</dc:subject>\n"
+            "    <dc:subject>Northumberland</dc:subject>"
+        )
+
+        self.assertEqual(read(path).subjects, ("Detective and mystery stories", "Northumberland"))
+
+    def test_the_colophon_mark_is_not_one_of_the_books_own_subjects(self):
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            f"    <dc:subject>{UNVERIFIED_TAG}</dc:subject>"
+        )
+
+        self.assertEqual(read(path).subjects, ())
+
+    def test_genres_are_added_in_order(self):
+        path = self.a_book()
+
+        changed = correct(path, Edits(genres=("Crime", "Mystery")))
+
+        self.assertEqual(changed, ("genres",))
+        self.assertEqual(subjects(path), ["Crime", "Mystery"])
+
+    def test_no_genres_is_not_a_change(self):
+        path = self.a_book()
+        before = path.read_bytes()
+
+        self.assertEqual(correct(path, Edits()), ())
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_a_genre_already_on_the_book_is_not_written_again(self):
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:subject>Crime</dc:subject>"
+        )
+        before = path.read_bytes()
+
+        changed = correct(path, Edits(genres=("Crime",)))
+
+        self.assertEqual(changed, (), "nothing moved, so the book is not rewritten")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_a_genre_spelt_differently_is_still_the_same_genre(self):
+        """Two tags for one shelf label is the whole thing this prevents."""
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:subject>crime</dc:subject>"
+        )
+
+        changed = correct(path, Edits(genres=("Crime",)))
+
+        self.assertEqual(changed, ())
+        self.assertEqual(subjects(path), ["crime"], "the book's own spelling is left alone")
+
+    def test_only_the_genres_that_are_new_are_added(self):
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:subject>Crime</dc:subject>"
+        )
+
+        changed = correct(path, Edits(genres=("Crime", "Mystery")))
+
+        self.assertEqual(changed, ("genres",))
+        self.assertEqual(subjects(path), ["Crime", "Mystery"])
+
+    def test_the_books_own_subjects_are_all_kept(self):
+        path = self.a_book(
+            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:subject>Detective and mystery stories</dc:subject>\n"
+            "    <dc:subject>Northumberland</dc:subject>"
+        )
+
+        correct(path, Edits(genres=("Crime",)))
+
+        self.assertEqual(
+            subjects(path),
+            ["Detective and mystery stories", "Northumberland", "Crime"],
+        )
+
+    def test_the_unverified_mark_survives_a_genre_write(self):
+        path = self.a_book('    <dc:title>Cragside</dc:title>')
+        correct(path, Edits(unverified=True))
+
+        changed = correct(path, Edits(genres=("Crime",)))
+
+        self.assertEqual(changed, ("genres",))
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        self.assertIn("Crime", subjects(path))
+        self.assertTrue(read(path).unverified)
+
+
 if __name__ == "__main__":
     unittest.main()

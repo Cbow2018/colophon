@@ -19,6 +19,7 @@ same name in two modules would not be caught by one `except` clause - a mistake
 that is invisible until the moment a source actually fails.
 """
 
+import re
 import urllib.error
 import urllib.request
 
@@ -26,6 +27,12 @@ from colophon.epub import is_cover
 
 USER_AGENT = "Colophon (+https://github.com/Cbow2018/colophon)"
 IMAGE_TIMEOUT_SECONDS = 30
+
+# A source genre string is sometimes a BISAC path (`Fantasy:Humour`) and
+# sometimes a list (`Classics; Fantasy; Horror`), so both separators are split
+# on. One definition, so what is asked about and what is cached cannot disagree
+# about where one genre ends and the next begins.
+_GENRE_SEPARATOR = re.compile(r"[:;]")
 
 # A cover is a few tens of kilobytes. This is far above any real one and far
 # below the point where holding it in memory matters, so it only ever catches a
@@ -60,6 +67,16 @@ def text(value):
         return None
     found = str(value).strip()
     return found or None
+
+
+def genre_parts(value):
+    """One source's genre string as the genres inside it, in order, without empties.
+
+    A source's own string is kept by whoever calls this, beside the parts: the
+    parts are what is asked about and cached, and the whole string is the only
+    record of what the source actually wrote.
+    """
+    return tuple(part.strip() for part in _GENRE_SEPARATOR.split(str(value)) if part.strip())
 
 
 def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):

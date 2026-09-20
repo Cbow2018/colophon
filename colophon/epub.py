@@ -43,8 +43,11 @@ COVER_META = "cover"
 # unverified book is not a corrected one - this is the whole of what is written
 # to it - and the tag and the note are added together and taken off together.
 # A tag is a `dc:subject`, which is what Calibre and Calibre-Web NextGen read as
-# a book's tags; the spec names the tag but not the element.
-UNVERIFIED_TAG = "colophon:unverified"
+# a book's tags; the spec names the tag but not the element. Every mark Colophon
+# writes into `dc:subject` starts with this, which is how the book's own subjects
+# are told from Colophon's - genres are added beside them and never replace them.
+COLOPHON_PREFIX = "colophon:"
+UNVERIFIED_TAG = f"{COLOPHON_PREFIX}unverified"
 UNVERIFIED_NOTE = "Metadata could not be verified by Colophon."
 # A blank line before the note, so it reads as a paragraph of its own rather than
 # as the end of the blurb's last sentence.
@@ -116,6 +119,10 @@ class Book:
     # marked and has now been matched has its mark taken off, and whether it has
     # one is a fact about the file as it was read.
     unverified: bool = False
+    # The book's own subjects, which is every `dc:subject` that is not one of
+    # Colophon's own marks. Genres are added to that list and never replace it,
+    # so "the book already has this genre" needs the list as it arrived.
+    subjects: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -160,6 +167,11 @@ class Edits:
     # pass rather than remembered, so a marked book that is corrected later comes
     # out clean.
     unverified: bool | None = None
+    # The allowed genres to write onto the book, in the order to write them.
+    # Nothing is ever taken off: the field is add-only because the `colophon:*`
+    # mark lives in `dc:subject` too, so a rule that replaced subjects would eat
+    # it. Empty means no genre was mapped for this book.
+    genres: tuple = ()
 
 
 def read(path):
@@ -180,6 +192,21 @@ def read(path):
         series_number=series_number,
         has_cover=_has_cover(package, metadata),
         unverified=_has_unverified(metadata, description),
+        subjects=_own_subjects(metadata),
+    )
+
+
+def _own_subjects(metadata):
+    """Every `dc:subject` on this book that is not one of Colophon's own marks.
+
+    A subject says what a book is about as well as what became of it, and only
+    the second is Colophon's to decide, so the mark is filtered out here rather
+    than counted as something the book already says about itself.
+    """
+    return tuple(
+        text
+        for text in ((element.text or "").strip() for element in _elements(metadata, "subject"))
+        if text and not text.startswith(COLOPHON_PREFIX)
     )
 
 
@@ -351,7 +378,39 @@ def _apply(metadata, edits):
         changed.append("series_number")
     if edits.unverified is not None and _set_unverified_tag(metadata, edits.unverified):
         changed.append("tag")
+    if _set_genres(metadata, edits.genres):
+        changed.append("genres")
     return tuple(changed)
+
+
+def _set_genres(metadata, genres):
+    """Add the genres the book does not already carry, saying whether any moved.
+
+    Add-only, and it never takes an element off. Two subjects are the same genre
+    when they are the same words, case and surrounding space aside, because
+    writing `Crime` beside a book's own `crime` would be exactly the pile of
+    near-duplicate tags this exists to prevent. The book's own spelling is
+    nevertheless left alone: the config's spelling is what is *added*, and
+    rewriting what is already there would be a rule this field does not have.
+
+    A genre already carried is not written, so a re-dropped file is not rewritten
+    and a second pass reports nothing.
+    """
+    taken = {
+        (element.text or "").strip().casefold()
+        for element in _elements(metadata, "subject")
+    }
+    changed = False
+    for genre in genres or ():
+        wanted = str(genre).strip()
+        if not wanted or wanted.casefold() in taken:
+            continue
+        element = ET.Element(f"{{{DC}}}subject")
+        element.text = wanted
+        _insert_dc(metadata, element)
+        taken.add(wanted.casefold())
+        changed = True
+    return changed
 
 
 def _set_unverified_tag(metadata, unverified):
