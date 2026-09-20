@@ -90,12 +90,12 @@ normalising server-side and its own spelling is stable, exactly as CBO-37's note
 records.
 
 Two recordings of those two title searches were made and then **not kept**: both
-answers are `by-title-cragside.json` again — the same two volumes, the same
-fields, a different `etag`, which Google changes on every request — so keeping
-them would be two near-duplicate files for a property this README already
-states. `by-isbn-cragside-authors.json` overlaps `by-isbn-cragside.json` for the
-same reason, and is kept because CBO-41's research note quotes its author value
-directly rather than through a second file.
+answers repeat the same two volumes with the same fields as
+`by-title-cragside.json`, and differ from it only in the `etag`, which Google
+changes on every request — so keeping them would be two near-duplicate files for a
+property this README already states. `by-isbn-cragside-authors.json` overlaps
+`by-isbn-cragside.json` for the same reason, and is kept because CBO-41's research
+note quotes its author value directly rather than through a second file.
 
 ## What these replies do **not** contain
 

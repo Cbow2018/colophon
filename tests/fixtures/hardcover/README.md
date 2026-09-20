@@ -46,13 +46,22 @@ these recordings are the ISBN query widened to ask for `authors.id` and
 | `works-good-omens-authors.json` | — | one work called *Good Omens* spelt `Terry Pratchett`, another spelt `Terry David John Pratchett`, and a third with the two authors in a different order | recorded |
 
 Three DCI Ryan books carry the same author id and the same series id, which is
-what makes an id worth recording: it resolves **the same id under a different
-spelling**, the case `works-good-omens-authors.json` shows most plainly. It does
-**not** merge 318638, 350233 and 350235 — those are three separate rows for one
-human, and nothing in the API says they are related (`canonical_id` and
-`alias_id` are null on all three). Reconciling those is what `[authors]` in
-`config.toml` is for, and CBO-41's test says so rather than implying the id solves
-it.
+what makes an id worth recording: it is a stable identity for a person across
+books, and it is what CBO-41 anchors a standard to. What the fixtures **do not**
+show is the id resolving a spelling difference — **no committed recording has one
+author id under two spellings**, and the two works in
+`works-good-omens-authors.json` are two different ids (`Terry Pratchett` is
+227859, `Terry David John Pratchett` is 1566154).
+
+The id therefore does **not** merge 318638, 350233 and 350235 — those are three
+separate rows for one human, and nothing in the API says they are related
+(`canonical_id` and `alias_id` are null on all three). Neither does the id merge
+227859 and 1566154. What does merge some of them is the *name*: CBO-41's key for a
+spelling is `matching.normalise`'s output, and `L.J. Ross` (318638) and
+`L. J. Ross` (350233) both come out as `l j ross`, while `LJ Ross` (350235) is
+`lj ross`. So **`[authors]` in `config.toml` is the only merge for spellings that
+do not normalise together**, and CBO-41's test says so rather than implying the id
+solves it.
 
 The id was first looked for in the `authors` root field, where **`_ilike` is
 refused** — `{"error":"ilike and related operations are not permitted on this

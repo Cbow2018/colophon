@@ -85,7 +85,7 @@ Google Books has no author identity at all. Its `volumeInfo.authors` is a list o
 display strings and nothing else, and its `fields` mask in `googlebooks.FIELDS`
 asks for no more.
 
-### 2. The id resolves the same id under two spellings, and nothing else
+### 2. What an author id does, and what it does not
 
 Three DCI Ryan books, each recorded by ISBN with the id asked for
 (`by-isbn-{cragside,berwick,the-infirmary}-authors.json`):
@@ -96,10 +96,19 @@ Three DCI Ryan books, each recorded by ISBN with the id asked for
 | *Berwick* | 9781529978940 | id 318638 `L.J. Ross` | id 23832, featured, position 24 |
 | *The Infirmary* | 9781799729945 | id 318638 `L.J. Ross` | id 23832, featured, position 11 |
 
-Same author id, same series id, three books. That is what an id buys: **when a
-record's author id is the one already recorded, the spelling is reused even if
-the string differs.** The case that needs it
-(`tests/fixtures/hardcover/works-good-omens-authors.json`):
+Same author id, same series id, three books, and the same spelling on all three.
+The four DCI Ryan works recorded earlier say the same thing, and so does every
+other full-format recording in `tests/fixtures/hardcover/`. **Checked rather than
+assumed: no committed recording shows one author id carrying two spellings, and
+none shows one series id carrying two names.** The same-id-different-spelling
+case this section is named after is real in principle and does not appear in any
+fixture CBO-41 has. §"Does step 2 earn its place" says what follows from that.
+
+Three things about identity *are* in the fixtures, and they are three different
+problems:
+
+**One name, two rows.** Two works called *Good Omens* name `Terry Pratchett` and
+neither of them is the other's author row:
 
 ```
 work 2955939  "Good Omens"  → 1566154 "Terry David John Pratchett"
@@ -107,13 +116,15 @@ work 315038   "Good Omens"  → 227859  "Terry Pratchett", 106235 "Neil Gaiman"
 work 438096   "Good Omens"  → 227859  "Terry Pratchett"
 ```
 
-One source, one title, and the name of its author spelt two ways on two records —
-plus a third record crediting only one of the two authors, and the two credited in
-a different order on the second. **Comparing the strings cannot resolve that;
-comparing ids can** (227859 is 227859).
+`Terry Pratchett` (227859) and `Terry David John Pratchett` (1566154) are **two
+ids and two normalised keys** — `terry pratchett` and `terry david john
+pratchett`. So the id does not join them either; they are separate standards
+until `[authors]` joins them, exactly like the Ross rows below. A third work
+credits only one of the two authors, and the two are listed in a different order
+on the second, which is why the record must keep the order a record gives rather
+than sorting authors.
 
-**What the id does not do — the residual case, and it is not hypothetical.** One
-human is three rows:
+**One human, three rows.** The case `[authors]` exists for:
 
 ```
 exact:  [{"id": 350235, "name": "LJ Ross", "slug": "lj-ross-9c7bfe5a-…"}]
@@ -122,23 +133,66 @@ plain:  [{"id": 806228, "name": "Ross", "slug": "ross"}]
 many:   [350233 "L. J. Ross", 318638 "L.J. Ross", 350235 "LJ Ross"]
 ```
 
-(committed as `authors-spelling-variants.json`; the fourth row is one `_in`
+(committed as `authors-spelling-variants.json`; the fourth line is one `_in`
 query, which is the only way to get more than one at once). Every DCI Ryan book
 carries 318638. Nothing in the API ties 318638 to 350233 or 350235: no
-`canonical_id`, no `alias_id`, no `alternate_names`, no link of any kind. So an id
-**does not merge those three**, and no amount of asking the same source will.
+`canonical_id`, no `alias_id`, no `alternate_names`, no link of any kind. So the
+id **does not merge those rows**, and no amount of asking the same source will.
 
-**That residual case is what `[authors]` is for**, and CBO-41's test must say so
-rather than implying the id solved it. The two mechanisms answer two different
-questions:
+**The name key merges two of the three, and that is the correction to this
+section's first draft.** Grouping the committed spellings through
+`matching.normalise` (run over the fixtures, not read off by eye):
+
+| id | spelling | normalised key |
+| --- | --- | --- |
+| 318638 | `L.J. Ross` | `l j ross` |
+| 350233 | `L. J. Ross` | `l j ross` |
+| 350235 | `LJ Ross` | `lj ross` |
+| 806228 | `Ross` | `ross` |
+| 227859 | `Terry Pratchett` | `terry pratchett` |
+| 1566154 | `Terry David John Pratchett` | `terry david john pratchett` |
+
+`L.J. Ross` and `L. J. Ross` are **one key**, so the name-keyed lookup merges
+those two rows with no help from `[authors]` at all. `LJ Ross` is a second key
+and `Ross` a third, and `Terry Pratchett` / `Terry David John Pratchett` are two
+more. The finding, stated exactly:
+
+> **`[authors]` is the only merge for spellings that do not normalise together.**
+
+So the two mechanisms answer two questions, and the first is narrower than the
+first draft claimed:
 
 | Question | Answered by |
 | --- | --- |
-| Is this the same author record I recorded before, spelt differently? | the source's own id |
-| Are these two *rows* one person? | `[authors]`, the user's override — nothing else |
+| Are these two spellings the same name? | `matching.normalise`, in the name-keyed lookup |
+| Are these two rows one person, spelt too differently to normalise together? | `[authors]` — nothing else |
+| Has this *source row* been seen before, whatever it was spelt as? | the source's own id — see below |
 
 An earlier cut of this note proposed using the LLM for the second question. It is
 dropped; §5 is why.
+
+#### Does step 2 earn its place?
+
+The resolution order has an id-keyed lookup before the name-keyed one. The rule
+is real and the maintainer asked for it, but the evidence for it is not in any
+fixture, so it is worth being plain about what it is for:
+
+- **It is not needed for the Ross rows.** Any spelling they are written under
+  resolves through the name key first, and `L.J. Ross` / `L. J. Ross` merge there.
+- **It is not needed for the Pratchett rows.** Two ids, two keys; the id row
+  would hold `227859 → Terry Pratchett` and the next book spelling it `Terry
+  Pratchett` finds the same standard by name anyway.
+- **It is needed only if a source ever returns one row under two spellings** —
+  the `david john` case on one id rather than two. Not observed here.
+
+This is the same shape as a finding CBO-36's review already acted on: the
+edit-distance decay was dropped because *no fixture could reach it*. The
+difference is that the id-keyed row is not only a lookup — it is also **where a
+new spelling is anchored**, which the next section needs, so it is kept as a
+store. Whether it also stays as a *read* is the one thing here a reviewer should
+decide, and the note proceeds on **yes, kept**, because it is one indexed lookup
+and it is what makes the id mean something rather than being written and never
+read.
 
 ### 3. The two sources spell the same author differently, and each is stable
 
@@ -271,11 +325,28 @@ say so rather than implying the id solves it."
 
 So the resolution order is: **the source's own id first, then the spelling the
 record already has, then the source's spelling as a new standard.** The id makes
-the first step exact where a source supplies one, which is the Pratchett case;
-the remembered spelling carries the standard to a source that has no ids, which is
-every Google Books match; and the residual one-human-three-rows case is answered
-by nothing but `[authors]`. This is written into §2 as a table because it is the
-single most misreadable part of the design.
+the first step exact where a source supplies one; the remembered spelling carries
+the standard to a source that has no ids, which is every Google Books match; and
+the residual one-human-three-rows case is answered by nothing but `[authors]`.
+
+**Two corrections to this answer, both verified after the fact, both recorded
+because the answer above is a decision and the corrections are facts.**
+
+1. **The Pratchett case is not a same-id case.** It is two ids — 227859 `Terry
+   Pratchett` and 1566154 `Terry David John Pratchett` — with two normalised keys
+   (`terry pratchett`, `terry david john pratchett`). So it demonstrates the same
+   residual case as the Ross rows and not the id rule. The id rule stands;
+   the example that was given for it does not, and §2 now says so.
+2. **`[authors]` is not the only merge.** `L.J. Ross` (318638) and `L. J. Ross`
+   (350233) normalise to one key, `l j ross`, so the name-keyed lookup merges
+   those two rows with no override at all. The corrected finding, which is the
+   one the build inherits, is **`[authors]` is the only merge for spellings that
+   do not normalise together.**
+
+Neither correction changes the order in the first paragraph; the first narrows
+what the id is demonstrated to do, and the second narrows what `[authors]` is
+required for. No committed recording shows one author id under two spellings, so
+§2 asks the reviewer to confirm whether the id-keyed lookup stays as a read.
 
 **Q2. Does the LLM recognise name variants?** → **No, dropped from this
 ticket.** The maintainer's reason is stronger than the token measurement and is
@@ -489,27 +560,57 @@ for each author the match names, in the matched record's order:
 Step 4 records only on a correction that was applied and delivered (Q5). The
 order is the ticket's own: overrides always win, a recorded author's spelling is
 reused, and a new author takes the top-priority source's spelling — which is step
-4 reached by the first source, in priority order, that matched the book. Step 2
-fires only when the source supplies an id and the record already has that id,
-which is the Pratchett case; step 3 is what makes the standard follow an author
-from Hardcover to Google Books.
+4 reached by the first source, in priority order, that matched the book. Step 3 is
+what makes the standard follow an author from Hardcover to Google Books, and it is
+the step the fixtures exercise (§2). Step 2 fires only when the source supplies an
+id and the record already has that id; no fixture reaches it, and §2 asks the
+reviewer to confirm it stays.
 
 Series is the same shape with `kind='series'` and one difference: Google Books
 has no series at all, so it reaches step 4 with nothing and can never introduce a
 series name.
 
-**Step 3 is also where the residual case is visible.** `matching.normalise` keeps
-the words and drops everything between them, so an initial pairs with its stop and
-`L.J. Ross` normalises to `l j ross`. That is exactly the same key as
-`L. J. Ross` (checked against the function, not assumed) — so those two spellings
-**do** reach one standard by name. The third spelling, `LJ Ross`, is the odd one
-out: `lj ross` is a different key, so it stays its own standard until `[authors]`
-says otherwise. A bare `Ross` is a third key again (`ross`).
+#### The write-side rule: a new id is anchored to the standard it resolved to
+
+Step 3 resolving a name is not the end of it. **When a book arrives under a
+source id the record has never seen, and the name lookup resolves to an existing
+standard, the record stores that id against that standard.** So the three Ross
+rows behave like this:
+
+```
+book A  hardcover, author id 318638 "L.J. Ross"
+        step 3 misses, step 4 records:  standard 'L.J. Ross'
+                                        keys: (hardcover, 318638), ('', 'l j ross')
+
+book B  hardcover, author id 350233 "L. J. Ross"
+        step 2 misses (350233 is new)
+        step 3 finds ('', 'l j ross') -> standard 'L.J. Ross'
+        writes 'L.J. Ross', and records (hardcover, 350233) -> standard 'L.J. Ross'
+
+book C  hardcover, author id 350235 "LJ Ross"
+        step 2 misses; step 3 misses too ('lj ross' is a different key)
+        step 4 records a *second* standard, 'LJ Ross'
+```
+
+Book B is the rule the maintainer asked for, and it is what makes an id row mean
+something: the row is written the first time a *new* id is seen, so every later
+book from that row is resolved by id rather than by re-normalising the name. It is
+also why the id-keyed lookup stays in the order at all — without it the row would
+be written and never read.
+
+Book C is the honest limit, and it is the corrected finding stated as behaviour:
+`LJ Ross` does not normalise to `l j ross`, so the record ends up with two
+standards for one human. **`[authors]` is the only merge for spellings that do not
+normalise together**, and a config entry mapping `LJ Ross` to `L.J. Ross` is what
+collapses C onto A. Nothing about the id changes that: 350235 and 318638 are
+different rows and the record is told so by the only part of the API that could
+tell it otherwise — which is nowhere, since `canonical_id` and `alias_id` are
+null.
 
 So of the three rows §2 found for one human, name resolution merges two and
-leaves one — and **the source id merges none of them**, because they are three
-rows with three ids. `[authors]` is the only thing that merges all three, which is
-what the ticket's test has to demonstrate.
+leaves one, the id merges none of them, and `[authors]` is what merges all three.
+That is what the ticket's test has to demonstrate, and it has to demonstrate the
+non-merge first.
 
 ### The query change
 
@@ -560,26 +661,33 @@ The ticket's three, plus the ones the probes make worth pinning:
   resolved at step 3 of the next section. The first half is
   `by-isbn-cragside-authors.json` or `by-isbn-berwick-authors.json`, the second is
   `googlebooks/by-isbn-cragside-authors.json`.
-- **Consistency by id, which is the step name resolution cannot do.** A record
-  carrying author id 227859 and a spelling the record has never seen still reuses
-  that author's standard, because the id matches. Driven by
-  `works-good-omens-authors.json`, where 227859 is spelt `Terry Pratchett` on both
-  works while 1566154 is a different row for the same human.
+- **The same, within one source, through the name key alone.** `L.J. Ross`
+  (318638) then `L. J. Ross` (350233) from `authors-spelling-variants.json` reach
+  one standard with no override and no id helping — `l j ross` either way. This is
+  the test that pins the corrected finding, so a change that stops normalising the
+  two together fails here.
+- **A new source id is anchored to the standard it resolved to.** A book whose
+  author id the record has never seen, whose spelling resolves by name, stores
+  that id against the standard — and the next book from that id resolves by id.
+  `authors-spelling-variants.json` supplies 350233 for it.
+- **The residual case, as the maintainer asked for it.** `LJ Ross` (350235) does
+  not merge with `L.J. Ross` (318638) through the id or through the name key —
+  `lj ross` and `l j ross` are different keys — and `[authors]` is what merges
+  them. The test asserts the non-merge first, so a later change that "helpfully"
+  starts merging them fails rather than passing silently. The Pratchett pair
+  (`terry pratchett` / `terry david john pratchett`) is the same test with a
+  second pair of keys.
+- **`normalise` is what decides a key.** A test pins `L.J. Ross` and
+  `L. J. Ross` to `l j ross` and `LJ Ross` to `lj ross`, because the whole
+  cross-source behaviour rests on that and it is not obvious from reading the
+  function. It is the one place a change to `normalise` shows up as a failure
+  rather than as a quietly different library.
 - **Override precedence.** An `[authors]` entry beats a recorded standard; the
   record is unchanged afterwards; a two-hop chain resolves one hop only; a
   differently-punctuated key matches.
 - **Duplicate re-lookup.** A recorded book, re-matched at a higher confidence,
   takes the new match and can raise a standard; at an equal confidence the
   configured source priority decides; at a lower one nothing changes.
-- **The residual case, as the maintainer asked for it.** `LJ Ross` (id 350235)
-  does not merge with `L.J. Ross` (id 318638) through the id or through the name
-  key — `lj ross` and `l j ross` are different keys — and `[authors]` is what
-  merges them. The test asserts the non-merge first, so a later change that
-  "helpfully" starts merging them fails rather than passing silently.
-- **`normalise` is what decides a key.** A test pins `L.J. Ross` and
-  `L. J. Ross` to `l j ross` and `LJ Ross` to `lj ross`, because the whole
-  cross-source behaviour rests on that and it is not obvious from reading the
-  function.
 - **The record has no series number.** Asserted against the schema, so a later
   ticket cannot add one quietly.
 - **`Backups.expire()` never deletes the record, its `-wal` or its `-shm`.**
@@ -595,18 +703,22 @@ not. No test reads any of them yet.
 
 | Fixture | What it pins |
 | --- | --- |
-| `hardcover/by-isbn-{cragside,berwick,the-infirmary}-authors.json` | same author id, same series id, three books |
+| `hardcover/by-isbn-{cragside,berwick,the-infirmary}-authors.json` | same author id, same series id, three books, and the same spelling on each |
 | `hardcover/author-lj-ross.json` | the row itself: no alternate names, no canonical, no alias |
-| `hardcover/authors-spelling-variants.json` | one human, three rows, unrelated to each other |
-| `hardcover/works-good-omens-authors.json` | one id under two spellings, and authors in two orders |
+| `hardcover/authors-spelling-variants.json` | one human, three rows, unrelated to each other — and two of the three merging through `normalise` |
+| `hardcover/works-good-omens-authors.json` | two rows for one human under two keys, one of them a fuller spelling, and authors in two orders |
 | `googlebooks/by-isbn-cragside-authors.json` | Google's own spelling, `L. J. Ross` |
+
+**None of the seven is an LLM reply.** Six are Hardcover API responses and one is
+a Google Books response — the only HTTP calls whose bodies were written here.
+Every DeepSeek reply the LLM section rests on stayed in `.tmp/` and is **not**
+committed, because no test would read it; the numbers are in §5 and on
+CBO-53/CBO-54. Nothing in `tests/fixtures/` changed under `llm/`.
 
 Two Google Books title recordings — the same Cragside search with `LJ Ross` and
 with `L.J. Ross` — were made and **not kept**: both answers are
 `by-title-cragside.json` again with a different `etag`, and that README already
-states the property they would show. The replies the LLM section rests on are
-**not** committed either, because no test would read them; the numbers are in §5
-and on CBO-53/CBO-54.
+states the property they would show.
 
 ## What this ticket does not build
 
