@@ -298,7 +298,12 @@ cache rows survive a config edit — they are re-validated when read (Q7).
 `dc:subject`, never removing the book's own subjects.** Two reasons, and the
 maintainer supplied the second: the `colophon:*` tags live in `dc:subject` too,
 so anything that replaced subjects would eat them. This is the **one field outside
-the `skip`/`fill`/`overwrite` system**, and the example config says so.
+the `skip`/`fill`/`overwrite` system**, and the example config says so. A genre
+the book already carries is not written again, **compared case- and
+space-insensitively** — `Crime` beside the book's own `crime` is the same
+near-duplicate problem in miniature — while the spelling already in the file is
+what stays: the config's spelling is what is added, and nothing rewrites an
+element that is already there.
 
 ### Round 3 — the cache's failure modes
 
@@ -409,6 +414,15 @@ overturned in review.
    **The `drop` is safe only because the table is provably unwritten** — assert
    that before writing the migration, and if a row ever does exist, migrate rather
    than drop.
+
+   *Overridden when CBO-42 was built:* the migration drops the version-1 table
+   unconditionally, with no row count read first. The check was for a state
+   nothing could have produced — version 1 shipped `CREATE TABLE genres (genre
+   TEXT PRIMARY KEY)`, `reset()` deleted from it, and no code path in any shipped
+   version ever inserted into it — so the guard would have been code that can
+   never run, and a `RecordError` would have refused to start on a real database
+   over a table its owner never wrote. The reasoning is recorded in `record.py`
+   where the migration is, next to the `DROP`.
 10. **The mapping is persisted at the one existing write point.** It travels on
     `Decision` beside the match and the resolutions, and the relay persists it
     after `copy_into_place` succeeds, so a book that never landed teaches nothing
@@ -548,7 +562,25 @@ for each (source, genre) the matched candidate carries, in order, deduped:
 
 Then every non-`None` target is matched against the allowed list
 case-insensitively, mapped onto the config's exact spelling, deduped, and added
-to `dc:subject` in source order if the book does not already carry it.
+to `dc:subject` in source order if the book does not already carry it — compared
+the same way, case and surrounding space aside, because `Crime` written beside a
+book's own `crime` is the pile of near-duplicate tags this ticket exists to
+prevent in miniature. The book's own spelling is what stays: the config's
+spelling is what is *added*, and this field has no rule that rewrites an element
+already there.
+
+**A failed call at step 4 drops the genre and nothing else, and the book lands.**
+`LlmError` and `LlmLimited` out of `map_genre` are caught there and never reach
+`_wait`: the genre is dropped, **no row is written for it** — it is absent rather
+than decided, so dropping the file in again asks the question again — and the
+book is delivered with whatever did resolve. The wait CBO-40's rule gives an
+unanswerable call belongs to a *match* the model was needed for; a tag on a book
+the rules already resolved is not worth holding that book for a day, and books
+are dropped in on demand. The chooser's own `LlmError`/`LlmLimited` handling is
+untouched and still waits, so the two paths must be pinned apart by test. The log
+line is where that shows: "the model said no" is an answer, it is recorded, and
+it reads differently from "could not be asked", which is not recorded and is the
+only one of the two worth re-dropping the file for.
 
 **An empty `allowed_genres` returns before step 1** (decision 12), and that is the
 one ordering in this list worth stating: with no list there is nothing to map
@@ -564,6 +596,7 @@ the mapping step, not inside step 3.
 | --- | --- |
 | `colophon/hardcover.py` | `cached_tags` in both queries; `_genres(book)` splitting on `:` and `;`; `Candidate(genres=...)` |
 | `colophon/googlebooks.py` | `categories` in `FIELDS`; the same split in `_candidate` |
+| `colophon/sources.py` | `genre_parts()`, the split both sources share. **The module already existed** — CBO-37 added it for `SourceError`, `text` and `image` — so this is a function in the place the two sources' common code already lives, not a new file |
 | `colophon/matching.py` | `Candidate.genres: tuple = ()` |
 | `colophon/llm.py` | `GENRE_SYSTEM_PROMPT`, `Llm.map_genre()`, the allowed-list membership check |
 | `colophon/config.py` | `allowed_genres`, `_to_genres()`, `Config.allowed_genres` |

@@ -80,6 +80,7 @@ from tests.test_googlebooks import Replay as GoogleReplay
 from tests.test_googlebooks import ReplayByQuery
 from tests.test_hardcover import Replay
 from tests.test_llm import Replay as LlmReplay
+from tests.test_llm import today
 
 # A book that already says everything the source says - every field the rules
 # write, in both series formats, with a cover of its own - so there is genuinely
@@ -3348,6 +3349,22 @@ class GenreMappingTests(CorrectionTestCase):
             **kwargs,
         )
 
+    def spent(self, *names):
+        """The same client with the UTC day's only call already spent."""
+        counter = self.folder / "llm-spent.json"
+        counter.write_text(
+            json.dumps({"date": today(), "calls": 1}), encoding="utf-8"
+        )
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key="llm-secret-key-4242",
+            daily_limit=1,
+            counter=counter,
+            transport=LlmReplay(*names),
+        )
+
     def source_saying(self, genres):
         """A source offering Cragside with these genres on its record."""
         return FakeSource(
@@ -3554,26 +3571,68 @@ class GenreMappingTests(CorrectionTestCase):
         self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
         self.assertFalse(outcome.waiting, "a book is not held for a model nobody set up")
 
-    def test_a_call_that_cannot_be_made_leaves_the_book_waiting(self):
-        """The same rule the chooser follows: an unanswerable call is not a no."""
-        unreachable = Llm(
-            provider="deepseek",
-            model="deepseek-flash",
-            base_url="https://api.deepseek.com",
-            key="llm-secret-key-4242",
-            counter=self.folder / "llm.json",
-            transport=lambda url, headers, request: (503, b"nope"),
-        )
+    def test_a_genre_call_that_could_not_be_made_does_not_hold_the_book(self):
+        """The wait belongs to a match the LLM was needed for, not to a tag.
+
+        The day's calls are spent, so the question cannot be put. The book was
+        resolved by its ISBN without the model, and it lands exactly as it would
+        have with no genres configured - corrected, minus the tags.
+        """
         corrector = self.corrector(
             source=self.source_saying((("Murder", "Murder"),)),
             genres=self.ALLOWED,
-            llm=unreachable,
+            llm=self.spent("genre-mapping-murder.json"),
         )
 
-        outcome = self.deliver(self.book(), corrector)
+        with self.assertLogs("colophon", level="WARNING") as caught:
+            outcome = self.deliver(self.book(), corrector)
+
+        self.assertFalse(outcome.waiting, "the book is not held for a tag")
+        self.assertTrue(outcome.applied, "and it is corrected and delivered")
+        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+        line = "\n".join(caught.output)
+        self.assertIn("Murder", line)
+        self.assertIn("could not be asked", line)
+        self.assertNotIn("does not fit", line, "not the model saying no")
+
+    def test_a_genre_that_could_not_be_asked_is_not_recorded_and_is_asked_again(self):
+        """Absent, not decided: nothing is cached, so the next run asks it again."""
+        record = self.record()
+        spent = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.spent("genre-mapping-murder.json"),
+            record=record,
+        )
+
+        self.deliver(self.book("First.epub"), spent, record=record)
+
+        self.assertEqual(record.genres(), (), "no row, positive or null")
+
+        later = self.corrector(
+            source=self.source_saying((("Murder", "Murder"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-murder.json"),
+            record=record,
+        )
+        self.deliver(self.book("Second.epub"), later, record=record)
+
+        self.assertEqual(len(later.llm._transport.sent), 1, "asked again")
+        self.assertEqual(read(self.folder / "Second.epub").subjects, ("Crime",))
+
+    def test_a_book_that_needed_the_chooser_and_could_not_ask_it_still_waits(self):
+        """The two paths are pinned apart: only the match's own wait survives."""
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        corrector = self.corrector(
+            source=FakeSource(found=None, candidates=[A_NEAR_MISS]),
+            genres=self.ALLOWED,
+            llm=self.spent("genre-mapping-murder.json"),
+        )
+
+        outcome = self.deliver(path, corrector)
 
         self.assertTrue(outcome.waiting)
-        self.assertIn("503", outcome.note)
+        self.assertIn("daily limit", outcome.note)
 
     # The packed forms ---------------------------------------------------------
 

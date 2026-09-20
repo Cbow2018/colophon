@@ -764,14 +764,10 @@ class Corrector:
             found = standards.applied_to(found)
         edits = self._edits(found, book, unverified=unverified)
         # The genres are mapped before anything is decided, because the answer is
-        # part of what the book is written with - and because a genre the model
-        # could not be asked about leaves the book waiting, which must happen
-        # before the backup rather than after it.
+        # part of what the book is written with.
         genres, mappings = (), ()
         if found is not None:
-            waiting, genres, mappings = self._map_genres(path, found, book)
-            if waiting is not None:
-                return waiting
+            genres, mappings = self._map_genres(found, book)
             edits = replace(edits, genres=genres)
         matched = {
             "isbn": isbn,
@@ -861,14 +857,15 @@ class Corrector:
             ),
         )
 
-    def _map_genres(self, path, found, book):
+    def _map_genres(self, found, book):
         """The allowed genres this book should be given, and how each was decided.
 
-        Returns `(waiting, genres, mappings)`, and `waiting` is not None only when
-        a genre could not be asked about: the model is unreachable, its key was
-        refused, or the day's calls are spent. That is the same rule the chooser
-        follows - the book is left for tomorrow rather than finished with a
-        question unasked - and it is why this is checked before the backup.
+        A genre whose question could not be put - the model is unreachable, its
+        key was refused, or the day's calls are spent - is dropped and the book
+        lands without it. Nothing is recorded about it either way: it is absent
+        rather than decided, so dropping the file in again asks it again. The wait
+        belongs to a match the LLM was needed for; a tag on a book the rules
+        already resolved is not worth holding that book for a day.
 
         With no allowed list there is no question to ask at all, so nothing is
         looked up: not the memo, not the record, and not the model. That early
@@ -879,7 +876,7 @@ class Corrector:
         is add-only, so a book that already says `Crime` is not rewritten for it.
         """
         if not self.allowed_genres:
-            return None, (), ()
+            return (), ()
         carried = {subject.strip().casefold() for subject in book.subjects}
         wanted = []
         mappings = []
@@ -887,11 +884,19 @@ class Corrector:
             try:
                 target = self._one_genre(found.source, genre)
             except (LlmError, LlmLimited) as error:
-                return self._wait(path, error), (), ()
+                LOG.warning(
+                    "%s's genre %r could not be asked about, so the book is "
+                    "delivered without it and nothing is recorded for it; dropping "
+                    "the book in again asks again: %s",
+                    found.source,
+                    genre,
+                    error,
+                )
+                continue
             mappings.append((found.source, genre, target or "", seen))
             if target and target.strip().casefold() not in carried:
                 wanted.append(target)
-        return None, tuple(wanted), tuple(mappings)
+        return tuple(wanted), tuple(mappings)
 
     def _one_genre(self, source, genre):
         """What this source genre maps to, or None, asking only when it must.
