@@ -637,7 +637,7 @@ CREATE TABLE names (
 );
 
 CREATE TABLE matches (
-    book_key   TEXT PRIMARY KEY, -- the ISBN, else normalised title + author
+    book_key   TEXT PRIMARY KEY, -- the ISBN, else the normalised title
     source     TEXT NOT NULL,    -- who matched it
     confidence REAL NOT NULL,    -- the match's own confidence
     matched_at TEXT NOT NULL,
@@ -881,3 +881,65 @@ CBO-42's genre mapping and the allowed-genres list itself; CBO-43's retry window
 and rejected-key hold; CBO-46's AI-guess mode; and the LLM name job (Q2). The
 `genres` table is created empty on purpose so CBO-42 has somewhere to put its
 list without changing this ticket's schema.
+
+## As built (2026-09-20)
+
+Built in the order below, one commit each. Every decision in this note is in the
+code; the four places the build departed from it are at the end, and each is a
+smaller change than the note asked for rather than a larger one.
+
+1. **`colophon/matching.py`** — `normalise` joins runs of initials. The rule it
+   settled on is narrower than "join runs of single letters", and the note's
+   "The normaliser change" section was rewritten from the built code: **a
+   one-letter word joins its neighbour only when the neighbour is a one-letter
+   word too and no non-one-letter word follows the pair**, a run chains, and a
+   full stop is taken out only between two letters. Without the look-ahead,
+   `I am` becomes `Iam`; without the digit guard, `1.0.0` becomes `10 0`.
+2. **`colophon/record.py`** — the schema, `user_version`, `resolve`, `save`,
+   `reset`, `names`, `standard`, `match`, `genres`, and `book_key`.
+3. **`colophon/config.py`** — `record_path` and `[authors]`, the latter keyed by
+   `normalise` and refused when two keys collide with different values.
+4. **`colophon/hardcover.py`** — both queries ask for `author { id name }` and
+   `series { id name }`, and `_author_rows` is the one place that decides what
+   counts as an author, so the names and the ids cannot describe different
+   people.
+5. **`colophon/correction.py`** — `Standards` and `Decision`; `_standards`
+   resolves the names and `applied_to` puts them on the candidate before
+   anything is decided from it, so the log line, the backup and the book all name
+   one spelling; `_decision` carries the match to the relay.
+6. **`colophon/relay.py`** — `_remember`, called after `copy_into_place` and
+   before the log line.
+7. **`colophon/__main__.py`** — `--reset-record` and `--yes`.
+
+Tests: 638 in the suite, 2 skipped. New files are `tests/test_record.py` (33)
+and the record classes in `tests/test_correction.py`, `tests/test_relay.py`,
+`tests/test_config.py`, `tests/test_main.py` and `tests/test_matching.py`.
+
+### Four places the build is narrower than the note
+
+- **`book_key` is the ISBN, else the normalised title — not "title and author".**
+  The note said both. The title alone is what the pass already has to hand and
+  what a file with no ISBN is looked up by, and two books sharing a title are
+  already separated by their matches rather than by this key. The stated
+  limitation stands: two editions of one book key separately because their
+  ISBNs differ.
+- **The `genres` table is never written**, as decided (Q7); the migration
+  scaffold is a `user_version` guard and a comment marking where a step goes,
+  rather than an empty list of steps. A first schema needs nothing to migrate
+  from, and the guard is the part that protects a user's record from an older
+  build.
+- **`_name` is unchanged.** It already collapsed both `LJ Ross` and
+  `J.R.R. Tolkien` to one token, which is why the ticket's problem was never
+  matching. `record.py`'s module docstring and `_name`'s own docstring both say
+  why the two normalisers are separate and which may over-merge.
+- **A per-save connection is not opened by the record.** `Record.open` is called
+  once by `main` (or by a test) and the connection is passed down as the note
+  says; `Relay` closes nothing, because it did not open it.
+
+### What the note said that the build proved wrong
+
+One number, already corrected in place: the blast radius was "6 of 394 strings"
+from a prototype whose word-splitting was itself broken. Re-measured against
+`HEAD`'s `matching.py`, **no title key in the fixture set moves at all**, and the
+only names that move are the three Ross spellings and the Tolkien pair — which
+is what the change is for.

@@ -3,7 +3,15 @@
 import os
 import unittest
 
-from colophon.record import AUTHOR, BY_NAME, SERIES, Match, Record, RecordError
+from colophon.record import (
+    AUTHOR,
+    BY_NAME,
+    SERIES,
+    Match,
+    Record,
+    RecordError,
+    book_key,
+)
 from tests.tempdir import TemporaryDirectory
 
 HARDCOVER = "hardcover"
@@ -163,6 +171,25 @@ class OverrideTests(RecordTestCase):
         self.assertEqual(self.spellings(("A",), overrides=overrides), ["b"])
 
 
+class BookKeyTests(unittest.TestCase):
+    """What a book is recognised by when it is looked up a second time."""
+
+    def test_an_isbn_is_the_key(self):
+        self.assertEqual(book_key("9781521748831", "Anything"), "9781521748831")
+
+    def test_the_title_is_the_key_when_there_is_no_isbn(self):
+        self.assertEqual(book_key(None, "Cragside"), "cragside")
+
+    def test_two_books_with_no_isbn_are_not_one_book(self):
+        """A blank key would make the second book recorded overwrite the first."""
+        self.assertNotEqual(book_key(None, "Cragside"), book_key(None, "Berwick"))
+
+    def test_the_key_ignores_how_the_title_is_spelt(self):
+        self.assertEqual(
+            book_key(None, "J.R.R. Tolkien"), book_key(None, "JRR Tolkien")
+        )
+
+
 class MatchTests(RecordTestCase):
     def test_a_book_already_recorded_takes_a_more_confident_match(self):
         self.record.save((), Match("9781521748831", GOOGLE, 0.9))
@@ -313,7 +340,9 @@ class FileNameTests(unittest.TestCase):
 
         The default lives in the backups folder, where a sibling file would be
         one more thing to keep `Backups.expire()` away from and one more thing to
-        explain. One connection and one writer needs nothing more than this.
+        explain. One connection and one writer needs nothing more than this, so
+        the folder is asserted to hold exactly the record, rather than asserted
+        not to hold a name that could not have appeared either way.
         """
         folder = TemporaryDirectory()
         self.addCleanup(folder.cleanup)
@@ -321,10 +350,9 @@ class FileNameTests(unittest.TestCase):
 
         record = Record.open(path)
         record.save(record.resolve(AUTHOR, (LJ,), HARDCOVER))
-        names = sorted(os.listdir(folder.name))
         record.close()
 
-        self.assertEqual(names, [".colophon.db"])
+        self.assertEqual(sorted(os.listdir(folder.name)), [".colophon.db"])
 
     def test_the_file_really_is_sqlite(self):
         folder = TemporaryDirectory()

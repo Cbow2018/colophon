@@ -27,7 +27,7 @@ from colophon.matching import (
     score_candidate,
     search_titles,
 )
-from colophon.record import AUTHOR, SERIES, Match
+from colophon.record import AUTHOR, SERIES, Match, book_key
 from colophon.sources import SourceError, fetcher_for
 
 LOG = logging.getLogger("colophon")
@@ -818,7 +818,7 @@ class Corrector:
             changed=_changes(written, edits, credited),
             applied=True,
             kept=str(kept),
-            decision=self._decision(standards, found, confidence),
+            decision=self._decision(standards, found, confidence, book),
         )
 
     def _standards(self, found):
@@ -852,7 +852,7 @@ class Corrector:
             resolved=authors + series,
         )
 
-    def _decision(self, standards, found, confidence):
+    def _decision(self, standards, found, confidence, book):
         """What to tell the record once this book has landed, or None.
 
         Nothing to standardise means nothing to record. The match travels beside
@@ -865,7 +865,10 @@ class Corrector:
         return Decision(
             resolutions=standards.resolved,
             match=Match(
-                book_key=found.isbn or "",
+                # The file's own title, not the record's: a book whose ISBN no
+                # source has is recognised by its title, and the title it is
+                # recognised by is the one the file carries.
+                book_key=book_key(found.isbn, book.title),
                 source=found.source,
                 confidence=confidence,
                 matched_as=str(found.isbn or ""),

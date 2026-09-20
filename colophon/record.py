@@ -375,6 +375,24 @@ class Record:
         self.connection.commit()
 
 
+def book_key(isbn, title):
+    """What a book is recognised by when it is looked up again.
+
+    The ISBN when there is one, and the normalised title when there is not. The
+    title is the weaker key and is used only because the alternative is worse:
+    keying every ISBN-less book on a blank would make them all one book, so the
+    second one recorded would overwrite the first's match.
+
+    Two editions of one book carry different ISBNs and key separately, which is
+    accepted for v1 — the consequence is that each can settle a spelling — and
+    a paperback and a hardback of one title under one spelling key together.
+    """
+    isbn = str(isbn or "").strip()
+    if isbn:
+        return isbn
+    return normalise(title)
+
+
 def _beats(match, held, priority):
     """Whether this match should replace the one the record already has.
 
