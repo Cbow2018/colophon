@@ -751,7 +751,15 @@ class GenreMappingTests(LlmTestCase):
 
         self.assertEqual(client.map_genre(self.ALLOWED, "crime"), "Crime")
 
-    def test_a_packed_form_is_asked_about_as_the_source_wrote_it(self):
+    def test_a_reply_recorded_for_the_unsplit_form_still_answers_a_genre(self):
+        """Probe evidence: the packed form is a question the client never asks.
+
+        `genre-mapping-packed.json` answers the unsplit `Fantasy:Humour`, and
+        decision 2 means the shipped client splits on `:` and `;` before asking -
+        so this is not a request it would build. What it shows is that the reply
+        is read as an ordinary answer, which is all the client does with any of
+        them.
+        """
         client = self.client("genre-mapping-packed.json")
 
         self.assertEqual(client.map_genre(self.ALLOWED, "Fantasy"), "Fantasy")

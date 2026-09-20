@@ -76,6 +76,14 @@ truncated replies: it carries **partial JSON with `finish_reason: length`**, whi
 is exactly why the parser must not read it. Do not "fix" it into a complete
 answer.
 
+**`genre-mapping-packed.json` is probe evidence too, in a smaller way: it was
+recorded with the unsplit `Fantasy:Humour` as the source genre, and the shipped
+client never asks that.** Decision 2 splits a source string on `:` and `;` before
+asking anything, so the request this reply answers is not one `Llm.map_genre`
+would build — its own `reasoning_content` names the question it really answered.
+It is still replayed, by a test named for what it shows (a recorded reply to the
+packed form is read as an ordinary answer) rather than for what it does not.
+
 `usage` **is** kept in these nine, unlike the four above. The completion and
 reasoning token counts are the whole reason the batch shape was rejected and
 CBO-42's note quotes them; `id`, `created` and `system_fingerprint` are still

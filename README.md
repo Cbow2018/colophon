@@ -51,7 +51,9 @@ through untouched.
   tag rather than five near-duplicates: `allowed_genres` in `config.toml` is the
   only vocabulary ever written, a genre that does not fit it is dropped, and the
   tags the book arrived with are never replaced. An empty list writes no genres
-  and costs no LLM calls
+  and costs no LLM calls. A genre the model could not be asked about is dropped
+  too — the book is delivered without it and nothing is recorded — so only a match
+  the LLM was actually needed for ever holds a book back
 - Never overwrites: an identical book already in output means the new copy goes
   to the backups folder; a *different* book of the same name is saved as
   `Name (2).epub`
@@ -61,8 +63,8 @@ through untouched.
   confidence, what changed and where each value came from
 - Runs as a non-root user, with a read-only root filesystem and no open ports
 
-Everything else - the LLM fallback, failure handling and retries, and formats
-other than EPUB/KEPUB - is still to come.
+Everything else - failure handling and retries, and formats other than
+EPUB/KEPUB - is still to come.
 
 ## Getting started
 
@@ -291,15 +293,21 @@ Put the key in a file, as the other secrets are, and mount it at the path
 every provider: switching provider means changing settings, not renaming the
 secret.
 
-A book the LLM could not be asked about - the endpoint is down, the key was
+A book the chooser could not be asked about - the endpoint is down, the key was
 refused, or the day's calls are spent - is **left in the ingest folder**,
 untouched and not delivered, and skipped until the next UTC day, when it is
-tried again. It is not marked: nothing answered, so nothing is final.
+tried again. It is not marked: nothing answered, so nothing is final. **Genre
+mapping is the one question that does not hold the book**: the genre is dropped,
+nothing is recorded for it, and the book is delivered with everything else - the
+wait belongs to a match the model was needed for, and a tag on a book the rules
+already resolved is not worth holding that book for a day. Dropping the file in
+again asks that genre again.
 `llm_daily_limit` is `200` calls a UTC day by default, counted whether or not the
-call succeeded, and `0` means no limit. The count lives in a hidden file in the
-backups folder, beside the originals - the one place Colophon is already
-guaranteed to be able to write, and a folder whose cleanup is proven never to
-touch it, so a container that restarts does not get a fresh day's calls.
+call succeeded, and `0` means no limit. Both questions count against it. The
+count lives in a hidden file in the backups folder, beside the originals - the
+one place Colophon is already guaranteed to be able to write, and a folder whose
+cleanup is proven never to touch it, so a container that restarts does not get a
+fresh day's calls.
 
 ## Settings
 
