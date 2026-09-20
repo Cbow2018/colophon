@@ -3421,24 +3421,39 @@ class GenreMappingTests(CorrectionTestCase):
             llm=self.llm("genre-mapping-murder.json"),
         )
 
-        self.deliver(self.book(), corrector)
+        outcome = self.deliver(self.book(), corrector)
 
         self.assertEqual(self.asked(corrector), ["Murder", "Crime", "Thriller", "Mystery"])
         self.assertEqual(read(self.folder / "Cragside.epub").subjects, ("Crime",))
+        self.assertEqual(
+            [
+                change.value
+                for change in outcome.changed
+                if change.field == "genres"
+            ],
+            ["Crime"],
+            "one entry per allowed genre, not one per source genre",
+        )
 
     def test_an_unmappable_genre_is_dropped(self):
         """A character heading is not a genre, and the model says so."""
-        corrector = self.corrector(
-            source=self.source_saying(
-                (("Finlay-Ryan, Maxwell (Fictitious character)",) * 2,)
+        for name, genre in (
+            (
+                "genre-mapping-unmappable.json",
+                "Finlay-Ryan, Maxwell (Fictitious character)",
             ),
-            genres=self.ALLOWED,
-            llm=self.llm("genre-mapping-unmappable.json"),
-        )
+            ("genre-mapping-synagogues.json", "Synagogues"),
+        ):
+            with self.subTest(name=name):
+                corrector = self.corrector(
+                    source=self.source_saying(((genre, genre),)),
+                    genres=self.ALLOWED,
+                    llm=self.llm(name),
+                )
 
-        self.deliver(self.book(), corrector)
+                self.deliver(self.book(), corrector)
 
-        self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
+                self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
 
     def test_a_genre_that_does_not_fit_leaves_the_book_with_none(self):
         corrector = self.corrector(
@@ -3822,6 +3837,34 @@ class GenreMappingTests(CorrectionTestCase):
 
         self.assertIsNotNone(outcome.decision)
         self.assertEqual(record.genres(), (), "nothing was persisted")
+
+    def test_a_book_that_needs_no_rewrite_still_teaches_the_record(self):
+        """The mapping is about the source's vocabulary, not about this file.
+
+        Nothing is planned for a book whose every field already matches and which
+        already carries the genre it maps to, so there is no rewrite to hang a
+        decision on - but the genre was asked about and answered, and the record
+        is what stops the next book paying for the same question.
+        """
+        record = self.record()
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            AS_DOWNLOADED + "    <dc:subject>Crime</dc:subject>",
+            version="2.0",
+        )
+        corrector = self.corrector(
+            source=self.source_saying((("Crime", "Crime"),)),
+            genres=self.ALLOWED,
+            llm=self.llm("genre-mapping-case.json"),
+            record=record,
+            fields={name: "skip" for name in KNOWN_FIELDS},
+        )
+
+        outcome = self.deliver(path, corrector, record=record)
+
+        self.assertEqual(outcome.changed, (), "nothing was written")
+        self.assertEqual(len(corrector.llm._transport.sent), 1, "the genre was asked")
+        self.assertEqual(record.mapping("hardcover", "Crime"), "Crime")
 
     # A dry run ----------------------------------------------------------------
 

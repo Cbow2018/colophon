@@ -821,7 +821,19 @@ class Corrector:
             planned = ()
             cover = None
         if not planned:
-            return Outcome(**matched)
+            # Nothing is written, but a genre mapping was still decided: it is a
+            # judgement about the source's vocabulary, not a value this pass put
+            # on the file, so the record can keep it without the book having been
+            # rewritten. Only the genres travel - no resolution and no match -
+            # because the book that reaches the library is the one it arrived as.
+            # A dry run carries none: an uncached genre was never asked about, so
+            # its empty mapping is "not asked" rather than "does not fit".
+            return Outcome(
+                **matched,
+                decision=(
+                    Decision(genres=mappings) if mappings and not self.dry_run else None
+                ),
+            )
         if self.dry_run:
             return Outcome(**matched, changed=_changes(planned, edits, credited))
 
@@ -874,6 +886,8 @@ class Corrector:
 
         A genre the book already carries is left out of what is written: the list
         is add-only, so a book that already says `Crime` is not rewritten for it.
+        Two source genres that map to one allowed genre are one entry, not two -
+        the mapping is still recorded for each of them.
         """
         if not self.allowed_genres:
             return (), ()
@@ -896,6 +910,7 @@ class Corrector:
             mappings.append((found.source, genre, target or "", seen))
             if target and target.strip().casefold() not in carried:
                 wanted.append(target)
+                carried.add(target.strip().casefold())
         return tuple(wanted), tuple(mappings)
 
     def _one_genre(self, source, genre):

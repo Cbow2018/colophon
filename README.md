@@ -47,6 +47,11 @@ through untouched.
   book by that author is given the same one. `[authors]` in `config.toml`
   overrides it, and it is never cleared on its own — `python -m colophon
   --reset-record` empties it, and asks before it does
+- Maps a book's source genres onto your own tag list, so a shelf label is one
+  tag rather than five near-duplicates: `allowed_genres` in `config.toml` is the
+  only vocabulary ever written, a genre that does not fit it is dropped, and the
+  tags the book arrived with are never replaced. An empty list writes no genres
+  and costs no LLM calls
 - Never overwrites: an identical book already in output means the new copy goes
   to the backups folder; a *different* book of the same name is saved as
   `Name (2).epub`
@@ -317,6 +322,7 @@ the same name in capitals, prefixed with `COLOPHON_`:
 | `llm_key_file` | `COLOPHON_LLM_KEY_FILE` | `/run/secrets/llm_key` |
 | `llm_daily_limit` | `COLOPHON_LLM_DAILY_LIMIT` | `200` |
 | `add_cover` | `COLOPHON_ADD_COVER` | `true` |
+| `allowed_genres` | `COLOPHON_ALLOWED_GENRES` | *(empty: no genres are written)* |
 | `record_path` | `COLOPHON_RECORD_PATH` | `/backups/.colophon.db` |
 | `confidence` | `COLOPHON_CONFIDENCE` | `0.85` |
 | `dry_run` | `COLOPHON_DRY_RUN` | `true` |
@@ -329,6 +335,13 @@ The `[fields]` table has no environment variable: it is nine keys, and nine
 environment variables would be a worse way to set them. `[authors]` is a table
 for the same reason: it says which spelling to write for a name the sources
 disagree about, and every way of writing that name reaches the same entry.
+
+`allowed_genres` is the one field outside those rules, because it is only ever
+added to: the source's genres are judged against your list and the ones that fit
+are written as you spell them, beside the tags the book already has rather than
+over them — which is what keeps the `colophon:unverified` mark. Removing a genre
+from the list stops it being written on the next book; it does not rewrite the
+books already on the shelf.
 
 The record is the one file Colophon writes that is not a book. It holds the
 author and series spellings your library has settled on, which is why

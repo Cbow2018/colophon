@@ -559,6 +559,27 @@ class GenreTests(unittest.TestCase):
             with self.subTest(written=written):
                 self.assertNotIn(written, ("dark", "fast-paced"))
 
+    def test_a_second_book_of_the_same_kind_adds_only_its_new_genre(self):
+        """*The Infirmary*'s `Suspense` is the fifth spelling of one shelf label.
+
+        `Thriller`, `Crime` and `Mystery` are *Cragside*'s too; `Suspense` is the
+        one genre this book brings that the other did not, which is the whole
+        complaint the ticket exists for.
+        """
+        book = self.source("by-isbn-9781799729945-genres.json").by_isbn(
+            self.THE_INFIRMARY_GENRES
+        )
+
+        self.assertEqual(
+            book.genres,
+            (
+                ("Thriller", "Thriller"),
+                ("Crime", "Crime"),
+                ("Suspense", "Suspense"),
+                ("Mystery", "Mystery"),
+            ),
+        )
+
     def test_a_packed_genre_is_two_genres_keeping_the_string_they_came_from(self):
         book = self.source("by-isbn-9781529196382-packed-genres.json").by_isbn(
             self.THE_TRIAL

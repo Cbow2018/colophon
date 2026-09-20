@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from colophon.backups import Backups
-from colophon.config import Config
+from colophon.config import KNOWN_FIELDS, Config
 from colophon.correction import Corrector
 from colophon.epub import UNVERIFIED_TAG, read
 from colophon.files import temp_name
@@ -975,7 +975,7 @@ class GenreMappingOnTheWayThroughTests(RelayTestCase):
             )
         )
 
-    def relay_over(self, allowed, dry_run=False, record=True):
+    def relay_over(self, allowed, dry_run=False, record=True, fields=None):
         self.config = Config(
             ingest_dir=self.ingest,
             output_dir=self.output,
@@ -994,6 +994,7 @@ class GenreMappingOnTheWayThroughTests(RelayTestCase):
                 fetch=no_network,
                 record=self.record if record else None,
                 genres=allowed,
+                fields=fields,
                 llm=Llm(
                     provider="deepseek",
                     model="deepseek-flash",
@@ -1021,6 +1022,28 @@ class GenreMappingOnTheWayThroughTests(RelayTestCase):
         self.settle(relay)
 
         self.assertEqual(self.record.mapping("hardcover", "Crime"), "Crime")
+        self.assertEqual(read(self.output / "Cragside.epub").subjects, ("Crime",))
+
+    def test_a_book_that_needs_no_rewrite_still_teaches_the_record(self):
+        """The relay keeps a mapping for a book it delivered but did not change.
+
+        Every field is skipped and the book already carries the genre it maps to,
+        so nothing is written - but the book still reaches the output folder, and
+        the genre question was asked and paid for.
+        """
+        write_epub(
+            self.ingest / "Cragside.epub",
+            AS_DOWNLOADED + "    <dc:subject>Crime</dc:subject>",
+            version="2.0",
+        )
+        relay = self.relay_over(
+            self.ALLOWED, fields={name: "skip" for name in KNOWN_FIELDS}
+        )
+
+        self.settle(relay)
+
+        self.assertEqual(self.record.mapping("hardcover", "Crime"), "Crime")
+        self.assertTrue((self.output / "Cragside.epub").is_file(), "and it arrived")
         self.assertEqual(read(self.output / "Cragside.epub").subjects, ("Crime",))
 
     def test_a_book_that_never_moved_teaches_no_mapping(self):
