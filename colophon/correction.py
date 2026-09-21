@@ -626,7 +626,7 @@ class Corrector:
         file_book = FileBook(book.title, book.authors, language, book.date)
         author = next((name for name in book.authors if str(name).strip()), None)
 
-        walk = self._gather(file_book, titles, language, author, title)
+        walk = self._gather(file_book, titles, language, author)
         # The band is not a property of the pool: the thresholds are the user's,
         # so it is asked of them rather than read off the `Ranked`.
         band = band_of(walk.ranked, self.bands)
@@ -673,14 +673,15 @@ class Corrector:
         # reaches the ISBN path, where the sources were asked and did not have it.
         return self._unverified(path, book, title, walk.asked, nearest)
 
-    def _gather(self, file_book, titles, language, author, title):
+    def _gather(self, file_book, titles, language, author):
         """Ask every source in turn, pool what they offer, and grade the pool.
 
         Returns the `Walk`: which sources answered, which could not be asked,
         whether the walk stopped on a strong pool, and the pool as it then
-        stood. Every error is logged here, once per source rather than once per
-        book, because a source that has stopped answering is a problem with the
-        run rather than a fact about one book.
+        stood. An error is recorded rather than raised, and is warned about by
+        `_failed` if the walk is one the book is held for: a walk that errored
+        and then exited early is not held, and a source that failed inside one
+        is not a problem with the run.
         """
         asked = []
         errored = []
@@ -695,7 +696,6 @@ class Corrector:
                 candidates = source.by_title(list(titles), language, author)
             except SourceError as error:
                 errored.append((source.name, str(error)))
-                self._blame(source.name, error, title)
                 continue
             asked.append(source.name)
             # The pool is built source by source in the order the user ranked
@@ -818,15 +818,13 @@ class Corrector:
         about one book, and a user watching `docker logs` should not have to read
         every book's line to notice it. Returns the phrase the book's own line
         carries, so the two say the same thing.
+
+        The logging is left to `_failed`, which is the one place that knows the
+        book is not being written: a walk that errored and then exited early is
+        not held, so a source that failed inside one is not a problem with the
+        run - the decision had already been made without it.
         """
-        blamed = _label(name)
-        LOG.warning(
-            "%s could not be asked about %s, so the book is held until tomorrow: %s",
-            blamed,
-            sought,
-            error,
-        )
-        return f"{blamed} could not be asked: {error}"
+        return f"{_label(name)} could not be asked: {error}"
 
     def _failed(self, path, failures, sought):
         """Hold a book whose walk could not be finished, and say which source.
@@ -838,13 +836,23 @@ class Corrector:
         answer the LLM's own failures get, for the same reason: the pass did not
         finish, so the book is not the library's yet.
 
-        What happens to it after that - the retry window, and the
+        Each source that could not be asked is warned about once here, at
+        WARNING rather than in the book's own line alone, because a source being
+        unreachable is a problem with the run rather than a fact about one book.
+        What happens to the book after that - the retry window, and the
         `colophon:source-unavailable` tag - is CBO-43's.
         """
-        return self._hold(
-            path,
-            "; ".join(self._blame(name, error, sought) for name, error in failures),
-        )
+        phrases = []
+        for name, error in failures:
+            phrases.append(self._blame(name, error, sought))
+            LOG.warning(
+                "%s could not be asked about %s, so the book is held until "
+                "tomorrow: %s",
+                _label(name),
+                sought,
+                error,
+            )
+        return self._hold(path, "; ".join(phrases))
 
     def _write(self, path, found, confidence=None, isbn=None, book=None, llm=None):
         """Back the original up, then write what the source is sure of.

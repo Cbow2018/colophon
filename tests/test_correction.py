@@ -3098,6 +3098,30 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(self.kept(), [])
 
+    def test_a_strong_pool_at_the_last_source_is_not_an_exit(self):
+        """A break with nothing left to skip is a completion, and it is held.
+
+        The source below the one that failed answers exactly, and there is no
+        source after it, so the walk stopped having reached every source the
+        user configured. A pool missing the source that errored is not a verdict
+        on the book, so it is held for tomorrow rather than written - even
+        though the pool it was graded against was strong.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+        second = self.a_second_source()
+        before = path.read_bytes()
+
+        outcome = self.corrector_over(first, second).correct(path)
+
+        self.assertTrue(second.asked_titles, "the pool was strong, and graded")
+        self.assertTrue(outcome.waiting)
+        self.assertFalse(outcome.matched)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.kept(), [])
+
     def test_the_outcome_says_which_source_could_not_be_asked(self):
         first = FakeSource(error=SourceError("Hardcover rejected the token (HTTP 401)"))
 
@@ -3127,6 +3151,54 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertIn("WARNING", captured.output[0])
         self.assertIn("Hardcover", captured.output[0])
         self.assertIn("rate limiting", captured.output[0])
+
+    def test_a_source_that_could_not_be_asked_is_warned_about_once(self):
+        """The book's own line carries the phrase too, and is not a second warning."""
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            outcome = self.corrector_over(first, self.a_second_source()).correct(path)
+
+        self.assertEqual(len(captured.output), 1, "one source down, one warning")
+        self.assertEqual(
+            outcome.note,
+            "Hardcover could not be asked: Hardcover answered HTTP 503",
+            "and the book's own line says the same thing",
+        )
+
+    def test_each_source_that_could_not_be_asked_is_warned_about(self):
+        """The pooling turns one warning into one per source, and both are wanted.
+
+        The walk no longer stops at the first source that is down, so a two-source
+        outage is two facts about the run rather than one. A user scanning the log
+        (or grepping it for a source) has to find the second one too, and the
+        single warning the walk used to leave would have named only the first.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+        second = FakeSource(
+            found=None,
+            title_error=SourceError("Google Books is rate limiting (HTTP 429)"),
+            name="google_books",
+        )
+
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            outcome = self.corrector_over(first, second).correct(path)
+
+        line = "\n".join(captured.output)
+        self.assertEqual(len(captured.output), 2, "one per source that was not asked")
+        self.assertIn("Hardcover", line)
+        self.assertIn("Google Books", line)
+        self.assertIn("HTTP 503", line)
+        self.assertIn("HTTP 429", line)
+        self.assertTrue(outcome.waiting)
+        self.assertIn("Hardcover could not be asked", outcome.fragment())
+        self.assertIn("Google Books could not be asked", outcome.fragment())
 
     def test_the_warning_names_the_book_that_could_not_be_looked_up(self):
         first = FakeSource(error=SourceError("Hardcover answered HTTP 503"))

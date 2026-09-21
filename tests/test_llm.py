@@ -1160,6 +1160,35 @@ class TheCandidateCapTests(unittest.TestCase):
 
         self.assertEqual(kept, [BELSAY_RECORD, *distractors[:4]])
 
+    def test_two_sources_are_ordered_by_rank_rather_than_source_by_source(self):
+        """The list is the pool's own ranking, not each source's reply in turn.
+
+        The prompt numbers its candidates by position, so the order *is* the
+        answer key the model reads back. Ordering by source would make the
+        numbering the priority order instead, and a pick of 1 would mean the
+        higher-priority source's best rather than the best record anyone offered
+        - a different question, answered by a different number.
+        """
+        file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
+        weak = Candidate(source="hardcover", title="Book 1", authors=("L. J. Ross",))
+        strong = Candidate(
+            source="google_books",
+            title="Belsay",
+            authors=("L. J. Ross",),
+            series="DCI Ryan Mysteries",
+            series_number="23",
+            language="en",
+        )
+
+        kept = top_candidates(rank(file_book, [weak, strong]))
+
+        self.assertEqual(
+            [candidate.source for candidate in kept],
+            ["google_books", "hardcover"],
+            "the better record is first even though its source answered second",
+        )
+        self.assertEqual(kept[0], strong)
+
     def test_every_candidate_is_kept_when_there_are_no_more_than_the_cap(self):
         file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
         candidates = [BELSAY_RECORD, BERWICK]
