@@ -879,6 +879,9 @@ errored, and whether the walk exited early — that belongs on the walk's result
 `correction.py`, not inside `Ranked`, because the matcher grades a pool and cannot
 know how the pool was gathered.
 
+**The rule above is written about the pooled title walk.** Whether it reaches the
+non-pooled ISBN path is open, and CBO-67 settles it — see §6 item 18.
+
 ### 4.3 The LLM's gate, and the two thresholds that must not be confused
 
 The LLM's own self-reported confidence is compared against the strong threshold, not
