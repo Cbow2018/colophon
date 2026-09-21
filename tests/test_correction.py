@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from colophon import epub as colophon_epub
+from colophon import matching as colophon_matching
 from colophon import sources as colophon_sources
 from colophon.backups import Backups
 from colophon.config import (
@@ -26,7 +27,7 @@ from colophon.epub import EpubError, read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.llm import Llm
-from colophon.matching import Candidate
+from colophon.matching import Bands, Candidate
 from colophon.record import AUTHOR, BY_NAME, Record
 from colophon.sources import SourceError
 from tests.coverimage import COVER as COVER_FIXTURE
@@ -148,6 +149,28 @@ A_NEAR_MISS = Candidate(
     series_number="11",
     language="en",
 )
+
+# The same near miss with §2's year in play as well: the file below carries a
+# date and so does the record, so the denominator is the full 2.15 and the score
+# is §2.1 row 4's own 0.9070 rather than the 0.90 a file with no date gets.
+A_NEAR_MISS_WITH_A_YEAR = Candidate(
+    source="hardcover",
+    title="Cragside: A DCI Ryan Mystery",
+    authors=("L.J. Ross",),
+    series_number="11",
+    date="2017-07-07",
+    language="en",
+)
+
+# The no-ISBN Cragside with its date on it, which is what puts the year into the
+# comparison: §4.1's singleton bar is about a pool of one, and 0.9070 is what a
+# near miss scores when the file states everything the record does but the
+# series position.
+CRAGSIDE_DATED = """    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:date>2017-07-07</dc:date>
+    <dc:language>en</dc:language>
+"""
 
 
 def same_book_with(blurb):
@@ -1328,6 +1351,42 @@ class FromConfigTests(unittest.TestCase):
         self.assertNotIn("cover", {change.field for change in outcome.changed})
         self.assertIsNone(cover_meta(book))
 
+    def test_the_bands_a_config_carries_are_the_bands_the_pass_applies(self):
+        """§4.5: the two thresholds are settings, so the pass is built with them.
+
+        `strong_score` already reached the walk; this is the same seam for the
+        two that did not, and it is the one that makes `singleton_score` a knob
+        rather than a number the code keeps to itself.
+        """
+        config = self.config(
+            sources=(), strong_score=0.7, singleton_score=0.9, medium_score=0.6
+        )
+
+        corrector = Corrector.from_config(config, Backups(self.folder / "backups"))
+
+        self.assertEqual(corrector.bands, Bands(strong=0.7, singleton=0.9, medium=0.6))
+
+    def test_the_full_scan_flag_a_config_carries_reaches_the_pass(self):
+        """§4.3: the flag is the only thing that decides how wide the model's
+        population is, so it has to survive the trip from the file."""
+        config = self.config(sources=(), llm_full_scan=False)
+
+        corrector = Corrector.from_config(config, Backups(self.folder / "backups"))
+
+        self.assertFalse(corrector.llm_full_scan)
+
+    def test_a_pass_with_no_thresholds_bands_on_the_designed_ones(self):
+        """§4.1 and §4.4: the numbers a caller that says nothing about them gets.
+
+        The defaults are written out here rather than imported, so the pass and
+        `config.py` cannot drift apart by both being read off one constant.
+        """
+        corrector = Corrector(backups=Backups(self.folder / "backups"))
+
+        self.assertEqual(
+            corrector.bands, Bands(strong=0.89, singleton=0.95, medium=0.80)
+        )
+
     def test_every_configured_source_has_a_label(self):
         """The corrector can only hold sources `config.py` allows, and every one
         of those has to be buildable and nameable.
@@ -1755,19 +1814,24 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         )
 
     def test_the_threshold_is_adjustable_and_below_it_a_near_miss_is_accepted(self):
-        """At 0.85 the 0.9070 candidate is good enough; at 0.95 it is not.
+        """At 0.85 the 0.90 candidate is good enough; at 0.95 it is not.
 
         The comparison grades a candidate rather than answering yes or no, so a
-        threshold is a setting with a range to sit in rather than a wall.
+        threshold is a setting with a range to sit in rather than a wall. The
+        candidate is a pool of one, so the bar that decides it is
+        `singleton_score`; both bars move together here, because a singleton bar
+        below the strong one is refused rather than merely unwise.
         """
         for threshold, expected in ((0.85, True), (0.95, False)):
             with self.subTest(strong_score=threshold):
                 path = self.book("Cragside.epub", CRAGSIDE)
                 source = FakeSource(found=None, candidates=[A_NEAR_MISS])
 
-                outcome = self.corrector(source=source, strong_score=threshold).correct(
-                    path
-                )
+                outcome = self.corrector(
+                    source=source,
+                    strong_score=threshold,
+                    singleton_score=threshold,
+                ).correct(path)
 
                 self.assertEqual(outcome.matched, expected)
                 self.assertEqual(outcome.unverified, not expected)
@@ -1817,9 +1881,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         perfect = self.book("Perfect.epub", CRAGSIDE)
         perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
-        outcome = self.corrector(source=perfect_source, strong_score=1.0).correct(
-            perfect
-        )
+        outcome = self.corrector(
+            source=perfect_source, strong_score=1.0, singleton_score=1.0
+        ).correct(perfect)
 
         self.assertTrue(outcome.matched, "an exact title and author is exactly 1.0")
         self.assertFalse(outcome.unverified)
@@ -1843,6 +1907,10 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 outcome = self.corrector(
                     source=FakeSource(found=None, candidates=[best_near_miss]),
                     strong_score=threshold,
+                    # Both bars at the threshold, because a singleton bar below
+                    # the strong one is refused and this candidate is a pool of
+                    # one.
+                    singleton_score=threshold,
                 ).correct(path)
 
                 self.assertEqual(
@@ -1917,7 +1985,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         path = self.book("Cragside.epub", CRAGSIDE)
         source = FakeSource(found=None, candidates=[A_NEAR_MISS])
 
-        outcome = self.corrector(source=source, strong_score=1.0).correct(path)
+        outcome = self.corrector(
+            source=source, strong_score=1.0, singleton_score=1.0
+        ).correct(path)
 
         self.assertFalse(outcome.matched, "0.9070 does not clear 1.0")
         self.assertTrue(outcome.unverified)
@@ -2746,10 +2816,217 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertIn("hardcover, google_books", outcome.fragment())
         self.assertNotIn("The Infirmary", outcome.fragment())
 
+    # --- the pooled walk ---------------------------------------------------
+
+    def test_two_sources_returning_the_same_edition_are_one_candidate_and_grade_strong(
+        self,
+    ):
+        """The ticket's headline case: one record, one grading, a strong grade.
+
+        Both sources have the edition the file is - the same ISBN, the same
+        title, the same author - so the pool holds it once, and the walk stops
+        at the source that answered rather than letting a second copy of the
+        same record in as a runner-up at a gap of 0.0. A pool of two identical
+        scores is a saturated metric and grades medium; a pool of one that
+        agrees on everything is strong, and this is the second.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        edition = {
+            "title": "Cragside",
+            "authors": ("L. J. Ross",),
+            "isbn": ISBN,
+            "language": "en",
+        }
+        first = FakeSource(
+            found=None, candidates=[Candidate(source="hardcover", **edition)]
+        )
+        second = FakeSource(
+            found=None,
+            candidates=[Candidate(source="google_books", **edition)],
+            name="google_books",
+        )
+
+        outcome = self.corrector_over(first, second).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.confidence, 1.0, "one record, agreeing on everything")
+        self.assertEqual(outcome.source, "hardcover", "the higher-priority source's")
+        self.assertEqual(
+            second.asked_titles, [], "and the walk stopped on a strong pool"
+        )
+        self.assertEqual(read(path).title, "Cragside")
+
+    def test_two_genuinely_different_editions_are_not_merged(self):
+        """Two records of one work are two candidates, and the gap says so.
+
+        The same title, the same author, nothing else for the file to tell them
+        apart with, and two different ISBNs: every field the comparison reads
+        agrees, so both score 1.0 and the gap between them is 0.0. §1.2's answer
+        to a saturated metric is the medium band, not a coin flip, so the book is
+        not written from whichever of the two the source happened to list first.
+        Being merged would have made it a singleton at 1.0 - strong, and written.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        source = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Cragside",
+                    authors=("L. J. Ross",),
+                    isbn=ISBN,
+                    language="en",
+                ),
+                Candidate(
+                    source="hardcover",
+                    title="Cragside",
+                    authors=("L. J. Ross",),
+                    isbn="9781999761009",
+                    language="en",
+                ),
+            ],
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched, "neither edition is written from")
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(outcome.confidence, 1.0, "and the tie is what stopped it")
+        self.assertEqual(len(source.asked_titles), 1, "one request, one pool")
+
+    def test_the_pool_is_what_picks_the_record_that_gets_written(self):
+        """Gathered, the pool prefers the better of two records of one edition.
+
+        Source one's record carries the edition's ISBN and the wrong series
+        position; source two's has no ISBN and the right one. The two are
+        different records to `dedupe`, which groups by ISBN first, so the pool
+        holds both and grades them together: the 1.0 leads the 0.9070 by 0.09,
+        which is over the band's gap, so it is source two's record the book is
+        written from - not the first one a source happened to offer.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE_DATED, version="2.0")
+        first = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Cragside: A DCI Ryan Mystery",
+                    authors=("L.J. Ross",),
+                    series="DCI Ryan Mysteries",
+                    series_number="11",
+                    date="2017-07-07",
+                    isbn=ISBN,
+                    language="en",
+                )
+            ],
+        )
+        second = self.a_second_source(
+            candidate=Candidate(
+                source="google_books",
+                title="Cragside: A DCI Ryan Mystery",
+                authors=("L. J. Ross",),
+                series="DCI Ryan Mysteries",
+                series_number="6",
+                date="2017-07-07",
+                language="en",
+            )
+        )
+
+        outcome = self.corrector_over(first, second).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.confidence, 1.0, "the edition the file is")
+        self.assertEqual(outcome.source, "google_books", "so that is whose values are")
+        self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
+
+    def test_a_pooled_singleton_in_the_medium_band_is_not_written(self):
+        """§4.1: a pool of one needs 0.95, and the shipped walk writes at 0.89.
+
+        The file's own title and author, exactly, with the record's series
+        position disagreeing and a year on both sides: §2.1 row 4's 0.9070. That
+        clears `strong_score`, and it is a pool of one, so nothing corroborates
+        it - a medium-band book is a question for the model or a mark, and not a
+        write, which is the whole point of the singleton bar.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE_DATED, version="2.0")
+
+        outcome = self.corrector(
+            source=FakeSource(found=None, candidates=[A_NEAR_MISS_WITH_A_YEAR])
+        ).correct(path)
+
+        self.assertEqual(outcome.confidence, 0.907)
+        self.assertFalse(outcome.matched, "a singleton under 0.95 is not written from")
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(
+            read(path).title,
+            "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
+            "marked means nothing of the record was written",
+        )
+
+    def test_the_singleton_bar_is_the_setting_that_writes_that_book(self):
+        """§4.5: the same book and the same pool, one threshold lower."""
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE_DATED, version="2.0")
+
+        outcome = self.corrector(
+            source=FakeSource(found=None, candidates=[A_NEAR_MISS_WITH_A_YEAR]),
+            singleton_score=0.90,
+        ).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.confidence, 0.907)
+        self.assertEqual(
+            read(path).title,
+            "Cragside: A DCI Ryan Mystery",
+            "written, so the record's own title is on the book",
+        )
+
+    def test_a_pool_that_grades_strong_stops_the_walk_before_the_next_source(self):
+        """§1.2: the sources below a decided book were never going to be asked."""
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
+        second = self.a_second_source()
+        before = path.read_bytes()
+
+        outcome = self.corrector_over(first, second).correct(path)
+
+        self.assertTrue(outcome.matched)
+        self.assertEqual(second.asked_titles, [], "the walk stopped on the strong pool")
+        self.assertNotEqual(path.read_bytes(), before, "and the book was written")
+
+    def test_a_source_s_reply_is_scored_once_rather_than_twice(self):
+        """§5: one ranking per reply, and everything downstream reads it.
+
+        The reply used to be measured twice - once to decide the match and once
+        again inside `top_candidates` to build the prompt - which on a reply of
+        three was six `SequenceMatcher` runs where three would do. The pool is
+        ranked once now, and the cap and the prompt both read that one ranking.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        source = FakeSource(
+            found=None,
+            candidates=[THE_INFIRMARY_CANDIDATE, ANOTHER_INFIRMARY, BERWICK_CANDIDATE],
+        )
+
+        with mock.patch.object(
+            colophon_matching,
+            "score_candidate",
+            wraps=colophon_matching.score_candidate,
+        ) as scored:
+            self.corrector(source=source).correct(path)
+
+        self.assertEqual(scored.call_count, 3, "one scoring pass over the reply")
+
     # --- a source that is down ---------------------------------------------
 
-    def test_a_source_that_is_down_stops_the_walk_for_that_book(self):
-        """No lower-priority source quietly stands in for one that is down."""
+    def test_a_walk_that_could_not_be_finished_holds_the_book(self):
+        """No lower-priority source quietly stands in for one that is down.
+
+        The ISBN path is not pooled - an ISBN identifies one edition, so the
+        first source to know it is as good as any other - and a source that
+        cannot answer still stops it. What changed is what happens to the book:
+        it is held for tomorrow rather than delivered, because a book whose
+        sources were not all asked is not a book the library has finished with.
+        """
         first = FakeSource(error=SourceError("Hardcover is rate limiting (HTTP 429)"))
         second = self.a_second_source()
         path = self.book()
@@ -2758,21 +3035,92 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         outcome = self.corrector_over(first, second).correct(path)
 
         self.assertFalse(outcome.matched)
-        self.assertEqual(second.asked, [], "the walk stopped at the failure")
+        self.assertTrue(outcome.waiting, "held, not delivered")
+        self.assertFalse(outcome.unverified, "and not marked: nothing was refused")
+        self.assertEqual(second.asked, [], "the ISBN path stopped at the failure")
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(self.kept(), [])
 
-    def test_a_title_lookup_that_is_down_stops_the_walk_too(self):
+    def test_a_title_lookup_that_is_down_does_not_stop_the_walk(self):
+        """The error is recorded, the next source is asked, and the book waits.
+
+        The sources are pooled, so a reply from below the one that is down is
+        still evidence about this book - and a book graded against a pool that
+        is missing a configured source is not a book the rules refused (§4.2).
+        The pool here grades medium, so it is the missing source and not the
+        band that holds the book.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+        second = self.a_second_source(candidate=A_NEAR_MISS)
+        before = path.read_bytes()
+
+        outcome = self.corrector_over(first, second).correct(path)
+
+        self.assertEqual(
+            second.asked_titles,
+            [["Cragside", "Cragside: A DCI Ryan Mystery"]],
+            "the source below one that is down is still asked",
+        )
+        self.assertTrue(outcome.waiting)
+        self.assertFalse(outcome.unverified, "held is not the same as marked")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.kept(), [])
+
+    def test_a_completed_walk_with_an_errored_source_does_not_write_whatever_the_band(
+        self,
+    ):
+        """§4.2's half-asked rule, at the band it would otherwise have written.
+
+        The second source has the book exactly, so the pool grades strong and
+        the walk would have written it - but the walk *completed*, and a source
+        the user configured was never asked, so the pool is not the pool the
+        user asked for. A walk that exited early is the other case, and is not
+        half-asked: there the later source was never going to be asked.
+        """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
         first = FakeSource(
             found=None, title_error=SourceError("Hardcover answered HTTP 503")
         )
         second = self.a_second_source()
+        before = path.read_bytes()
 
         outcome = self.corrector_over(first, second).correct(path)
 
+        self.assertTrue(
+            second.asked_titles, "the pool was strong, so it was graded against it"
+        )
+        self.assertFalse(outcome.matched, "and it is not written from")
+        self.assertTrue(outcome.waiting, "the book waits for the source to come back")
+        self.assertFalse(outcome.unverified)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.kept(), [])
+
+    def test_a_strong_pool_at_the_last_source_is_not_an_exit(self):
+        """A break with nothing left to skip is a completion, and it is held.
+
+        The source below the one that failed answers exactly, and there is no
+        source after it, so the walk stopped having reached every source the
+        user configured. A pool missing the source that errored is not a verdict
+        on the book, so it is held for tomorrow rather than written - even
+        though the pool it was graded against was strong.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+        second = self.a_second_source()
+        before = path.read_bytes()
+
+        outcome = self.corrector_over(first, second).correct(path)
+
+        self.assertTrue(second.asked_titles, "the pool was strong, and graded")
+        self.assertTrue(outcome.waiting)
         self.assertFalse(outcome.matched)
-        self.assertEqual(second.asked_titles, [])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.kept(), [])
 
     def test_the_outcome_says_which_source_could_not_be_asked(self):
         first = FakeSource(error=SourceError("Hardcover rejected the token (HTTP 401)"))
@@ -2781,6 +3129,7 @@ class TheSourcePriorityListTests(CorrectionTestCase):
             self.book()
         )
 
+        self.assertTrue(outcome.waiting)
         self.assertIn("Hardcover could not be asked", outcome.fragment())
         self.assertIn("rejected the token", outcome.fragment())
 
@@ -2802,6 +3151,54 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertIn("WARNING", captured.output[0])
         self.assertIn("Hardcover", captured.output[0])
         self.assertIn("rate limiting", captured.output[0])
+
+    def test_a_source_that_could_not_be_asked_is_warned_about_once(self):
+        """The book's own line carries the phrase too, and is not a second warning."""
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            outcome = self.corrector_over(first, self.a_second_source()).correct(path)
+
+        self.assertEqual(len(captured.output), 1, "one source down, one warning")
+        self.assertEqual(
+            outcome.note,
+            "Hardcover could not be asked: Hardcover answered HTTP 503",
+            "and the book's own line says the same thing",
+        )
+
+    def test_each_source_that_could_not_be_asked_is_warned_about(self):
+        """The pooling turns one warning into one per source, and both are wanted.
+
+        The walk no longer stops at the first source that is down, so a two-source
+        outage is two facts about the run rather than one. A user scanning the log
+        (or grepping it for a source) has to find the second one too, and the
+        single warning the walk used to leave would have named only the first.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+        second = FakeSource(
+            found=None,
+            title_error=SourceError("Google Books is rate limiting (HTTP 429)"),
+            name="google_books",
+        )
+
+        with self.assertLogs("colophon", level="WARNING") as captured:
+            outcome = self.corrector_over(first, second).correct(path)
+
+        line = "\n".join(captured.output)
+        self.assertEqual(len(captured.output), 2, "one per source that was not asked")
+        self.assertIn("Hardcover", line)
+        self.assertIn("Google Books", line)
+        self.assertIn("HTTP 503", line)
+        self.assertIn("HTTP 429", line)
+        self.assertTrue(outcome.waiting)
+        self.assertIn("Hardcover could not be asked", outcome.fragment())
+        self.assertIn("Google Books could not be asked", outcome.fragment())
 
     def test_the_warning_names_the_book_that_could_not_be_looked_up(self):
         first = FakeSource(error=SourceError("Hardcover answered HTTP 503"))
@@ -2864,15 +3261,23 @@ class ARealGoogleRecordingThroughTheCorrectorTests(CorrectionTestCase):
         )
 
     def test_the_blurb_the_date_and_the_cover_all_arrive_from_the_recording(self):
-        """Whichever of the two editions the comparison chose, the values are its.
+        """The edition the file says it is, and no other: the values are its.
 
         The recording holds two editions of Cragside - the Ulverscroft large
         print and the original - and they disagree about the blurb, the date and
-        the cover. Which one wins is the comparison's business; what this is
-        about is that whatever the file ends up saying, it is what that edition
-        said, and the others' values are nowhere in it.
+        the cover. The file carries the large print's ISBN, which is what an ISBN
+        is for: the two are told apart exactly, and what the book ends up saying
+        is what that edition said, with the other's values nowhere in it.
         """
-        path = self.book()
+        path = write_epub(
+            self.folder / "Cragside.epub",
+            """    <dc:title>Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">9781444846577</dc:identifier>
+    <dc:language>en</dc:language>
+""",
+            version="3.0",
+        )
         recorded = json.loads(
             (GOOGLE_RECORDED / "by-title-cragside-other-fields.json").read_text(
                 encoding="utf-8"
@@ -3000,15 +3405,20 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
         self.assertIn("Section 1. General Terms of Use", whole_book)
         self.assertIn("Project Gutenberg License", whole_book)
 
-    def test_a_real_book_is_corrected_from_a_recorded_google_books_reply(self):
+    def test_a_real_book_is_not_written_from_a_reply_full_of_editions(self):
         """No stand-in at all: the real client, a real recording, a real EPUB.
 
         The Gutenberg book carries no ISBN, so it goes down the title path, asks
-        Google the question `colophon/googlebooks.py` builds, and takes its title
-        and authors from the volume Google actually returned. This is the
-        recording in `fixtures/googlebooks/by-title-poe.json`, and nothing here
-        is hand-written - which is the point, because a hand-made candidate can
-        only ever agree with whatever the client was written to produce.
+        Google the question `colophon/googlebooks.py` builds, and is graded
+        against what Google actually returned - which is ten volumes of the same
+        story, five of them agreeing with the file on everything it states.
+        Every one of those five scores 1.0, so the gap is 0.0 and §1.2 calls
+        that saturated: the reply is read and scored, and the book is marked
+        rather than written from a printing picked by nothing but list order.
+        This is the recording in `fixtures/googlebooks/by-title-poe.json`, and
+        nothing here is hand-written - which is the point, because a hand-made
+        candidate can only ever agree with whatever the client was written to
+        produce.
         """
         path = self.a_real_book()
         replay = ReplayByQuery(**{TITLE_ASKED: "by-title-poe.json"})
@@ -3017,12 +3427,15 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
         outcome = self.corrector(source=source).correct(path)
 
         self.assertEqual(replay.asked, TITLE_ASKED)
-        self.assertTrue(outcome.matched, outcome.fragment())
-        self.assertEqual(outcome.source, "google_books")
+        self.assertFalse(
+            outcome.matched, "five editions at a gap of 0.0 is not a match"
+        )
+        self.assertTrue(outcome.unverified)
+        self.assertIn("no source among google_books", outcome.fragment())
+        self.assertIsNotNone(outcome.passed_over, "the reply was read and scored")
+        self.assertGreater(outcome.confidence, 0.9, "and what it scored was high")
+        # Nothing was written from it, so the book is the one that arrived.
         self.assertEqual(read(path).title, "The Masque of the Red Death")
-        self.assertEqual(read(path).authors, ("Edgar Allan Poe",))
-        # Google has no series for it, so there is still no series on the book.
-        self.assertEqual(calibre_series(path), (None, None))
 
     def test_the_original_is_kept_before_google_books_values_are_written(self):
         """A record spelling the author differently is a change, so it is backed up.
@@ -3076,14 +3489,25 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
         self.assertEqual(read(path).title, "Cragside")
 
     def test_the_real_google_books_answers_the_title_path(self):
+        """Google's own recording, replayed to the real client - and it is medium.
+
+        The reply holds two editions of *Cragside* - the Ulverscroft large print
+        and the original - which agree with the file on everything it states, so
+        both score 1.0 and the gap between them is 0.0. That is §1.2's saturated
+        metric: the reply was read and scored, which is what this test is about,
+        and a file that cannot tell two editions apart is not written from
+        whichever one Google happened to list first. The ISBN path, below, is
+        where an edition is recognised exactly.
+        """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
         source = GoogleBooks("a-key", transport=GoogleReplay("by-title-cragside.json"))
 
         outcome = self.corrector(source=source).correct(path)
 
-        self.assertTrue(outcome.matched, outcome.fragment())
-        self.assertEqual(outcome.source, "google_books")
-        self.assertEqual(read(path).title, "Cragside")
+        self.assertFalse(outcome.matched, "two editions at a gap of 0.0 is not a match")
+        self.assertTrue(outcome.unverified)
+        self.assertEqual(outcome.confidence, 1.0, "the reply was read and scored")
+        self.assertIn("google_books", outcome.fragment())
 
     def test_the_real_google_books_answers_the_isbn_path(self):
         """The recording carries the ISBN that was asked about, so it is a match."""

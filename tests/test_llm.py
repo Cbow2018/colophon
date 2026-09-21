@@ -16,10 +16,10 @@ from colophon.config import Config, load_config
 from colophon.correction import Corrector, forget_yesterdays_waits, top_candidates
 from colophon.epub import read
 from colophon.llm import PROVIDERS, Llm, LlmError, LlmLimited
-from colophon.matching import Candidate, FileBook
+from colophon.matching import Candidate, FileBook, rank
+from tests.samplebooks import CRAGSIDE, write_epub
 from tests.samplebooks import HOLY_ISLAND as HOLY_ISLAND_BOOK
-from tests.samplebooks import write_epub
-from tests.sources import FakeSource, no_network
+from tests.sources import CRAGSIDE_CANDIDATE, FakeSource, no_network
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "llm"
@@ -61,6 +61,26 @@ THE_INFIRMARY = Candidate(
     language="en",
 )
 FILE = {"title": "Belsay (The DCI Ryan Mysteries Book 23)", "filename": "Belsay.epub"}
+
+# The Cragside file's own title and author with the series position disagreeing:
+# §2.1 row 4 over the 2.00 denominator a file with no date gets, so 0.90 and a
+# pool of one - the medium band, which the chooser is asked about either way.
+A_NEAR_MISS = Candidate(
+    source="hardcover",
+    title="Cragside: A DCI Ryan Mystery",
+    authors=("L.J. Ross",),
+    series_number="11",
+    language="en",
+)
+
+# The same author and a different book of hers: the title agrees on nothing, so
+# the pool grades low - the band `llm_full_scan` exists to widen into.
+A_LOW_BAND = Candidate(
+    source="hardcover",
+    title="Berwick",
+    authors=("L.J. Ross",),
+    language="en",
+)
 
 
 class Replay:
@@ -1120,7 +1140,7 @@ class TheCandidateCapTests(unittest.TestCase):
         ]
         candidates = distractors + [BELSAY_RECORD]
 
-        kept = top_candidates(file_book, candidates)
+        kept = top_candidates(rank(file_book, candidates))
 
         self.assertEqual(len(kept), 5)
         self.assertEqual(kept[0], BELSAY_RECORD, "the best candidate goes first")
@@ -1136,15 +1156,47 @@ class TheCandidateCapTests(unittest.TestCase):
             for number in range(1, 6)
         ]
 
-        kept = top_candidates(file_book, distractors + [BELSAY_RECORD])
+        kept = top_candidates(rank(file_book, distractors + [BELSAY_RECORD]))
 
         self.assertEqual(kept, [BELSAY_RECORD, *distractors[:4]])
+
+    def test_two_sources_are_ordered_by_rank_rather_than_source_by_source(self):
+        """The list is the pool's own ranking, not each source's reply in turn.
+
+        The prompt numbers its candidates by position, so the order *is* the
+        answer key the model reads back. Ordering by source would make the
+        numbering the priority order instead, and a pick of 1 would mean the
+        higher-priority source's best rather than the best record anyone offered
+        - a different question, answered by a different number.
+        """
+        file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
+        weak = Candidate(source="hardcover", title="Book 1", authors=("L. J. Ross",))
+        strong = Candidate(
+            source="google_books",
+            title="Belsay",
+            authors=("L. J. Ross",),
+            series="DCI Ryan Mysteries",
+            series_number="23",
+            language="en",
+        )
+
+        kept = top_candidates(rank(file_book, [weak, strong]))
+
+        self.assertEqual(
+            [candidate.source for candidate in kept],
+            ["google_books", "hardcover"],
+            "the better record is first even though its source answered second",
+        )
+        self.assertEqual(kept[0], strong)
 
     def test_every_candidate_is_kept_when_there_are_no_more_than_the_cap(self):
         file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
         candidates = [BELSAY_RECORD, BERWICK]
 
-        self.assertEqual(top_candidates(file_book, candidates), candidates)
+        kept = top_candidates(rank(file_book, candidates))
+
+        self.assertEqual(len(kept), 2, "nothing under the cap is dropped")
+        self.assertCountEqual(kept, candidates)
 
 
 class TheWaitingDayTests(unittest.TestCase):
@@ -1321,6 +1373,124 @@ class ThePerSourceCapTests(unittest.TestCase):
 
         prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
         self.assertEqual(prompt.count("title="), 2)
+
+    def test_one_edition_from_two_sources_is_one_candidate_in_the_prompt(self):
+        """The pool is deduped before it is ranked, so one record is one line.
+
+        Both sources have the same edition of the same book, by the same ISBN,
+        so the pool holds it once. Two copies of one record would be two prompt
+        lines for one question - and, both scoring the same, a runner-up at a
+        gap of 0.0 for the band to read.
+        """
+        llm = self.llm("belsay-absent.json")
+        first = FakeSource(found=None, candidates=[BELSAY_RECORD])
+        second = FakeSource(found=None, candidates=[BELSAY_RECORD], name="google_books")
+
+        self.corrector(llm, first, second).correct(self.book())
+
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertEqual(prompt.count("title="), 1)
+
+
+class WhichBandReachesTheModelTests(unittest.TestCase):
+    """§4.3 and §5.2: the band decides whether the model is asked at all.
+
+    `medium` is the band the tiebreaker was designed for, and it always asks.
+    `low` and `none` are the books whose pool the rules could not use at all -
+    every source was asked and nothing agreed - and `llm_full_scan` is what
+    widens the population to them. `strong` never asks: the walk wrote and
+    stopped, and a book the rules are sure of is not a question.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.folder = Path(self._tmp.name)
+        self.backups = Backups(self.folder / "backups")
+        self.calls = 0
+        self.addCleanup(self._tmp.cleanup)
+
+    def book(self, name="Cragside.epub"):
+        return write_epub(self.folder / name, CRAGSIDE, version="2.0")
+
+    def llm(self, *names):
+        self.calls += 1
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key=KEY,
+            daily_limit=0,
+            counter=self.folder / f"llm-{self.calls}.json",
+            transport=Replay(*names),
+        )
+
+    def corrector(self, llm, candidate, **settings):
+        return Corrector(
+            sources=[FakeSource(found=None, candidates=[candidate])],
+            backups=self.backups,
+            llm=llm,
+            fetch=no_network,
+            **settings,
+        )
+
+    def test_a_strong_pool_is_not_a_question_and_spends_no_call(self):
+        llm = self.llm("belsay-absent.json")
+
+        outcome = self.corrector(llm, CRAGSIDE_CANDIDATE).correct(self.book())
+
+        self.assertTrue(outcome.matched, "the rules answered it exactly")
+        self.assertEqual(llm._transport.sent, [], "so there is nothing to ask")
+
+    def test_a_medium_book_is_asked_with_the_flag_off(self):
+        """§4.3: the flag widens the population, it does not decide the call."""
+        llm = self.llm("belsay-absent.json")
+
+        outcome = self.corrector(llm, A_NEAR_MISS, llm_full_scan=False).correct(
+            self.book()
+        )
+
+        self.assertEqual(
+            len(llm._transport.sent), 1, "medium is the chooser's own band"
+        )
+        self.assertFalse(outcome.matched, "and a null pick is not applied")
+
+    def test_a_low_band_book_is_asked_while_the_flag_is_on(self):
+        llm = self.llm("belsay-absent.json")
+
+        outcome = self.corrector(llm, A_LOW_BAND, llm_full_scan=True).correct(
+            self.book()
+        )
+
+        self.assertEqual(len(llm._transport.sent), 1, "the widened population")
+        self.assertTrue(outcome.unverified)
+
+    def test_a_low_band_book_is_not_asked_when_the_flag_is_off(self):
+        llm = self.llm("belsay-absent.json")
+
+        outcome = self.corrector(llm, A_LOW_BAND, llm_full_scan=False).correct(
+            self.book()
+        )
+
+        self.assertEqual(llm._transport.sent, [], "narrowed to the medium band")
+        self.assertTrue(outcome.unverified)
+        self.assertFalse(outcome.waiting, "marked, not held: nothing went unanswered")
+
+    def test_the_medium_threshold_is_what_draws_that_band(self):
+        """§4.5: `medium_score` is a setting, so the band follows it.
+
+        The same low-band pool with the medium bar under its score: the book is
+        a medium-band book now, and medium is what the chooser is for - which is
+        the whole job of the setting, and it does it with the widened population
+        turned off.
+        """
+        llm = self.llm("belsay-absent.json")
+
+        outcome = self.corrector(
+            llm, A_LOW_BAND, llm_full_scan=False, medium_score=0.4
+        ).correct(self.book())
+
+        self.assertEqual(len(llm._transport.sent), 1, "medium reaches the model")
+        self.assertTrue(outcome.unverified, "and a null pick is not applied")
 
 
 def _reply_with(content, confidence=None, finish="stop"):

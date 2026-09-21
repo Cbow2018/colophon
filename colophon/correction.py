@@ -11,11 +11,17 @@ always be undone.
 """
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from colophon import epub
-from colophon.config import DEFAULT_STRONG_SCORE, FIELD_DEFAULTS, KNOWN_FIELDS
+from colophon.config import (
+    DEFAULT_MEDIUM_SCORE,
+    DEFAULT_SINGLETON_SCORE,
+    DEFAULT_STRONG_SCORE,
+    FIELD_DEFAULTS,
+    KNOWN_FIELDS,
+)
 from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -28,7 +34,11 @@ from colophon.llm import (
     utc_today,
 )
 from colophon.matching import (
+    Bands,
     FileBook,
+    Ranked,
+    band_of,
+    dedupe,
     primary_language,
     rank,
     search_titles,
@@ -177,10 +187,11 @@ class Outcome:
     # Whether a correction was actually written. A dry run reports every change
     # and applies none, so the two cannot be told apart from `changed`.
     dry_run: bool = False
-    # Whether the book is waiting for the next UTC day, because the LLM could
-    # not be asked - it is down, its key was refused, or the day's calls are
-    # spent. The file is left exactly as it was, in the ingest folder, and the
-    # relay must not deliver it.
+    # Whether the book is waiting for the next UTC day, because the pass did not
+    # finish with it: the LLM could not be asked - it is down, its key was
+    # refused, or the day's calls are spent - or a source the user configured
+    # could not be asked at all. The file is left exactly as it was, in the
+    # ingest folder, and the relay must not deliver it.
     waiting: bool = False
     # Why it is waiting, for its own log line.
     note: str | None = None
@@ -323,19 +334,52 @@ class Outcome:
         return f"no source{self._among()} carries ISBN {self.isbn}"
 
 
+@dataclass(frozen=True)
+class Walk:
+    """What one book's title walk gathered, and how it stopped.
+
+    `asked` is the sources that answered, in the order the user ranked them,
+    which is also the sources whose candidates are in the pool. `errored` is
+    `(source, reason)` for each source that could not be asked: a walk that
+    errored is not a walk that finished, and a book graded against a pool
+    missing a source the user configured is not a book the rules refused.
+    `exited` says the walk stopped on purpose, because the pool as it then stood
+    graded strong - a source that was never reached by a decision is not a
+    source that failed.
+
+    Half-asked is the two of those together, `errored and not exited`, which is
+    §4.2's rule as one expression rather than a third state.
+
+    `ranked` is the pool as it finally stood: deduped in priority order and
+    measured once, so the band, the leader and the gap all come from one
+    grading. An unanswered walk is an empty pool, which grades `none`.
+    """
+
+    asked: tuple = ()
+    errored: tuple = ()
+    exited: bool = False
+    ranked: Ranked = field(default_factory=Ranked)
+
+
 class Corrector:
     """Corrects the books the relay hands it, one file at a time.
 
-    `sources` is the priority list, in the order the user set: the first source
-    that matches a book is the one it takes its values from, and both the ISBN
+    `sources` is the priority list, in the order the user set: both the ISBN
     path and the title path walk the same list. An empty list - no source
     configured, or none of them usable - means every book passes through with
     the metadata it came with.
 
-    A source that cannot answer stops the walk for that book rather than being
-    passed over: the list is a trust order, so a lower-priority source must
-    never quietly stand in for a higher-priority one that is down. What happens
-    to the book after that belongs to the retry window (CBO-43).
+    The title path pools the sources rather than racing them: every configured
+    source is asked, every reply joins one pool, and the pool is deduped and
+    graded as it then stands. `dedupe` keeps the first record of a group, so the
+    pool is built source by source in the order the user ranked them and the
+    record that survives a group is the one from the highest-priority source
+    that offered it. A source that cannot answer does not end the walk either:
+    it is recorded, the next source is asked, and a walk that finished with a
+    source missing leaves the book held for tomorrow rather than written or
+    marked - a pool missing a source the user configured is not a verdict on
+    the book. What happens to a held book after that belongs to the retry window
+    (CBO-43).
 
     `dry_run` decides whether a correction is actually written: in a dry run
     every answer is the same, except that nothing on disk moves, including the
@@ -351,6 +395,9 @@ class Corrector:
         add_cover=True,
         fetch=None,
         strong_score=DEFAULT_STRONG_SCORE,
+        singleton_score=DEFAULT_SINGLETON_SCORE,
+        medium_score=DEFAULT_MEDIUM_SCORE,
+        llm_full_scan=True,
         llm=None,
         record=None,
         overrides=None,
@@ -365,14 +412,25 @@ class Corrector:
         self.fields = dict(fields or FIELD_DEFAULTS)
         self.add_cover = add_cover
         # How sure a title-and-author match has to be before it counts as one:
-        # `strong_score`, the multi-candidate bar, and the only thing that
-        # decides whether a candidate is a match or a near miss. The bands and
-        # the second threshold a singleton is held to are CBO-59's; this walk
-        # still reads one number, so nothing about how it stops has changed. The
-        # LLM's own pick is held to the same number, which is a change to what
-        # the ticket implies: see docs/research/cbo-40-llm-fallback-chooser.md,
+        # `strong_score`, the multi-candidate bar. The bands the walk acts on are
+        # built from this and the two thresholds below, and the LLM's own pick is
+        # held to `strong_score` rather than to the singleton bar - a model
+        # picking one of two near-identical candidates has answered the question
+        # the gap could not: see docs/research/cbo-40-llm-fallback-chooser.md,
         # Q4.
         self.strong_score = strong_score
+        # The three thresholds as one value, which is what `band_of` takes: the
+        # matcher reads no config, so the policy has to arrive as an argument.
+        self.bands = Bands(
+            strong=strong_score, singleton=singleton_score, medium=medium_score
+        )
+        # Whether a book the rules could not decide goes to the LLM from any
+        # non-strong band, or only from the medium one. It widens which uncertain
+        # books reach the model; it does not disable early exit, and it does not
+        # make a book the rules already graded strong spend a call. On by
+        # default, because that is the reach the walk had before the bands
+        # existed: `off` is the narrowing, and a user asks for it.
+        self.llm_full_scan = llm_full_scan
         # The fallback chooser, or None when the user has not set one up. No LLM
         # means uncertain books take the unverified path rather than waiting.
         self.llm = llm
@@ -391,9 +449,10 @@ class Corrector:
         # is the durable cache; this is what makes a run that never lands still
         # ask each genre once, rather than once per book carrying it.
         self._genre_memo = {}
-        # Books the LLM could not be asked about, and why, for the UTC day they
-        # were left for: a cache, not a decision, so it is in memory and a
-        # restart costs one extra round of source queries.
+        # Books the pass did not finish with, and why, for the UTC day they were
+        # left for - the LLM that could not be asked and the source that could
+        # not be. A cache, not a decision, so it is in memory and a restart costs
+        # one extra round of source queries.
         self._waiting = {}
         # How a cover is fetched, injected so no test reaches the network.
         self.fetch = fetch or fetcher_for()
@@ -437,6 +496,9 @@ class Corrector:
             fields=config.fields,
             add_cover=config.add_cover,
             strong_score=config.strong_score,
+            singleton_score=config.singleton_score,
+            medium_score=config.medium_score,
+            llm_full_scan=config.llm_full_scan,
             llm=llm,
             record=record,
             overrides=dict(config.authors),
@@ -507,7 +569,9 @@ class Corrector:
             try:
                 found = source.by_isbn(book.isbn)
             except SourceError as error:
-                return self._failed(source, error, f"ISBN {book.isbn}")
+                return self._failed(
+                    path, [(source.name, str(error))], f"ISBN {book.isbn}"
+                )
             if found is not None:
                 return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
 
@@ -524,20 +588,29 @@ class Corrector:
         """The title path, for a file that carries no ISBN.
 
         The title is cleaned first, because the file's title has the subtitle
-        and the series on it and a source keeps neither. Each source is asked in
-        turn, and the first to offer a candidate that agrees on the title and
-        the author and clears the threshold is the match - a near miss from a
-        trusted source does not stop a lower-priority one from being asked, and a
-        source that cannot answer stops the walk rather than being passed over.
+        and the series on it and a source keeps neither. Every configured source
+        is asked in turn and every reply joins one pool, which is deduped and
+        graded as it then stands: what the first source offered does not decide
+        the book on its own, and a source that cannot answer is recorded rather
+        than fatal.
 
-        When no candidate clears the threshold there is one more thing to try:
-        the LLM chooser, which sees the candidates the sources did offer and
-        either picks one or says none of them is the book. It is consulted only
-        here, so a book the rules already matched never spends a call, and only
-        when there is something to put to it. A candidate the rules could not
-        use is still offered to the model: they read the title and the author,
-        and the reason a book needs an LLM is usually that those two are not
-        enough.
+        A pool that grades strong ends the walk there, because the sources below
+        it were never going to be asked for this book; a pool that does not is
+        measured again when the next source's reply joins it. When the sources
+        run out with no such decision there is one more thing to try: the LLM
+        chooser, which sees the candidates the sources did offer and either picks
+        one or says none of them is the book. It is consulted only here, so a
+        book the rules already matched never spends a call, and only when there
+        is something to put to it. A candidate the rules could not use is still
+        offered to the model: they read the title and the author, and the reason
+        a book needs an LLM is usually that those two are not enough.
+
+        One rule outranks the band. A walk that *completed* while a configured
+        source was erroring is half-asked: it was graded against a pool that is
+        missing a source the user put in the trust order, so the book is held
+        for tomorrow rather than written or marked (§4.2). A walk that *exited*
+        early is not half-asked whatever a source below it might have done - the
+        source was never going to be asked.
         """
         titles = search_titles(book.title)
         if not titles:
@@ -553,73 +626,100 @@ class Corrector:
         file_book = FileBook(book.title, book.authors, language, book.date)
         author = next((name for name in book.authors if str(name).strip()), None)
 
-        nearest = None
-        offered = []
-        tried = []
-        for source in self.sources:
-            tried.append(source.name)
+        walk = self._gather(file_book, titles, language, author)
+        # The band is not a property of the pool: the thresholds are the user's,
+        # so it is asked of them rather than read off the `Ranked`.
+        band = band_of(walk.ranked, self.bands)
+
+        if walk.errored and not walk.exited:
+            return self._failed(path, walk.errored, title)
+
+        if band == "strong":
+            # Both the number and `agrees` are behind this: `band_of` refuses a
+            # leader the author gate rejected at every threshold, so a candidate
+            # that is not an explanation of this book is never written from on
+            # the rules' say-so.
+            match = walk.ranked.leader
+            return self._write(path, match.candidate, match.score, book=book)
+
+        # The best candidate that does agree on both halves, which is what a
+        # book no source could match still names: a reply that agrees on neither
+        # is not an explanation of this book and is not named as one, though it
+        # is still offered to the model.
+        nearest = next((match for match in walk.ranked.matches if match.agrees), None)
+        # What the model may be shown. `medium` is the band that was always
+        # meant to ask; `llm_full_scan` widens that to low and none, which are
+        # the books every source was asked about and nothing usable came back
+        # for (§4.3). A strong pool never reaches here.
+        offered = top_candidates(walk.ranked)
+        if offered and (band == "medium" or self.llm_full_scan):
+            chosen, answered = self._ask_llm(path, book, offered)
+            if chosen is not None:
+                return chosen
+            if answered is not None:
+                return replace(
+                    self._unverified(path, book, title, walk.asked, nearest),
+                    llm_pick=answered.pick,
+                    llm_confidence=answered.confidence,
+                    llm_reason=answered.short_reason,
+                )
+
+        # The model was not asked, or answered and was not sure enough, so the
+        # book keeps the metadata it came with - and is marked, which is what
+        # tells a person browsing their library that nobody could vouch for it.
+        # The mark is written here rather than left to the relay, because the
+        # correction is the pass that knows what was asked: a book whose walk
+        # could not finish is held instead, and a book with no title at all
+        # reaches the ISBN path, where the sources were asked and did not have it.
+        return self._unverified(path, book, title, walk.asked, nearest)
+
+    def _gather(self, file_book, titles, language, author):
+        """Ask every source in turn, pool what they offer, and grade the pool.
+
+        Returns the `Walk`: which sources answered, which could not be asked,
+        whether the walk stopped on a strong pool, and the pool as it then
+        stood. An error is recorded rather than raised, and is warned about by
+        `_failed` if the walk is one the book is held for: a walk that errored
+        and then exited early is not held, and a source that failed inside one
+        is not a problem with the run.
+        """
+        asked = []
+        errored = []
+        pool = ()
+        ranked = Ranked()
+        exited = False
+        for index, source in enumerate(self.sources):
             try:
                 # Every form in one request: a source filters its own way, and
                 # the caller's language and author are the filters that keep the
                 # reply to this book.
                 candidates = source.by_title(list(titles), language, author)
             except SourceError as error:
-                return self._failed(source, error, title)
+                errored.append((source.name, str(error)))
+                continue
+            asked.append(source.name)
+            # The pool is built source by source in the order the user ranked
+            # them, which is what makes `dedupe`'s first-wins the trust order:
+            # the record that survives a group is the one the highest-priority
+            # source that offered it sent. Filling in a kept record's missing
+            # fields from the others is CBO-61's, not this.
+            pool = dedupe([*pool, *candidates])
+            ranked = rank(file_book, pool)
+            if band_of(ranked, self.bands) == "strong":
+                # A source the decision never reached is not a source that
+                # failed, which is the whole exemption - and it only means
+                # anything when there was one left to reach. A strong pool at the
+                # last configured source completed the walk, and that pool is
+                # still missing whatever errored.
+                exited = index < len(self.sources) - 1
+                break
 
-            # One pass: the pool is measured once, and what was measured is what
-            # gets written or named. The single best match is the leader, which
-            # is what a caller that means to write a book acts on; the ordering
-            # and the gap are what CBO-59's banding reads.
-            ranked = rank(file_book, candidates)
-            match = ranked.leader
-            # Both the number and `agrees`, because the threshold is a setting:
-            # at 0.89 the ceiling under a candidate that agrees on neither half
-            # already refuses it, and at a lower one the number alone would not.
-            # A candidate that is not an explanation of this book is never
-            # written from on the rules' say-so at any setting; it goes to the
-            # model below with every other one the rules could not use.
-            if match is not None and match.agrees and match.score >= self.strong_score:
-                return self._write(path, match.candidate, match.score, book=book)
-            # No match yet, so this source's best few are what the model may be
-            # shown. The cap is per source, so a second source's best record is
-            # never crowded out by the first source's long tail - which is the
-            # whole reason there is a cap.
-            offered.extend(top_candidates(file_book, candidates))
-            # A near miss - one that agrees on both title and author but not
-            # confidently enough - is remembered rather than written, so a book
-            # no source can match still names the closest thing to it. A reply
-            # that agrees on neither is not an explanation of this book at all,
-            # and is not named as one; it is still offered to the model.
-            if (
-                match is not None
-                and match.agrees
-                and (nearest is None or match.score > nearest.score)
-            ):
-                nearest = match
-
-        if offered:
-            # Nothing cleared the threshold, so the model is the last thing to
-            # ask - and anything but a confident pick from it leaves the book
-            # where the rules left it, marked unverified.
-            chosen, answered = self._ask_llm(path, book, offered)
-            if chosen is not None:
-                return chosen
-            if answered is not None:
-                return replace(
-                    self._unverified(path, book, title, tried, nearest),
-                    llm_pick=answered.pick,
-                    llm_confidence=answered.confidence,
-                    llm_reason=answered.short_reason,
-                )
-
-        # Nothing cleared the threshold, so the book keeps the metadata it came
-        # with - and is marked, which is what tells a person browsing their
-        # library that nobody could vouch for it. The mark is written here rather
-        # than left to the relay, because the correction is the pass that knows
-        # what was asked: a book whose source could not be asked never reaches
-        # this line, and a book with no title at all reaches it by the ISBN path
-        # instead, where the sources were asked and did not have it.
-        return self._unverified(path, book, title, tried, nearest)
+        return Walk(
+            asked=tuple(asked),
+            errored=tuple(errored),
+            exited=exited,
+            ranked=ranked,
+        )
 
     def _ask_llm(self, path, book, candidates):
         """Put the candidates to the LLM, and say what it answered.
@@ -659,6 +759,20 @@ class Corrector:
     def _wait(self, path, error):
         """Leave the book where it is until the next UTC day, and say why.
 
+        Every failure of the LLM's ends here, and the shape of the failure is the
+        only thing that differs: an outage is worth waiting out, a rejected key
+        is CBO-43's to act on, and a 4xx that is not a 401 repeats every day -
+        which is why the LLM logs that last class as a probable misconfiguration
+        rather than as an outage.
+        """
+        LOG.warning(
+            "%s is left in the ingest folder until tomorrow: %s", path.name, error
+        )
+        return self._hold(path, str(error))
+
+    def _hold(self, path, note):
+        """Leave a book the pass did not finish with for the next UTC day.
+
         The file is not written to at all - not even marked - because rewriting
         it in place would change its hash and so its duplicate detection, and the
         whole thing is redone tomorrow. The waiting list is what stops the next
@@ -666,18 +780,9 @@ class Corrector:
         relay can be told why again without the message being written twice, and
         the day the book was left for, which is what lets the list clear itself
         when tomorrow arrives.
-
-        Every failure ends here, and the shape of the failure is the only thing
-        that differs: an outage is worth waiting out, a rejected key is CBO-43's
-        to act on, and a 4xx that is not a 401 repeats every day - which is why
-        the LLM logs that last class as a probable misconfiguration rather than
-        as an outage.
         """
-        self._waiting[path] = (utc_today(), str(error))
-        LOG.warning(
-            "%s is left in the ingest folder until tomorrow: %s", path.name, error
-        )
-        return Outcome(waiting=True, note=str(error))
+        self._waiting[path] = (utc_today(), note)
+        return Outcome(waiting=True, note=note)
 
     def _unverified(self, path, book, title, tried, nearest=None):
         """Mark a book nothing matched confidently, and say what was looked for.
@@ -705,29 +810,49 @@ class Corrector:
             tried=tuple(tried),
         )
 
-    def _failed(self, source, error, sought):
-        """A source that could not answer stops the walk, and is said out loud.
+    def _blame(self, name, error, sought):
+        """Say out loud that a source could not be asked about this book.
 
-        The walk does not carry on to a lower-priority source: the list is a
-        trust order, so a book is never quietly corrected from a source the user
-        ranked below one that is down. The book passes through untouched.
+        Logged at WARNING and not only in the book's own log line, because a
+        source being unreachable is a problem with the run rather than a fact
+        about one book, and a user watching `docker logs` should not have to read
+        every book's line to notice it. Returns the phrase the book's own line
+        carries, so the two say the same thing.
 
-        This is logged at WARNING and not only in the book's own log line,
-        because a source being unreachable is a problem with the run rather than
-        a fact about one book, and a user watching `docker logs` should not have
-        to read every book's line to notice it. What happens to the book next -
-        the retry window, and the `colophon:source-unavailable` tag - is CBO-43's.
+        The logging is left to `_failed`, which is the one place that knows the
+        book is not being written: a walk that errored and then exited early is
+        not held, so a source that failed inside one is not a problem with the
+        run - the decision had already been made without it.
         """
-        blamed = _label(source.name)
-        LOG.warning(
-            "%s could not be asked about %s, so the book is left alone: %s",
-            blamed,
-            sought,
-            error,
-        )
-        return Outcome(
-            problem=f"{blamed} could not be asked: {error}", dry_run=self.dry_run
-        )
+        return f"{_label(name)} could not be asked: {error}"
+
+    def _failed(self, path, failures, sought):
+        """Hold a book whose walk could not be finished, and say which source.
+
+        A book graded against a pool that is missing a source the user
+        configured is not a book the rules refused, so nothing about it is
+        decided here - not written, not marked, and not put to the model from
+        what is left. It is held for the next UTC day instead, which is the same
+        answer the LLM's own failures get, for the same reason: the pass did not
+        finish, so the book is not the library's yet.
+
+        Each source that could not be asked is warned about once here, at
+        WARNING rather than in the book's own line alone, because a source being
+        unreachable is a problem with the run rather than a fact about one book.
+        What happens to the book after that - the retry window, and the
+        `colophon:source-unavailable` tag - is CBO-43's.
+        """
+        phrases = []
+        for name, error in failures:
+            phrases.append(self._blame(name, error, sought))
+            LOG.warning(
+                "%s could not be asked about %s, so the book is held until "
+                "tomorrow: %s",
+                _label(name),
+                sought,
+                error,
+            )
+        return self._hold(path, "; ".join(phrases))
 
     def _write(self, path, found, confidence=None, isbn=None, book=None, llm=None):
         """Back the original up, then write what the source is sure of.

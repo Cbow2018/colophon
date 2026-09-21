@@ -879,6 +879,9 @@ errored, and whether the walk exited early — that belongs on the walk's result
 `correction.py`, not inside `Ranked`, because the matcher grades a pool and cannot
 know how the pool was gathered.
 
+**The rule above is written about the pooled title walk.** Whether it reaches the
+non-pooled ISBN path is open, and CBO-67 settles it — see §6 item 18.
+
 ### 4.3 The LLM's gate, and the two thresholds that must not be confused
 
 The LLM's own self-reported confidence is compared against the strong threshold, not
@@ -896,6 +899,15 @@ medium-band one. Defining the flag as "ask whenever the pool is non-empty, whate
 the band" would instead pay for calls on books the rules already graded strong, against
 a 200/day limit. With the flag off, the walk still asks for medium-band books; the flag
 widens the *population*, not the decision.
+
+**The flag ships `true`, and the default is part of the design rather than a convenience.**
+The walk this replaces asked the model for *any* non-empty pool the rules did not write
+from, which is every non-strong band — so `true` is the reach Colophon already had, and
+shipping `false` would have silently narrowed the model's population to the medium band
+while reading as the conservative default. **`off` is the deliberate narrowing, and a
+user asks for it**; it is not what a fresh install gets. The flag still only widens the
+population: it never changes the decision, it does not disable early exit, and a book the
+rules already graded strong never spends a call either way.
 
 **And the two numbers must be named as different quantities in the log.** The
 rule-based number and the model's self-reported number are on different scales —
@@ -972,7 +984,7 @@ costs a config-comment rewrite and will never cost so little again.
 | Strong threshold | `config.toml` | `strong_score`, default `0.89` (replaces `confidence`, whose old default was 0.85) |
 | Singleton threshold | `config.toml` | `singleton_score`, default `0.95` |
 | Medium threshold | `config.toml` | `medium_score`, default `0.80`, **provisional** (§4.4) |
-| Full-scan flag | `config.toml` | `llm_full_scan`, default `false` |
+| Full-scan flag | `config.toml` | `llm_full_scan`, default `true` — see §4.3 |
 | Author agreement floor | internal constant | `0.5` — a property of the metric, not a preference |
 | Runner-up gap | internal constant | `0.08` |
 | Field weights | internal constants | — |
@@ -984,6 +996,21 @@ and in the config comment: an existing `confidence = 0.9` in someone's `config.t
 will stop being read. Accept the break rather than aliasing it, because the old value
 does not mean the same thing on the new scale and silently reinterpreting it is worse
 than refusing it — and pre-1.0 is the only time this is free.
+
+**`singleton_score` and `medium_score` reach the decision without the matcher reading
+config.** §5.2 requires `band_of` to read only its arguments, so the two keys cannot be
+fetched from where the decision is made: they travel as a frozen `Bands` value object
+(`strong`, `singleton`, `medium`, and the internal `gap`) built by the caller and passed
+in, `band_of(ranked, bands=BANDS)`. The module constants are then only what a caller
+with no config means, and the thresholds that decide a real library's bands are the
+user's. This is *more* pure than reading four module globals, not less: the function's
+answer is a function of its arguments alone, and the hidden dependency is gone.
+
+**`singleton_score` below `strong_score` is refused at startup.** Each threshold is a
+setting on its own, so only the pair can catch the inversion — and an inverted pair makes
+a pool of one, which nothing corroborates, *easier* to write from than a corroborated
+one, which is §1.2 backwards. `load_config` raises a `ConfigError` naming both numbers
+rather than letting the pair through, the way the defaults would hide it.
 
 **Why the gap, the singleton bar, the author floor and the weights stay internal**:
 they are not preferences, they are the metric's calibration. A user who lowers the
@@ -1020,7 +1047,7 @@ well as scoring), so this section audits what is inside rather than proposing a 
 | `Candidate` | The shared record shape. `hardcover.py`, `googlebooks.py`, `llm.py` and `correction.py` all import it from here, which is what stops two sources' records drifting apart. |
 | `FileBook` | What the matcher knows about the file. **Gains `date` only** — already read by `epub.read()` (`epub.py:190`) and currently dropped. Publisher is not added, because publisher is not scored (§2). |
 | `Match` | One candidate measured: the candidate, its `score`, per-field penalties and similarities, whether the author agreed, and the reasons. **`confidence` is renamed to `score`** (§4.5). |
-| `Ranked` (new) | The ordered pool plus its band: `(match, runner_up, gap, band)`. What a caller needs to act and to log, so a caller never recomputes the ordering or the gap. |
+| `Ranked` (new) | The ordered pool: `matches`, with `leader`, `runner_up` and `gap` derived from it. What a caller needs to act and to log, so a caller never recomputes the ordering or the gap. |
 | `CleanedTitle` | Unchanged. The cleaning result, carrying the series position. |
 
 | Function | Status |
@@ -1029,7 +1056,7 @@ well as scoring), so this section audits what is inside rather than proposing a 
 | `primary_language()` | Unchanged, and **not** the language guarantee (§3.5). |
 | `score_candidate()` | Rewritten as the accumulator with the author gate. Same name, same "one candidate against the file" job. |
 | `rank()` (new) | Replaces `nearest_candidate()`. Returns the whole ordered pool — the gap needs the second entry, and the LLM needs the ranked list. |
-| `band_of()` (new) | The grading, as a pure function of the ranked pool. See §5.2. |
+| `band_of()` (new) | The grading, as a pure function of the ranked pool **and the bands it is asked about**: `band_of(ranked, bands=BANDS)`. See §5.2. |
 | `dedupe()` (new) | Merges candidates describing one record (§6, item 4). |
 | `normalise()` | **Frozen** — the record's durable key (§3.7), pinned by a golden test below. |
 | `comparison_text()` (new) | The §3.1 pipeline, for comparison only. |
@@ -1038,6 +1065,13 @@ Explicitly **private**: the similarity calibration, the penalty functions per fi
 the article and parenthetical handling, `_name`, `_join_initials`, `_words`,
 `_series_adjustment`. The tests reach them through `score_candidate` and `band_of`,
 which is what keeps the tests honest about the public behaviour.
+
+**`Ranked` does not carry the band, and it used to.** `band` was a property on `Ranked`,
+and it was deleted rather than moved: it called `band_of(self)` with no thresholds, so it
+answered from the module defaults for any caller whose config had moved — a wrong answer
+with nothing in the call site to show it. The band is `band_of(ranked, bands)`, computed
+by the caller from the thresholds it actually holds (§4.5), and `Ranked` carries only
+`matches`. The deletion is deliberate, not an omission.
 
 **`top_candidates()` moves here from `correction.py`** (line 1160). It is "the best few
 candidates by score", it is pure, and it sits in the pipeline module only because it
@@ -1135,7 +1169,7 @@ resolved is in the body above.
 | `strong_score = 0.89` and `medium_score = 0.80`, **both provisional**. | §4.1, §4.4 |
 | The singleton bar stays at 0.95 and row 4 (series contradicts, 0.9070) goes to the medium band, so CBO-36's 0.90 verdict now means "sent to the tiebreaker", not "written". | §6 item 4 |
 | A completed walk that graded strong with a source erroring is half-asked and does not write. | §4.2 |
-| `llm_full_scan` means "ask whenever the band is not strong and the pool is non-empty". | §4.3 |
+| `llm_full_scan` means "ask whenever the band is not strong and the pool is non-empty", and it ships `true` — `false` is the narrowing. | §4.3 |
 | `dedupe()` and `band_of()` are pure and live in the matcher; only the walk is impure. | §5.2 |
 | `normalise()` is frozen as the record's key and pinned by a golden test. | §3.7, §5.1 |
 | The `confidence` config key is renamed `strong_score`; `confidence` is the LLM's own figure. | §4.5 |
@@ -1309,6 +1343,20 @@ resolved is in the body above.
     field is not a second opinion there, and a future change that weakens the author
     gate would not be caught by the title. Worth a fixture whose lookalike differs in
     its *subtitle* rather than its head.
+18. **The ISBN path stops at a failed source while the title path pools, and that
+    asymmetry is not settled.** §4.2's half-asked rule is written about the pooled title
+    walk, and this note does not say whether it reaches the ISBN path, which is not
+    pooled: an ISBN identifies one edition, so the first source that knows it is as good
+    as any other and there is no pool to build. **CBO-59 took the narrow reading** — a
+    source that fails on the ISBN path still ends the walk for that book, which is held
+    for tomorrow by the same rule, and the sources below it are not asked. That reading
+    is defensible and it fixes the same outage bug on both paths, but it means one
+    question has two answers and the difference is visible in behaviour rather than only
+    in the code: a book with an ISBN stops at the first failing source, a book without
+    one carries on. **This is left open deliberately. CBO-67 settles it** — whether the
+    ISBN path pools, falls through, or keeps its stop — and until it does, the asymmetry
+    is a settled *implementation* rather than a settled rule, and should not be read as
+    one.
 
 ### Smaller, and settleable while building
 
