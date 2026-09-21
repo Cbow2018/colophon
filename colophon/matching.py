@@ -232,15 +232,17 @@ class Match:
 
 @dataclass(frozen=True)
 class Ranked:
-    """One file's pool, ordered, with the band it grades and what led to it.
+    """One file's pool, ordered, with what led to it.
 
     `matches` is every candidate that survived the language filter, best first
     with ties left in the order the source offered them. Everything else is
     derived from that ordering, so nothing can disagree with it: `leader` is the
-    best match, `runner_up` the second, `gap` how far apart they are, and `band`
-    is `band_of`'s answer. `runner_up` and `gap` are None for a pool of one,
-    which is the common case and the reason a singleton is graded against a
-    higher bar.
+    best match, `runner_up` the second and `gap` how far apart they are.
+    `runner_up` and `gap` are None for a pool of one, which is the common case
+    and the reason a singleton is graded against a higher bar. The band is not
+    one of these: it is `band_of(ranked, bands)`, because the thresholds are the
+    caller's and a pool that answered with the module's defaults would be
+    answering a question the caller did not ask.
     """
 
     matches: tuple = ()
@@ -261,10 +263,6 @@ class Ranked:
         if self.runner_up is None:
             return None
         return round(self.leader.score - self.runner_up.score, 4)
-
-    @property
-    def band(self):
-        return band_of(self)
 
 
 def clean_title(title):
@@ -500,28 +498,66 @@ def dedupe(candidates):
     return tuple(kept)
 
 
-def band_of(ranked):
+@dataclass(frozen=True)
+class Bands:
+    """The thresholds the bands are drawn from, as one value.
+
+    A caller's policy, passed in rather than read from here: `band_of` reads
+    only its arguments, and the four module constants are only what a caller
+    with nothing to say gets. `gap` is internal calibration (§4.5) and never
+    comes from config, so it is a field with a default rather than a fourth
+    setting.
+
+    A `singleton` below `strong` is refused rather than accepted, because it
+    would make a one-witness pool easier to write from than a corroborated one
+    and so invert §1.2.
+    """
+
+    strong: float = STRONG_SCORE
+    singleton: float = SINGLETON_STRONG
+    medium: float = MEDIUM_SCORE
+    gap: float = BAND_GAP
+
+    def __post_init__(self):
+        if self.singleton < self.strong:
+            raise ValueError(
+                f"singleton_score {self.singleton} is below strong_score "
+                f"{self.strong}, which would make a pool of one easier to write "
+                "than a pool of two"
+            )
+
+
+# What a caller that has no config means.
+BANDS = Bands()
+
+
+def band_of(ranked, bands=BANDS):
     """Which band a ranked pool falls in, and nothing else.
 
     One candidate has no runner-up to corroborate its leader, so it has to
-    clear `SINGLETON_STRONG` rather than `STRONG_SCORE`. Two or more need the
-    lower score *and* `BAND_GAP` of separation: a high score with a small gap
+    clear `bands.singleton` rather than `bands.strong`. Two or more need the
+    lower score *and* `bands.gap` of separation: a high score with a small gap
     says the metric is saturated rather than that the leader is right.
 
     `strong` needs the author to agree, so a candidate the gate refused - which
     is capped at `NO_AGREEMENT_CEILING` - can reach neither strong threshold.
+
+    The thresholds arrive as an argument rather than being read from the module,
+    which is what lets a user's own `singleton_score` and `medium_score` reach
+    the decision (§4.5) without this function - or anything else here - reading
+    config. `BANDS` is what a caller that has no config means.
     """
     leader = ranked.leader
     if leader is None:
         return "none"
     strong = (
-        leader.score >= SINGLETON_STRONG
+        leader.score >= bands.singleton
         if ranked.runner_up is None
-        else leader.score >= STRONG_SCORE and (ranked.gap or 0.0) >= BAND_GAP
+        else leader.score >= bands.strong and (ranked.gap or 0.0) >= bands.gap
     )
     if strong and leader.author_agrees:
         return "strong"
-    if leader.author_agrees and leader.score >= MEDIUM_SCORE:
+    if leader.author_agrees and leader.score >= bands.medium:
         return "medium"
     return "low" if leader.score > 0.0 else "none"
 

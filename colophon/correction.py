@@ -15,7 +15,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from colophon import epub
-from colophon.config import DEFAULT_STRONG_SCORE, FIELD_DEFAULTS, KNOWN_FIELDS
+from colophon.config import (
+    DEFAULT_MEDIUM_SCORE,
+    DEFAULT_SINGLETON_SCORE,
+    DEFAULT_STRONG_SCORE,
+    FIELD_DEFAULTS,
+    KNOWN_FIELDS,
+)
 from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -28,6 +34,7 @@ from colophon.llm import (
     utc_today,
 )
 from colophon.matching import (
+    Bands,
     FileBook,
     primary_language,
     rank,
@@ -351,6 +358,8 @@ class Corrector:
         add_cover=True,
         fetch=None,
         strong_score=DEFAULT_STRONG_SCORE,
+        singleton_score=DEFAULT_SINGLETON_SCORE,
+        medium_score=DEFAULT_MEDIUM_SCORE,
         llm=None,
         record=None,
         overrides=None,
@@ -365,14 +374,18 @@ class Corrector:
         self.fields = dict(fields or FIELD_DEFAULTS)
         self.add_cover = add_cover
         # How sure a title-and-author match has to be before it counts as one:
-        # `strong_score`, the multi-candidate bar, and the only thing that
-        # decides whether a candidate is a match or a near miss. The bands and
-        # the second threshold a singleton is held to are CBO-59's; this walk
-        # still reads one number, so nothing about how it stops has changed. The
-        # LLM's own pick is held to the same number, which is a change to what
-        # the ticket implies: see docs/research/cbo-40-llm-fallback-chooser.md,
+        # `strong_score`, the multi-candidate bar. The bands the walk acts on are
+        # built from this and the two thresholds below, and the LLM's own pick is
+        # held to `strong_score` rather than to the singleton bar - a model
+        # picking one of two near-identical candidates has answered the question
+        # the gap could not: see docs/research/cbo-40-llm-fallback-chooser.md,
         # Q4.
         self.strong_score = strong_score
+        # The three thresholds as one value, which is what `band_of` takes: the
+        # matcher reads no config, so the policy has to arrive as an argument.
+        self.bands = Bands(
+            strong=strong_score, singleton=singleton_score, medium=medium_score
+        )
         # The fallback chooser, or None when the user has not set one up. No LLM
         # means uncertain books take the unverified path rather than waiting.
         self.llm = llm
@@ -437,6 +450,8 @@ class Corrector:
             fields=config.fields,
             add_cover=config.add_cover,
             strong_score=config.strong_score,
+            singleton_score=config.singleton_score,
+            medium_score=config.medium_score,
             llm=llm,
             record=record,
             overrides=dict(config.authors),

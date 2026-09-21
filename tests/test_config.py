@@ -245,6 +245,28 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(from_file.medium_score, 0.75)
         self.assertEqual(from_env.strong_score, 0.7, "the environment wins")
 
+    def test_a_singleton_bar_below_the_strong_one_is_refused(self):
+        """§1.2: a pool of one must never be easier to write than a corroborated one.
+
+        Each threshold is a setting on its own, so the pair is the only place
+        the inversion can be caught - and it is caught at startup rather than at
+        the first book, because a config that quietly makes a one-witness pool
+        the easiest thing in the library to write is a config that has inverted
+        the rule the singleton bar exists for.
+        """
+        for env in (
+            {"COLOPHON_SINGLETON_SCORE": "0.85"},
+            {"COLOPHON_STRONG_SCORE": "0.9", "COLOPHON_SINGLETON_SCORE": "0.85"},
+        ):
+            with self.subTest(env=env), self.assertRaises(ConfigError):
+                load_config(env=env)
+
+        equal = load_config(
+            env={"COLOPHON_STRONG_SCORE": "0.9", "COLOPHON_SINGLETON_SCORE": "0.9"}
+        )
+
+        self.assertEqual(equal.singleton_score, 0.9, "level with it is not below it")
+
     def test_a_threshold_of_one_is_allowed_because_a_perfect_match_is_reachable(self):
         """The range is `(0, 1]`, and the top of it is a setting rather than a wall.
 
@@ -252,13 +274,24 @@ class LoadConfigTests(unittest.TestCase):
         refuses everything else without being a value nothing can reach. The
         boundary is tested from both sides: 1.0 is accepted, and just above it is
         refused because no candidate could ever clear it.
+
+        Both bars are set to 1.0, because a singleton bar below the strong one is
+        refused: at strong 1.0 the shipped 0.95 would make a pool of one the
+        easiest thing in the library to write from.
         """
-        config = load_config(env={"COLOPHON_STRONG_SCORE": "1.0"})
+        config = load_config(
+            env={"COLOPHON_STRONG_SCORE": "1.0", "COLOPHON_SINGLETON_SCORE": "1.0"}
+        )
 
         self.assertEqual(config.strong_score, 1.0)
         for refused in ("1.0000001", "1.5"):
             with self.subTest(given=refused), self.assertRaises(ConfigError):
-                load_config(env={"COLOPHON_STRONG_SCORE": refused})
+                load_config(
+                    env={
+                        "COLOPHON_STRONG_SCORE": refused,
+                        "COLOPHON_SINGLETON_SCORE": "1.0",
+                    }
+                )
 
     def test_every_field_has_a_rule_and_the_defaults_are_the_ones_documented(self):
         """The design spec's own list, which is what a fresh install gets."""

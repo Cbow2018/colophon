@@ -26,7 +26,7 @@ from colophon.epub import EpubError, read
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
 from colophon.llm import Llm
-from colophon.matching import Candidate
+from colophon.matching import Bands, Candidate
 from colophon.record import AUTHOR, BY_NAME, Record
 from colophon.sources import SourceError
 from tests.coverimage import COVER as COVER_FIXTURE
@@ -1328,6 +1328,33 @@ class FromConfigTests(unittest.TestCase):
         self.assertNotIn("cover", {change.field for change in outcome.changed})
         self.assertIsNone(cover_meta(book))
 
+    def test_the_bands_a_config_carries_are_the_bands_the_pass_applies(self):
+        """§4.5: the two thresholds are settings, so the pass is built with them.
+
+        `strong_score` already reached the walk; this is the same seam for the
+        two that did not, and it is the one that makes `singleton_score` a knob
+        rather than a number the code keeps to itself.
+        """
+        config = self.config(
+            sources=(), strong_score=0.7, singleton_score=0.9, medium_score=0.6
+        )
+
+        corrector = Corrector.from_config(config, Backups(self.folder / "backups"))
+
+        self.assertEqual(corrector.bands, Bands(strong=0.7, singleton=0.9, medium=0.6))
+
+    def test_a_pass_with_no_thresholds_bands_on_the_designed_ones(self):
+        """§4.1 and §4.4: the numbers a caller that says nothing about them gets.
+
+        The defaults are written out here rather than imported, so the pass and
+        `config.py` cannot drift apart by both being read off one constant.
+        """
+        corrector = Corrector(backups=Backups(self.folder / "backups"))
+
+        self.assertEqual(
+            corrector.bands, Bands(strong=0.89, singleton=0.95, medium=0.80)
+        )
+
     def test_every_configured_source_has_a_label(self):
         """The corrector can only hold sources `config.py` allows, and every one
         of those has to be buildable and nameable.
@@ -1817,9 +1844,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         perfect = self.book("Perfect.epub", CRAGSIDE)
         perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
-        outcome = self.corrector(source=perfect_source, strong_score=1.0).correct(
-            perfect
-        )
+        outcome = self.corrector(
+            source=perfect_source, strong_score=1.0, singleton_score=1.0
+        ).correct(perfect)
 
         self.assertTrue(outcome.matched, "an exact title and author is exactly 1.0")
         self.assertFalse(outcome.unverified)
@@ -1843,6 +1870,10 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 outcome = self.corrector(
                     source=FakeSource(found=None, candidates=[best_near_miss]),
                     strong_score=threshold,
+                    # Both bars at the threshold, because a singleton bar below
+                    # the strong one is refused and this candidate is a pool of
+                    # one.
+                    singleton_score=threshold,
                 ).correct(path)
 
                 self.assertEqual(
@@ -1917,7 +1948,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         path = self.book("Cragside.epub", CRAGSIDE)
         source = FakeSource(found=None, candidates=[A_NEAR_MISS])
 
-        outcome = self.corrector(source=source, strong_score=1.0).correct(path)
+        outcome = self.corrector(
+            source=source, strong_score=1.0, singleton_score=1.0
+        ).correct(path)
 
         self.assertFalse(outcome.matched, "0.9070 does not clear 1.0")
         self.assertTrue(outcome.unverified)

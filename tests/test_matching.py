@@ -13,6 +13,7 @@ from itertools import pairwise
 from colophon.matching import (
     AUTHOR_AGREES,
     NO_AGREEMENT_CEILING,
+    Bands,
     Candidate,
     FileBook,
     band_of,
@@ -1184,6 +1185,38 @@ class BandTests(unittest.TestCase):
         self.assertIsInstance(band, str)
         self.assertIn(band, ("strong", "medium", "low", "none"))
 
+    def test_the_thresholds_the_caller_passes_are_what_draw_the_bands(self):
+        """§5.2 and §4.5: the thresholds are the caller's, not this module's.
+
+        One pool, three policies. The candidate is §2.1 row 4 - the file's own
+        title and author exactly and the series position disagreeing - which
+        scores 0.9070 at §2's full denominator. Under the shipped bands that is
+        a singleton short of the 0.95 bar and so medium; a caller's 0.90 bar
+        makes the same pool strong; and a caller's 0.95 medium bar pushes it
+        down to low. Nothing about the pool changed between the three.
+        """
+        ranked = rank(
+            FileBook(MESSY, LJ, date="2017-07-07"),
+            [
+                candidate(
+                    title="Cragside: A DCI Ryan Mystery",
+                    series_number="11",
+                    date="2017-07-07",
+                )
+            ],
+        )
+
+        self.assertEqual(ranked.matches[0].denominator, ALL_FOUR)
+        self.assertEqual(ranked.matches[0].score, 0.907)
+        self.assertEqual(band_of(ranked), "medium")
+        self.assertEqual(band_of(ranked, Bands(singleton=0.90)), "strong")
+        self.assertEqual(band_of(ranked, Bands(medium=0.95)), "low")
+
+    def test_a_singleton_bar_under_the_strong_one_is_refused(self):
+        """§1.2: a pool of one must never be easier to write than a corroborated one."""
+        with self.assertRaises(ValueError):
+            Bands(strong=0.89, singleton=0.85)
+
 
 class RankTests(unittest.TestCase):
     """§5.1: the whole ordered pool, and the gap it can be read from."""
@@ -1223,7 +1256,7 @@ class RankTests(unittest.TestCase):
         self.assertEqual(len(ranked.matches), 1)
         self.assertIsNone(ranked.runner_up)
         self.assertIsNone(ranked.gap)
-        self.assertEqual(ranked.band, "strong")
+        self.assertEqual(band_of(ranked), "strong")
 
     def test_the_runner_up_is_the_second_best_and_the_gap_is_the_difference(self):
         """§4.1: the gap is `leader.score - runner_up.score` over the deduped pool."""
@@ -1245,7 +1278,7 @@ class RankTests(unittest.TestCase):
         self.assertIsNone(ranked.runner_up)
         self.assertIsNone(ranked.gap)
         self.assertIsNone(ranked.leader)
-        self.assertEqual(ranked.band, "none")
+        self.assertEqual(band_of(ranked), "none")
 
     def test_scoring_the_same_pool_twice_is_identical(self):
         """§3.6 and §6 item 16: determinism is a correctness requirement.
@@ -1274,7 +1307,7 @@ class RankTests(unittest.TestCase):
         self.assertEqual(
             [match.score for match in first.matches], [m.score for m in second.matches]
         )
-        self.assertEqual(first.band, second.band)
+        self.assertEqual(band_of(first), band_of(second))
         self.assertEqual(first.gap, second.gap)
         self.assertEqual(first.matches[0].denominator, second.matches[0].denominator)
 
@@ -1287,7 +1320,7 @@ class LanguageFilterTests(unittest.TestCase):
         ranked = rank(FileBook(BARE, LJ, "en"), [candidate(title=BARE, language="de")])
 
         self.assertEqual(ranked.matches, ())
-        self.assertEqual(ranked.band, "none")
+        self.assertEqual(band_of(ranked), "none")
 
     def test_differing_three_letter_codes_are_dropped_too(self):
         """§3.5: the same form, three-letter, and the codes differ."""
@@ -1350,7 +1383,7 @@ class LanguageFilterTests(unittest.TestCase):
 
         self.assertEqual(len(ranked.matches), 1)
         self.assertIsNone(ranked.runner_up)
-        self.assertEqual(ranked.band, "strong")
+        self.assertEqual(band_of(ranked), "strong")
 
 
 class DedupeTests(unittest.TestCase):

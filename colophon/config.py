@@ -210,6 +210,16 @@ def load_config(env=None):
     )
     for name in ("strong_score", "singleton_score", "medium_score"):
         values[name] = _to_threshold(_setting(env, values, name, (int, float)), name)
+    if values["singleton_score"] < values["strong_score"]:
+        # Each of the two is a setting on its own, so only the pair can catch an
+        # inverted configuration - and an inverted one is not a preference: it
+        # makes a pool of one, which nothing corroborates, easier to write from
+        # than a pool of two.
+        raise ConfigError(
+            f"singleton_score ({values['singleton_score']}) is below strong_score "
+            f"({values['strong_score']}); a pool of one would then be easier to "
+            "write than a corroborated one"
+        )
     values["llm_full_scan"] = _to_bool(
         _setting(env, values, "llm_full_scan", bool), "llm_full_scan"
     )
