@@ -562,32 +562,36 @@ def band_of(ranked, bands=BANDS):
     return "low" if leader.score > 0.0 else "none"
 
 
-def top_candidates(file_book, candidates):
-    """The candidates worth putting to the LLM, best first.
+def top_candidates(ranked):
+    """The ranked pool, at most `CANDIDATES_PER_SOURCE` per source, best first.
 
-    One source's reply at a time, and at most `CANDIDATES_PER_SOURCE` of them,
-    because a source can return a long tail of lookalikes and every one of them
-    costs tokens and buries the right record a little deeper. The cap is on the
-    *best* few rather than the first few: the ones the source listed first are
-    in whatever order its own search ranked them, while the score is what this
-    project's rules make of them against this file. The best candidate is
-    therefore candidate 1 in the prompt, which is the number a reply is read
-    against.
+    The pool arrives already ranked and deduped, so nothing here scores or sorts
+    it: this is the ranked list with each source's contribution capped. A source
+    can return a long tail of lookalikes and every one of them costs tokens and
+    buries the right record a little deeper, so the cap keeps the best few by
+    this project's own score rather than the first few the source listed.
 
-    The cap is per source, so this is called once per source's own reply and not
-    over everything the sources offered between them: otherwise the first source
-    to answer would spend the whole prompt and a second source's best record
-    would never be shown.
+    The cap is per source rather than over the list, which is the whole reason
+    there is a cap: otherwise the first source to answer would spend the whole
+    prompt and a second source's best record would never be shown.
 
-    Being ranked here does not mean being accepted: a candidate that agrees on
+    Order is the pool's own, which is global rank order. The prompt numbers the
+    candidates by position, so the number a reply is read against is this
+    project's ranking rather than the order the sources happened to answer in.
+
+    Being offered does not mean being accepted: a candidate that agrees on
     neither title nor author is not an explanation of the book to the rules, and
     is still offered to the model - they read the title and the author, and the
     reason a book needs an LLM is usually that those two are not enough.
     """
-    return [
-        match.candidate
-        for match in rank(file_book, candidates).matches[:CANDIDATES_PER_SOURCE]
-    ]
+    kept, seen = [], {}
+    for match in ranked.matches:
+        source = match.candidate.source
+        if seen.get(source, 0) >= CANDIDATES_PER_SOURCE:
+            continue
+        seen[source] = seen.get(source, 0) + 1
+        kept.append(match.candidate)
+    return kept
 
 
 def _title_penalty(file_head, file_subtitle, record_head, record_subtitle):

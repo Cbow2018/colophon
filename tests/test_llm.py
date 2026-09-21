@@ -16,7 +16,7 @@ from colophon.config import Config, load_config
 from colophon.correction import Corrector, forget_yesterdays_waits, top_candidates
 from colophon.epub import read
 from colophon.llm import PROVIDERS, Llm, LlmError, LlmLimited
-from colophon.matching import Candidate, FileBook
+from colophon.matching import Candidate, FileBook, rank
 from tests.samplebooks import HOLY_ISLAND as HOLY_ISLAND_BOOK
 from tests.samplebooks import write_epub
 from tests.sources import FakeSource, no_network
@@ -1120,7 +1120,7 @@ class TheCandidateCapTests(unittest.TestCase):
         ]
         candidates = distractors + [BELSAY_RECORD]
 
-        kept = top_candidates(file_book, candidates)
+        kept = top_candidates(rank(file_book, candidates))
 
         self.assertEqual(len(kept), 5)
         self.assertEqual(kept[0], BELSAY_RECORD, "the best candidate goes first")
@@ -1136,7 +1136,7 @@ class TheCandidateCapTests(unittest.TestCase):
             for number in range(1, 6)
         ]
 
-        kept = top_candidates(file_book, distractors + [BELSAY_RECORD])
+        kept = top_candidates(rank(file_book, distractors + [BELSAY_RECORD]))
 
         self.assertEqual(kept, [BELSAY_RECORD, *distractors[:4]])
 
@@ -1144,7 +1144,10 @@ class TheCandidateCapTests(unittest.TestCase):
         file_book = FileBook("Belsay: A DCI Ryan Mystery", ("L. J. Ross",), "en")
         candidates = [BELSAY_RECORD, BERWICK]
 
-        self.assertEqual(top_candidates(file_book, candidates), candidates)
+        kept = top_candidates(rank(file_book, candidates))
+
+        self.assertEqual(len(kept), 2, "nothing under the cap is dropped")
+        self.assertCountEqual(kept, candidates)
 
 
 class TheWaitingDayTests(unittest.TestCase):
@@ -1321,6 +1324,23 @@ class ThePerSourceCapTests(unittest.TestCase):
 
         prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
         self.assertEqual(prompt.count("title="), 2)
+
+    def test_one_edition_from_two_sources_is_one_candidate_in_the_prompt(self):
+        """The pool is deduped before it is ranked, so one record is one line.
+
+        Both sources have the same edition of the same book, by the same ISBN,
+        so the pool holds it once. Two copies of one record would be two prompt
+        lines for one question - and, both scoring the same, a runner-up at a
+        gap of 0.0 for the band to read.
+        """
+        llm = self.llm("belsay-absent.json")
+        first = FakeSource(found=None, candidates=[BELSAY_RECORD])
+        second = FakeSource(found=None, candidates=[BELSAY_RECORD], name="google_books")
+
+        self.corrector(llm, first, second).correct(self.book())
+
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertEqual(prompt.count("title="), 1)
 
 
 def _reply_with(content, confidence=None, finish="stop"):

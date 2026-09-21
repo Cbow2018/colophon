@@ -1457,7 +1457,7 @@ class DedupeTests(unittest.TestCase):
 
 
 class TopCandidatesTests(unittest.TestCase):
-    """§5.1: the best few by score, and the cap that keeps a prompt to a reply."""
+    """§5.1: the best few of an already-ranked pool, and the per-source cap."""
 
     def test_the_best_few_come_back_best_first(self):
         file_book = FileBook(MESSY, LJ)
@@ -1465,17 +1465,17 @@ class TopCandidatesTests(unittest.TestCase):
         best = candidate(title="Cragside", authors=("M.J. Porter",))
         middling = candidate(title="The Infirmary", authors=LJ)
 
-        kept = top_candidates(file_book, [worst, best, middling])
+        kept = top_candidates(rank(file_book, [worst, best, middling]))
 
         self.assertEqual(kept[0], best)
         self.assertEqual(kept[-1], worst)
 
     def test_the_cap_is_five_per_source(self):
-        """§6 item 9: `CANDIDATES_PER_SOURCE = 5`, per source, before scoring."""
+        """§6 item 9: `CANDIDATES_PER_SOURCE = 5`, per source."""
         file_book = FileBook(MESSY, LJ)
         offered = [candidate(title=f"Cragside {number}") for number in range(9)]
 
-        self.assertEqual(len(top_candidates(file_book, offered)), 5)
+        self.assertEqual(len(top_candidates(rank(file_book, offered))), 5)
 
     def test_the_cap_keeps_the_best_rather_than_the_first(self):
         file_book = FileBook(MESSY, LJ)
@@ -1485,7 +1485,7 @@ class TopCandidatesTests(unittest.TestCase):
             for _ in range(6)
         ]
 
-        kept = top_candidates(file_book, distractors + [best])
+        kept = top_candidates(rank(file_book, distractors + [best]))
 
         self.assertEqual(kept[0], best)
 
@@ -1494,7 +1494,7 @@ class TopCandidatesTests(unittest.TestCase):
         file_book = FileBook(MESSY, LJ)
         weak = candidate(title="The Infirmary", authors=("Carly Reagon",))
 
-        self.assertEqual(top_candidates(file_book, [weak]), [weak])
+        self.assertEqual(top_candidates(rank(file_book, [weak])), [weak])
 
 
 class NormaliseIsFrozenTests(unittest.TestCase):
