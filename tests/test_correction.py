@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from colophon import epub as colophon_epub
+from colophon import matching as colophon_matching
 from colophon import sources as colophon_sources
 from colophon.backups import Backups
 from colophon.config import (
@@ -2979,6 +2980,29 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertTrue(outcome.matched)
         self.assertEqual(second.asked_titles, [], "the walk stopped on the strong pool")
         self.assertNotEqual(path.read_bytes(), before, "and the book was written")
+
+    def test_a_source_s_reply_is_scored_once_rather_than_twice(self):
+        """§5: one ranking per reply, and everything downstream reads it.
+
+        The reply used to be measured twice - once to decide the match and once
+        again inside `top_candidates` to build the prompt - which on a reply of
+        three was six `SequenceMatcher` runs where three would do. The pool is
+        ranked once now, and the cap and the prompt both read that one ranking.
+        """
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        source = FakeSource(
+            found=None,
+            candidates=[THE_INFIRMARY_CANDIDATE, ANOTHER_INFIRMARY, BERWICK_CANDIDATE],
+        )
+
+        with mock.patch.object(
+            colophon_matching,
+            "score_candidate",
+            wraps=colophon_matching.score_candidate,
+        ) as scored:
+            self.corrector(source=source).correct(path)
+
+        self.assertEqual(scored.call_count, 3, "one scoring pass over the reply")
 
     # --- a source that is down ---------------------------------------------
 

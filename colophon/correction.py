@@ -449,9 +449,10 @@ class Corrector:
         # is the durable cache; this is what makes a run that never lands still
         # ask each genre once, rather than once per book carrying it.
         self._genre_memo = {}
-        # Books the LLM could not be asked about, and why, for the UTC day they
-        # were left for: a cache, not a decision, so it is in memory and a
-        # restart costs one extra round of source queries.
+        # Books the pass did not finish with, and why, for the UTC day they were
+        # left for - the LLM that could not be asked and the source that could
+        # not be. A cache, not a decision, so it is in memory and a restart costs
+        # one extra round of source queries.
         self._waiting = {}
         # How a cover is fetched, injected so no test reaches the network.
         self.fetch = fetch or fetcher_for()

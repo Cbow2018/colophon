@@ -154,10 +154,13 @@ class Config:
     singleton_score: float = DEFAULT_SINGLETON_SCORE
     medium_score: float = DEFAULT_MEDIUM_SCORE
     # Whether to put a book to the LLM whenever the rules could not decide it,
-    # rather than only when it landed in the medium band. It widens which
-    # uncertain books reach the model; it does not disable early exit, and it
-    # does not make a book the rules already graded strong spend a call.
-    llm_full_scan: bool = False
+    # rather than only when it landed in the medium band. On, a low or none band
+    # book is asked about too, which is the reach the walk had before the bands
+    # existed - so this is the default, and turning it off is the deliberate
+    # narrowing rather than the other way round. It widens which uncertain books
+    # reach the model; it does not disable early exit, and it does not make a
+    # book the rules already graded strong spend a call.
+    llm_full_scan: bool = True
 
 
 def load_config(env=None):

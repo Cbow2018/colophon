@@ -226,7 +226,10 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.strong_score, 0.89)
         self.assertEqual(config.singleton_score, 0.95)
         self.assertEqual(config.medium_score, 0.80)
-        self.assertFalse(config.llm_full_scan, "the flag ships off")
+        self.assertTrue(
+            config.llm_full_scan,
+            "on: low and none reach the model unless the user narrows it",
+        )
 
     def test_the_old_confidence_key_is_gone_rather_than_aliased(self):
         """§4.5: renaming it is the point, so a stale key is refused, not read."""
@@ -427,7 +430,7 @@ class LoadConfigTests(unittest.TestCase):
         )
         self.assertEqual(config.singleton_score, 0.95)
         self.assertEqual(config.medium_score, 0.80)
-        self.assertFalse(config.llm_full_scan)
+        self.assertTrue(config.llm_full_scan)
         self.assertTrue(config.dry_run, "the example ships as a dry run")
         self.assertEqual(
             config.allowed_genres, (), "and with no tags list, as it ships"
