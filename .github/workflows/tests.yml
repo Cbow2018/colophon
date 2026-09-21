@@ -29,6 +29,8 @@ jobs:
         run: pip install ruff==0.16.8
       - name: Lint
         run: ruff check .
+      - name: Check the formatting
+        run: ruff format --check .
 
   container:
     runs-on: ubuntu-latest
