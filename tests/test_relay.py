@@ -77,6 +77,7 @@ class RelayTestCase(unittest.TestCase):
             patcher = mock.patch.object(module, "urlopen", refuse)
             patcher.start()
             self.addCleanup(patcher.stop)
+
     def drop(self, name, text="a book", into=None):
         path = (into or self.ingest) / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -460,7 +461,9 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
 
         line = "\n".join(captured.output)
         self.assertIn("description<-hardcover", line)
-        self.assertNotIn("FROM THE #1", line, "the blurb itself is in the book, not the log")
+        self.assertNotIn(
+            "FROM THE #1", line, "the blurb itself is in the book, not the log"
+        )
         self.assertIn('publisher="Independently Published"<-hardcover', line)
         self.assertIn('date="2017-07-07"<-hardcover', line)
         self.assertLess(max(len(part) for part in captured.output), 1000)
@@ -492,7 +495,9 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         self.assertEqual((self.backups / "Cragside.epub").read_bytes(), original)
         self.assertNotEqual((self.output / "Cragside.epub").read_bytes(), original)
 
-    def test_the_single_line_says_the_match_the_confidence_the_fields_and_the_source(self):
+    def test_the_single_line_says_the_match_the_confidence_the_fields_and_the_source(
+        self,
+    ):
         self.drop_a_book()
 
         with self.assertLogs("colophon", level="INFO") as captured:
@@ -616,7 +621,9 @@ class ABookNothingCanMatchTests(RelayTestCase):
         self.settle()
 
         delivered = self.output / "Unknown.epub"
-        self.assertTrue(delivered.exists(), "a book nothing matched still reaches the library")
+        self.assertTrue(
+            delivered.exists(), "a book nothing matched still reaches the library"
+        )
         self.assertIn("colophon:unverified", subjects(delivered))
         self.assertEqual(
             read(delivered).description,
@@ -728,19 +735,25 @@ class ABookWaitingForTheLLMTests(RelayTestCase):
         self.settle()
 
         self.assertNotIn("colophon:unverified", subjects(self.path))
-        self.assertEqual(self.backups_kept(), [], "and the original is not backed up either")
+        self.assertEqual(
+            self.backups_kept(), [], "and the original is not backed up either"
+        )
 
     def backups_kept(self):
         """What the backups folder holds, the LLM's own counter aside."""
         return sorted(
-            path.name for path in self.backups.iterdir() if not path.name.startswith(".")
+            path.name
+            for path in self.backups.iterdir()
+            if not path.name.startswith(".")
         )
 
     def test_it_says_why_in_the_log(self):
         with self.assertLogs("colophon", level="WARNING") as captured:
             self.settle()
 
-        self.assertIn("left in the ingest folder until tomorrow", "\n".join(captured.output))
+        self.assertIn(
+            "left in the ingest folder until tomorrow", "\n".join(captured.output)
+        )
 
     def test_it_is_not_asked_about_again_on_a_later_scan_today(self):
         self.settle()
@@ -769,7 +782,11 @@ class ARealNoMatchThroughTheRelayTests(RelayTestCase):
             # the number, the title query sends titles. Both are the API's own
             # reply to a question nobody has an edition for.
             asked = json.loads(body)["variables"]
-            name = "nothing-found.json" if "isbn" in asked else "by-title-nothing-found.json"
+            name = (
+                "nothing-found.json"
+                if "isbn" in asked
+                else "by-title-nothing-found.json"
+            )
             return 200, (HARDCOVER_RECORDED / name).read_bytes()
 
         def replay_google(url, headers):
@@ -800,10 +817,11 @@ class ARealNoMatchThroughTheRelayTests(RelayTestCase):
         delivered = self.output / "Unknown.epub"
         self.assertTrue(delivered.exists())
         self.assertIn("colophon:unverified", subjects(delivered))
-        self.assertIn("metadata could not be verified", read(delivered).description.lower())
+        self.assertIn(
+            "metadata could not be verified", read(delivered).description.lower()
+        )
         self.assertIn("hardcover", "\n".join(captured.output))
         self.assertIn("google_books", "\n".join(captured.output))
-
 
     def test_the_design_spec_s_isbn_no_source_has_reaches_output_marked(self):
         """The ISBN CBO-33 names for Cragside, which Hardcover has no edition of.

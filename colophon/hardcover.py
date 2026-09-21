@@ -124,7 +124,10 @@ query BooksByTitle($titles: [String!]!%s) {
 
 # The query per language length. Every caller means the two-letter one, which
 # is what most files say; a three-letter tag needs the other column.
-TITLE_QUERY = _TITLE_QUERY % (", $language: String!", "language: {code2: {_eq: $language}}")
+TITLE_QUERY = _TITLE_QUERY % (
+    ", $language: String!",
+    "language: {code2: {_eq: $language}}",
+)
 _TITLE_QUERY_BY_LENGTH = {
     2: TITLE_QUERY,
     3: _TITLE_QUERY % (", $language: String!", "language: {code3: {_eq: $language}}"),
@@ -168,7 +171,9 @@ class Hardcover:
         except FileNotFoundError:
             return None
         except OSError as error:
-            raise SourceError(f"could not read the Hardcover token file: {error}") from error
+            raise SourceError(
+                f"could not read the Hardcover token file: {error}"
+            ) from error
         return cls(_without_bearer(token), **kwargs) if token else None
 
     def by_isbn(self, isbn):
@@ -230,7 +235,9 @@ class Hardcover:
         except SourceError:
             raise
         except Exception as error:
-            raise SourceError(f"could not reach Hardcover: {self._without_token(error)}") from error
+            raise SourceError(
+                f"could not reach Hardcover: {self._without_token(error)}"
+            ) from error
 
         if status in (401, 403):
             raise SourceError(f"Hardcover rejected the token (HTTP {status})")

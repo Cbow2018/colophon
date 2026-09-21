@@ -54,8 +54,13 @@ TITLE_W, AUTHOR_W, SERIES_W, YEAR_W = 1.00, 0.80, 0.20, 0.15
 # m)` — and the article rule leaves the shortest run alone, which is the 0.375
 # §3.2's floor test needs.
 STRETCH = (
-    (0.35, 1.00), (0.50, 0.88), (0.60, 0.78), (0.70, 0.63),
-    (0.80, 0.45), (0.90, 0.22), (1.00, 0.00),
+    (0.35, 1.00),
+    (0.50, 0.88),
+    (0.60, 0.78),
+    (0.70, 0.63),
+    (0.80, 0.45),
+    (0.90, 0.22),
+    (1.00, 0.00),
 )
 DEAD_BAND = 0.97
 FLOOR = 0.35
@@ -80,9 +85,7 @@ def candidate(title=None, authors=LJ, series_number=None, date=None, **rest):
     )
 
 
-CRAGSIDE_RECORD = candidate(
-    title="Cragside", series_number="6", date="2017-07-07"
-)
+CRAGSIDE_RECORD = candidate(title="Cragside", series_number="6", date="2017-07-07")
 
 
 class ComparisonTextTests(unittest.TestCase):
@@ -178,7 +181,9 @@ class SimilarityTests(unittest.TestCase):
                     round(1.0 - penalty(raw), 4),
                 )
                 self.assertAlmostEqual(
-                    self.title_similarity(file_title, candidate_title), expected, places=4
+                    self.title_similarity(file_title, candidate_title),
+                    expected,
+                    places=4,
                 )
 
     def test_the_dead_band_makes_a_near_identical_ratio_cost_nothing(self):
@@ -261,7 +266,9 @@ class TitleComparisonTests(unittest.TestCase):
             round(1.0 - penalty(0.7241), 4),
         )
 
-    def test_a_record_whose_subtitle_differs_is_refused_even_though_the_head_agrees(self):
+    def test_a_record_whose_subtitle_differs_is_refused_even_though_the_head_agrees(
+        self,
+    ):
         """§3.3: the case max-over-forms got wrong, stated as a verdict."""
         match = score_candidate(
             FileBook("Cragside: A DCI Ryan Mystery", LJ),
@@ -524,9 +531,7 @@ class ScoreTests(unittest.TestCase):
         Every penalty is 0, so the score is 1.0 exactly - which is §1.1's
         requirement on the accumulation rather than a rounding accident.
         """
-        match = score_candidate(
-            FileBook(MESSY, LJ, date="2017-07-07"), CRAGSIDE_RECORD
-        )
+        match = score_candidate(FileBook(MESSY, LJ, date="2017-07-07"), CRAGSIDE_RECORD)
 
         self.assertEqual(match.score, 1.0)
         self.assertEqual(match.denominator, ALL_FOUR)
@@ -633,9 +638,7 @@ class ScoreTests(unittest.TestCase):
     def test_row_10_the_gate_holds_a_file_that_names_no_author(self):
         """§2.1 row 10: three fields compare and score 1.0000 without the gate;
         the gate holds it at 0.7000 on the 1.35 scale."""
-        match = score_candidate(
-            FileBook(MESSY, (), date="2017-07-07"), CRAGSIDE_RECORD
-        )
+        match = score_candidate(FileBook(MESSY, (), date="2017-07-07"), CRAGSIDE_RECORD)
 
         self.assertEqual(match.denominator, TITLE_SERIES_YEAR)
         self.assertEqual(match.score, NO_AGREEMENT_CEILING)
@@ -645,7 +648,9 @@ class ScoreTests(unittest.TestCase):
         """§2.1 row 11: 0.4134 of title similarity, alone on the 1.00 scale."""
         match = score_candidate(
             FileBook(MESSY, LJ),
-            candidate(title="Cragside: A 1930s murder mystery", authors=("M.J. Porter",)),
+            candidate(
+                title="Cragside: A 1930s murder mystery", authors=("M.J. Porter",)
+            ),
         )
 
         self.assertEqual(match.denominator, TITLE_ALONE)
@@ -744,9 +749,7 @@ class BandTests(unittest.TestCase):
         The same record as the test above with every field agreeing: 1.0000 at
         2.15, which is over `singleton_score` and over `strong_score` both.
         """
-        ranked = rank(
-            FileBook(MESSY, LJ, date="2017-07-07"), [CRAGSIDE_RECORD]
-        )
+        ranked = rank(FileBook(MESSY, LJ, date="2017-07-07"), [CRAGSIDE_RECORD])
 
         self.assertEqual(ranked.matches[0].score, 1.0)
         self.assertEqual(band_of(ranked), "strong")
@@ -899,7 +902,9 @@ class BandTests(unittest.TestCase):
             (
                 FileBook(MESSY, LJ, date="2017-07-07"),
                 CRAGSIDE_RECORD,
-                candidate(title=BARE, authors=LJ, series_number="11", date="2017-07-07"),
+                candidate(
+                    title=BARE, authors=LJ, series_number="11", date="2017-07-07"
+                ),
                 ALL_FOUR,
                 0.0930,
             ),
@@ -1033,9 +1038,7 @@ class BandTests(unittest.TestCase):
         )
         for record_head, similarity, expected in cases:
             with self.subTest(head=record_head):
-                file_book = FileBook(
-                    "a a a a a a a a (Book 6)", LJ, date="2017-07-07"
-                )
+                file_book = FileBook("a a a a a a a a (Book 6)", LJ, date="2017-07-07")
                 record = candidate(
                     title=record_head, series_number="11", date="1999-01-01"
                 )
@@ -1126,7 +1129,9 @@ class BandTests(unittest.TestCase):
         ranked = rank(
             file_book,
             [
-                candidate(title=BARE, authors=LJ, series_number="11", date="1999-01-01"),
+                candidate(
+                    title=BARE, authors=LJ, series_number="11", date="1999-01-01"
+                ),
                 candidate(
                     title=BARE,
                     authors=("M.J. Porter",),
@@ -1185,7 +1190,9 @@ class RankTests(unittest.TestCase):
 
     def test_the_pool_comes_back_in_score_order(self):
         file_book = FileBook(MESSY, LJ)
-        worse = candidate(title="Cragside: A 1930s murder mystery", authors=("M.J. Porter",))
+        worse = candidate(
+            title="Cragside: A 1930s murder mystery", authors=("M.J. Porter",)
+        )
         best = candidate(title="Cragside")
         middling = candidate(title="Cragside", authors=("M.J. Porter",))
 
@@ -1251,7 +1258,9 @@ class RankTests(unittest.TestCase):
             candidate(title="Cragside", series_number="11", date="2017-07-07"),
             candidate(title="The Infirmary", series_number="11"),
             candidate(title="Cragside", series_number="6", date="2017-07-07"),
-            candidate(title="Cragside: A 1930s murder mystery", authors=("M.J. Porter",)),
+            candidate(
+                title="Cragside: A 1930s murder mystery", authors=("M.J. Porter",)
+            ),
         ]
         file_book = FileBook(MESSY, LJ, date="2017-07-07")
 
@@ -1262,7 +1271,9 @@ class RankTests(unittest.TestCase):
             [match.candidate for match in first.matches],
             [match.candidate for match in second.matches],
         )
-        self.assertEqual([match.score for match in first.matches], [m.score for m in second.matches])
+        self.assertEqual(
+            [match.score for match in first.matches], [m.score for m in second.matches]
+        )
         self.assertEqual(first.band, second.band)
         self.assertEqual(first.gap, second.gap)
         self.assertEqual(first.matches[0].denominator, second.matches[0].denominator)
@@ -1280,7 +1291,9 @@ class LanguageFilterTests(unittest.TestCase):
 
     def test_differing_three_letter_codes_are_dropped_too(self):
         """§3.5: the same form, three-letter, and the codes differ."""
-        ranked = rank(FileBook(BARE, LJ, "eng"), [candidate(title=BARE, language="ger")])
+        ranked = rank(
+            FileBook(BARE, LJ, "eng"), [candidate(title=BARE, language="ger")]
+        )
 
         self.assertEqual(ranked.matches, ())
 
@@ -1384,7 +1397,9 @@ class DedupeTests(unittest.TestCase):
 
     def test_a_record_with_an_isbn_is_not_grouped_with_one_without(self):
         """The fallback is for records the ISBN cannot group, not a second pass."""
-        first = candidate(title=BARE, authors=LJ, isbn="9781521748831", date="2017-07-07")
+        first = candidate(
+            title=BARE, authors=LJ, isbn="9781521748831", date="2017-07-07"
+        )
         second = candidate(title=BARE, authors=LJ, date="2017-07-07")
 
         self.assertEqual(dedupe([first, second]), (first, second))
@@ -1433,7 +1448,8 @@ class TopCandidatesTests(unittest.TestCase):
         file_book = FileBook(MESSY, LJ)
         best = candidate(title="Cragside")
         distractors = [
-            candidate(title="The Infirmary", authors=("Carly Reagon",)) for _ in range(6)
+            candidate(title="The Infirmary", authors=("Carly Reagon",))
+            for _ in range(6)
         ]
 
         kept = top_candidates(file_book, distractors + [best])

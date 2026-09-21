@@ -186,7 +186,9 @@ def unmarked_entries(path):
     text = re.sub(rf"\s*<dc:subject>{re.escape(UNVERIFIED_TAG)}</dc:subject>", "", text)
     text = text.replace(f"\n\n{UNVERIFIED_SENTENCE}", "")
     text = re.sub(
-        rf"\s*<dc:description>{re.escape(UNVERIFIED_SENTENCE)}</dc:description>", "", text
+        rf"\s*<dc:description>{re.escape(UNVERIFIED_SENTENCE)}</dc:description>",
+        "",
+        text,
     )
     text = text.replace(f"<p>{UNVERIFIED_SENTENCE}</p>", "")
 
@@ -284,7 +286,9 @@ class CorrectionTestCase(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
 
     def book(self, name="Cragside.epub", content=CHAPTER):
-        return write_epub(self.folder / name, AS_DOWNLOADED, version="2.0", content=content)
+        return write_epub(
+            self.folder / name, AS_DOWNLOADED, version="2.0", content=content
+        )
 
     def corrector(self, source="default", **kwargs):
         """A corrector over one source unless a test hands it a longer list.
@@ -481,7 +485,9 @@ class FieldRuleTests(CorrectionTestCase):
         path = self.book()
         before = path.read_bytes()
 
-        outcome = self.corrector(rules=self.rules(**{name: "skip" for name in KNOWN_FIELDS})).correct(path)
+        outcome = self.corrector(
+            rules=self.rules(**{name: "skip" for name in KNOWN_FIELDS})
+        ).correct(path)
 
         self.assertTrue(outcome.matched)
         self.assertEqual(outcome.changed, ())
@@ -493,7 +499,9 @@ class FieldRuleTests(CorrectionTestCase):
         path = self.book()
 
         self.corrector(
-            rules=self.rules(title="overwrite", description="skip", publisher="skip", date="skip")
+            rules=self.rules(
+                title="overwrite", description="skip", publisher="skip", date="skip"
+            )
         ).correct(path)
 
         book = read(path)
@@ -513,9 +521,17 @@ class FieldRuleTests(CorrectionTestCase):
 """,
             version="2.0",
         )
-        source = FakeSource(found=None, candidates=[Candidate(
-            source="hardcover", title="Cragside", authors=("L.J. Ross",), isbn=ISBN
-        )])
+        source = FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Cragside",
+                    authors=("L.J. Ross",),
+                    isbn=ISBN,
+                )
+            ],
+        )
 
         self.corrector(source=source, rules=self.rules(isbn="fill")).correct(path)
 
@@ -587,7 +603,9 @@ class FieldRuleTests(CorrectionTestCase):
             version="2.0",
         )
 
-        self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(path)
+        self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(
+            path
+        )
 
         self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "3"))
 
@@ -604,7 +622,9 @@ class FieldRuleTests(CorrectionTestCase):
             version="2.0",
         )
 
-        self.corrector(rules=self.rules(series="skip", series_number="overwrite")).correct(path)
+        self.corrector(
+            rules=self.rules(series="skip", series_number="overwrite")
+        ).correct(path)
 
         self.assertEqual(calibre_series(path), ("dci ryan mysteries", "6"))
 
@@ -629,11 +649,15 @@ class FieldRuleTests(CorrectionTestCase):
             version="2.0",
         )
 
-        self.corrector(rules=self.rules(series="fill", series_number="fill")).correct(path)
+        self.corrector(rules=self.rules(series="fill", series_number="fill")).correct(
+            path
+        )
 
         self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
 
-    def test_a_skipped_series_leaves_a_number_that_belongs_to_another_series_alone(self):
+    def test_a_skipped_series_leaves_a_number_that_belongs_to_another_series_alone(
+        self,
+    ):
         """The mirror of the case the ticket settled.
 
         The file is in `An Old Series` #3 and its series is left alone, so the
@@ -667,7 +691,9 @@ class FieldRuleTests(CorrectionTestCase):
             version="2.0",
         )
 
-        outcome = self.corrector(rules=self.rules(series="skip", series_number="skip")).correct(path)
+        outcome = self.corrector(
+            rules=self.rules(series="skip", series_number="skip")
+        ).correct(path)
 
         self.assertEqual(calibre_series(path), (None, "3"))
         self.assertNotIn("series_number", {change.field for change in outcome.changed})
@@ -700,7 +726,8 @@ class FieldRuleTests(CorrectionTestCase):
         )
 
         self.corrector(
-            source=source, rules=self.rules(series="overwrite", series_number="overwrite")
+            source=source,
+            rules=self.rules(series="overwrite", series_number="overwrite"),
         ).correct(path)
 
         self.assertEqual(calibre_series(path), ("An Old Series", "3"))
@@ -715,7 +742,12 @@ class FieldRuleTests(CorrectionTestCase):
         source_series = "DCI Ryan Mysteries"
         cases = [
             # file series, file number, what the rules say, what the book ends up with
-            ("An Old Series", "3", ("overwrite", "overwrite"), ("DCI Ryan Mysteries", "6")),
+            (
+                "An Old Series",
+                "3",
+                ("overwrite", "overwrite"),
+                ("DCI Ryan Mysteries", "6"),
+            ),
             ("An Old Series", "3", ("overwrite", "skip"), ("DCI Ryan Mysteries", None)),
             (
                 source_series,
@@ -741,11 +773,10 @@ class FieldRuleTests(CorrectionTestCase):
                         f'    <meta name="calibre:series" content="{file_series}"/>\n'
                     )
                 if file_number:
-                    metadata += (
-                        f'    <meta name="calibre:series_index" content="{file_number}"/>\n'
-                    )
+                    metadata += f'    <meta name="calibre:series_index" content="{file_number}"/>\n'
                 path = write_epub(
-                    self.folder / f"Case-{series_rule}-{number_rule}-{file_series}.epub",
+                    self.folder
+                    / f"Case-{series_rule}-{number_rule}-{file_series}.epub",
                     metadata,
                     version="2.0",
                 )
@@ -774,7 +805,9 @@ class FieldRuleTests(CorrectionTestCase):
             version="3.0",
         )
 
-        self.corrector(rules=self.rules(series="fill", series_number="fill")).correct(path)
+        self.corrector(rules=self.rules(series="fill", series_number="fill")).correct(
+            path
+        )
 
         self.assertEqual(read(path).series, "Old Series")
         self.assertEqual(epub3_series(path), ("Old Series", "series", "9"))
@@ -814,7 +847,11 @@ class FieldRuleTests(CorrectionTestCase):
 
         self.assertNotIn("cover", {change.field for change in outcome.changed})
         self.assertEqual(
-            [item for item in manifest_items(path).values() if item.get("media-type") == "image/png"],
+            [
+                item
+                for item in manifest_items(path).values()
+                if item.get("media-type") == "image/png"
+            ],
             [
                 item
                 for item in manifest_items(path).values()
@@ -822,7 +859,9 @@ class FieldRuleTests(CorrectionTestCase):
             ],
             "the book's own cover entry is left as it was",
         )
-        self.assertEqual(entries_of(path)["OEBPS/local-cover.png"], before["OEBPS/local-cover.png"])
+        self.assertEqual(
+            entries_of(path)["OEBPS/local-cover.png"], before["OEBPS/local-cover.png"]
+        )
 
     def test_the_cover_setting_can_be_turned_off(self):
         path = write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED, version="2.0")
@@ -903,7 +942,9 @@ class FieldRuleTests(CorrectionTestCase):
         corrector.correct(write_epub(self.folder / "Cragside.epub", AS_DOWNLOADED))
 
         self.assertEqual(asked, [MATCH.cover])
-        self.assertEqual(second.asked, [], "the lower-priority source is not asked at all")
+        self.assertEqual(
+            second.asked, [], "the lower-priority source is not asked at all"
+        )
 
     def test_a_cover_the_file_will_not_take_leaves_the_book_uncorrected(self):
         """Bytes that are no image are caught, not raised on out of the pass.
@@ -930,6 +971,7 @@ class FieldRuleTests(CorrectionTestCase):
 
     def test_a_cover_that_cannot_be_fetched_does_not_stop_the_metadata(self):
         """A blurb and a right title are worth having without the image."""
+
         def fetch(url):
             raise SourceError("could not fetch the cover: it answered HTTP 500")
 
@@ -1049,7 +1091,9 @@ class MatchingTests(CorrectionTestCase):
         self.corrector().correct(path)
 
         self.assertEqual(self.kept(), ["Cragside.epub"])
-        self.assertEqual((self.folder / "backups" / "Cragside.epub").read_bytes(), before)
+        self.assertEqual(
+            (self.folder / "backups" / "Cragside.epub").read_bytes(), before
+        )
         self.assertNotEqual(path.read_bytes(), before)
 
     def test_a_kepub_is_corrected_the_same_way(self):
@@ -1059,7 +1103,9 @@ class MatchingTests(CorrectionTestCase):
 
         self.assertTrue(outcome.matched)
         self.assertEqual(read(path).title, "Cragside")
-        self.assertIn('class="koboSpan"', entries_of(path)["OEBPS/chapter.xhtml"].decode())
+        self.assertIn(
+            'class="koboSpan"', entries_of(path)["OEBPS/chapter.xhtml"].decode()
+        )
 
     def test_a_bare_kepub_is_corrected_too(self):
         """Kobo's own extension, without an .epub on the end."""
@@ -1069,6 +1115,7 @@ class MatchingTests(CorrectionTestCase):
 
         self.assertTrue(outcome.matched)
         self.assertEqual(read(path).title, "Cragside")
+
     def test_the_outcome_lists_the_fields_and_where_each_value_came_from(self):
         path = self.book()
 
@@ -1145,10 +1192,12 @@ class FromConfigTests(unittest.TestCase):
             self.config(sources=("google_books",)), Backups(self.folder / "backups")
         )
 
-        self.assertEqual([source.name for source in corrector.sources], ["google_books"])
+        self.assertEqual(
+            [source.name for source in corrector.sources], ["google_books"]
+        )
 
     def test_a_custom_endpoint_with_no_key_is_not_reported_as_no_llm(self):
-        """"No LLM key at …" is about a preset that needed one. A custom endpoint
+        """ "No LLM key at …" is about a preset that needed one. A custom endpoint
         is used without a key, so saying the LLM is not set up would be a lie."""
         (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
 
@@ -1218,7 +1267,9 @@ class FromConfigTests(unittest.TestCase):
         self.assertIn("Google Books key file", "\n".join(captured.output))
 
     def test_no_token_file_means_no_source(self):
-        corrector = Corrector.from_config(self.config(), Backups(self.folder / "backups"))
+        corrector = Corrector.from_config(
+            self.config(), Backups(self.folder / "backups")
+        )
 
         self.assertEqual(corrector.sources, ())
 
@@ -1303,7 +1354,9 @@ class FromConfigTests(unittest.TestCase):
     def test_a_token_file_gives_it_a_source(self):
         (self.folder / "hardcover_token").write_text("a-token\n", encoding="utf-8")
 
-        corrector = Corrector.from_config(self.config(), Backups(self.folder / "backups"))
+        corrector = Corrector.from_config(
+            self.config(), Backups(self.folder / "backups")
+        )
 
         self.assertEqual([source.name for source in corrector.sources], ["hardcover"])
 
@@ -1461,7 +1514,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
 
     def test_berwick_is_matched_too(self):
-        path, source = self.a_book_the_source_has("Berwick.epub", BERWICK, BERWICK_CANDIDATE)
+        path, source = self.a_book_the_source_has(
+            "Berwick.epub", BERWICK, BERWICK_CANDIDATE
+        )
 
         outcome = self.corrector(source=source).correct(path)
 
@@ -1471,7 +1526,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
     def test_belsay_is_matched_and_gets_the_number_its_title_never_had(self):
         """Belsay is #23 on the record, and the file's title does not say so."""
-        path, source = self.a_book_the_source_has("Belsay.epub", BELSAY, BELSAY_CANDIDATE)
+        path, source = self.a_book_the_source_has(
+            "Belsay.epub", BELSAY, BELSAY_CANDIDATE
+        )
 
         outcome = self.corrector(source=source).correct(path)
 
@@ -1488,7 +1545,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         # The cleaned title first, then the same title with the subtitle left on
         # for a source that kept it, both in the one request.
-        self.assertEqual(source.asked_titles, [["Cragside", "Cragside: A DCI Ryan Mystery"]])
+        self.assertEqual(
+            source.asked_titles, [["Cragside", "Cragside: A DCI Ryan Mystery"]]
+        )
         self.assertEqual(source.asked_languages, ["en"])
         self.assertEqual(source.asked, [], "there was no ISBN to ask about")
 
@@ -1538,7 +1597,8 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         ):
             with self.subTest(language=written):
                 metadata = CRAGSIDE.replace(
-                    "<dc:language>en</dc:language>", f"<dc:language>{written}</dc:language>"
+                    "<dc:language>en</dc:language>",
+                    f"<dc:language>{written}</dc:language>",
                 )
                 path, source = self.a_book_the_source_has(
                     f"{written}.epub", metadata, CRAGSIDE_CANDIDATE
@@ -1547,7 +1607,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 outcome = self.corrector(source=source).correct(path)
 
                 self.assertEqual(source.asked_languages, [expected])
-                self.assertTrue(outcome.matched, f"`{written}` and `en` are one language")
+                self.assertTrue(
+                    outcome.matched, f"`{written}` and `en` are one language"
+                )
 
     def test_a_file_tagged_eng_matches_a_record_carrying_both_codes(self):
         """The case the client-side language check used to refuse.
@@ -1642,7 +1704,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertFalse(outcome.matched)
         self.assertEqual(len(source.asked_titles), 1, "one request, one scoring pass")
-        self.assertEqual(source.asked_titles[0], ["Cragside", "Cragside: A DCI Ryan Mystery"])
+        self.assertEqual(
+            source.asked_titles[0], ["Cragside", "Cragside: A DCI Ryan Mystery"]
+        )
 
     def test_the_lookalike_is_not_accepted_for_any_of_them(self):
         """A different book by the same author is rejected - and the book is marked.
@@ -1701,7 +1765,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 path = self.book("Cragside.epub", CRAGSIDE)
                 source = FakeSource(found=None, candidates=[A_NEAR_MISS])
 
-                outcome = self.corrector(source=source, strong_score=threshold).correct(path)
+                outcome = self.corrector(source=source, strong_score=threshold).correct(
+                    path
+                )
 
                 self.assertEqual(outcome.matched, expected)
                 self.assertEqual(outcome.unverified, not expected)
@@ -1713,7 +1779,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     "accepted means the record's values are written",
                 )
 
-    def test_a_lowered_threshold_does_not_let_a_record_that_agrees_on_nothing_through(self):
+    def test_a_lowered_threshold_does_not_let_a_record_that_agrees_on_nothing_through(
+        self,
+    ):
         """The threshold is the number; `agrees` is the floor under it.
 
         `Another Infirmary` is a real book of this one's name by someone else, so
@@ -1749,7 +1817,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         perfect = self.book("Perfect.epub", CRAGSIDE)
         perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
-        outcome = self.corrector(source=perfect_source, strong_score=1.0).correct(perfect)
+        outcome = self.corrector(source=perfect_source, strong_score=1.0).correct(
+            perfect
+        )
 
         self.assertTrue(outcome.matched, "an exact title and author is exactly 1.0")
         self.assertFalse(outcome.unverified)
@@ -1789,7 +1859,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                     "marked means nothing of the record was written",
                 )
 
-    def test_an_exact_match_whose_series_position_disagrees_scores_below_a_perfect_one(self):
+    def test_an_exact_match_whose_series_position_disagrees_scores_below_a_perfect_one(
+        self,
+    ):
         """The one exact match that is not a 1.0, and the line it sits under.
 
         A title and an author can both agree exactly and the comparison still not
@@ -1873,7 +1945,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.corrector(source=source).correct(path)
 
         self.assertEqual(self.kept(), ["Cragside.epub"])
-        self.assertEqual((self.folder / "backups" / "Cragside.epub").read_bytes(), before)
+        self.assertEqual(
+            (self.folder / "backups" / "Cragside.epub").read_bytes(), before
+        )
 
     def test_the_outcome_says_which_title_the_match_was_made_on(self):
         path, source = self.a_book_the_source_has(
@@ -1882,7 +1956,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         outcome = self.corrector(source=source).correct(path)
 
-        self.assertIn("hardcover matched Cragside by title and author", outcome.fragment())
+        self.assertIn(
+            "hardcover matched Cragside by title and author", outcome.fragment()
+        )
         self.assertIn("confidence 1.00", outcome.fragment())
 
     def test_a_near_miss_says_which_book_it_was_and_what_was_wrong_with_it(self):
@@ -1901,7 +1977,8 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertFalse(outcome.matched)
         self.assertIn(
-            "no source among hardcover has an edition called Cragside", outcome.fragment()
+            "no source among hardcover has an edition called Cragside",
+            outcome.fragment(),
         )
         self.assertIn("confidence 0.90", outcome.fragment())
         self.assertIn("the full titles agree", outcome.fragment())
@@ -1936,7 +2013,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         path = self.book("Cragside.epub", CRAGSIDE)
         before = path.read_bytes()
 
-        outcome = self.corrector(source=FakeSource(found=None), dry_run=True).correct(path)
+        outcome = self.corrector(source=FakeSource(found=None), dry_run=True).correct(
+            path
+        )
 
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified)
@@ -1945,7 +2024,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         )
         self.assertEqual(path.read_bytes(), before, "nothing is written")
         self.assertEqual(self.kept(), [])
-        self.assertIn("would mark", outcome.fragment(), "a dry run says it would, not that it did")
+        self.assertIn(
+            "would mark", outcome.fragment(), "a dry run says it would, not that it did"
+        )
 
     def test_the_line_says_the_book_was_marked(self):
         path = self.book("Cragside.epub", CRAGSIDE)
@@ -1995,13 +2076,17 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         outcome = self.corrector(source=source).correct(path)
 
         self.assertEqual(source.asked, [ISBN], "the ISBN is what it was asked about")
-        self.assertEqual(source.asked_titles, [], "and there is no title to fall back to")
+        self.assertEqual(
+            source.asked_titles, [], "and there is no title to fall back to"
+        )
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified, "so the book is marked like any other")
         self.assertIn(UNVERIFIED_TAG, subjects(path))
         self.assertIn(ISBN, outcome.fragment())
         self.assertIn("marked colophon:unverified", outcome.fragment())
-        self.assertNotIn("no title", outcome.fragment(), "it was asked about, by its ISBN")
+        self.assertNotIn(
+            "no title", outcome.fragment(), "it was asked about, by its ISBN"
+        )
 
     def test_the_near_miss_line_says_the_book_was_marked_too(self):
         """A near miss is still a miss, so the book is marked and the line says so."""
@@ -2140,7 +2225,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.corrector(source=FakeSource(found=None)).correct(path)
 
         self.assertEqual(self.kept(), ["Cragside.epub"])
-        self.assertEqual((self.folder / "backups" / "Cragside.epub").read_bytes(), before)
+        self.assertEqual(
+            (self.folder / "backups" / "Cragside.epub").read_bytes(), before
+        )
 
     def test_marking_an_unverified_book_twice_changes_nothing_the_second_time(self):
         """A re-drop is looked up again, so the marker must not stack up."""
@@ -2153,7 +2240,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         self.assertEqual(subjects(path).count(UNVERIFIED_TAG), 1, "one tag, not two")
         self.assertEqual(
-            read(path).description.count(UNVERIFIED_SENTENCE), 1, "one sentence, not two"
+            read(path).description.count(UNVERIFIED_SENTENCE),
+            1,
+            "one sentence, not two",
         )
         self.assertEqual(second.changed, ())
         self.assertEqual(path.read_bytes(), marked, "nothing left to change")
@@ -2223,11 +2312,16 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified)
         self.assertIn(UNVERIFIED_TAG, subjects(path))
-        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)")
+        self.assertEqual(
+            read(path).title,
+            "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
+        )
 
     def test_a_source_that_cannot_answer_leaves_the_book_alone(self):
         path = self.book("Cragside.epub", CRAGSIDE)
-        source = FakeSource(title_error=SourceError("Hardcover is rate limiting (HTTP 429)"))
+        source = FakeSource(
+            title_error=SourceError("Hardcover is rate limiting (HTTP 429)")
+        )
         before = path.read_bytes()
 
         outcome = self.corrector(source=source).correct(path)
@@ -2253,7 +2347,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         )
         source = FakeSource(
             found=None,
-            candidates=[Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
+            candidates=[
+                Candidate(title="Cragside", authors=("L.J. Ross",), language="en")
+            ],
         )
 
         outcome = self.corrector(source=source).correct(path)
@@ -2279,7 +2375,9 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         )
         source = FakeSource(
             found=None,
-            candidates=[Candidate(title="Cragside", authors=("L.J. Ross",), language="en")],
+            candidates=[
+                Candidate(title="Cragside", authors=("L.J. Ross",), language="en")
+            ],
         )
         before = path.read_bytes()
 
@@ -2354,9 +2452,9 @@ class TheMarkComingOffAgainTests(CorrectionTestCase):
         # blurb replaces a marked description is the whole question here.
         source = FakeSource(found=None, candidates=[NO_COVER_MATCH])
 
-        outcome = self.corrector(source=source, fields=self.rules(description="overwrite")).correct(
-            path
-        )
+        outcome = self.corrector(
+            source=source, fields=self.rules(description="overwrite")
+        ).correct(path)
 
         self.assertTrue(outcome.matched)
         self.assertNotIn(UNVERIFIED_TAG, subjects(path))
@@ -2553,7 +2651,9 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertTrue(outcome.unverified)
         self.assertIn(UNVERIFIED_TAG, subjects(path))
         self.assertIn("marked colophon:unverified", outcome.fragment())
-        self.assertIn(ISBN, outcome.fragment(), "and the line says which ISBN was tried")
+        self.assertIn(
+            ISBN, outcome.fragment(), "and the line says which ISBN was tried"
+        )
 
     # --- the title path ----------------------------------------------------
 
@@ -2565,7 +2665,9 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         outcome = self.corrector_over(first, second).correct(path)
 
         self.assertTrue(outcome.matched)
-        self.assertEqual(second.asked_titles, [["Cragside", "Cragside: A DCI Ryan Mystery"]])
+        self.assertEqual(
+            second.asked_titles, [["Cragside", "Cragside: A DCI Ryan Mystery"]]
+        )
         self.assertEqual(read(path).title, "Cragside")
 
     def test_the_author_is_passed_to_a_source_that_filters_on_it(self):
@@ -2625,14 +2727,17 @@ class TheSourcePriorityListTests(CorrectionTestCase):
             same_book(unmarked_entries(path), original_entries),
             "take the mark off and the file is the one that arrived",
         )
-        self.assertEqual(self.kept(), ["Cragside.epub"], "backed up before it was marked")
+        self.assertEqual(
+            self.kept(), ["Cragside.epub"], "backed up before it was marked"
+        )
 
     def test_a_source_that_offers_nothing_at_all_does_not_name_a_book(self):
         """A reply that agrees on neither title nor author is not an explanation."""
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
 
         outcome = self.corrector_over(
-            FakeSource(found=None), self.a_second_source(candidate=THE_INFIRMARY_CANDIDATE)
+            FakeSource(found=None),
+            self.a_second_source(candidate=THE_INFIRMARY_CANDIDATE),
         ).correct(path)
 
         self.assertFalse(outcome.matched)
@@ -2659,7 +2764,9 @@ class TheSourcePriorityListTests(CorrectionTestCase):
 
     def test_a_title_lookup_that_is_down_stops_the_walk_too(self):
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
-        first = FakeSource(found=None, title_error=SourceError("Hardcover answered HTTP 503"))
+        first = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
         second = self.a_second_source()
 
         outcome = self.corrector_over(first, second).correct(path)
@@ -2670,7 +2777,9 @@ class TheSourcePriorityListTests(CorrectionTestCase):
     def test_the_outcome_says_which_source_could_not_be_asked(self):
         first = FakeSource(error=SourceError("Hardcover rejected the token (HTTP 401)"))
 
-        outcome = self.corrector_over(first, self.a_second_source()).correct(self.book())
+        outcome = self.corrector_over(first, self.a_second_source()).correct(
+            self.book()
+        )
 
         self.assertIn("Hardcover could not be asked", outcome.fragment())
         self.assertIn("rejected the token", outcome.fragment())
@@ -2687,7 +2796,9 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         with self.assertLogs("colophon", level="WARNING") as captured:
             self.corrector_over(first, self.a_second_source()).correct(self.book())
 
-        self.assertEqual(len(captured.output), 1, "one warning, not one per source tried")
+        self.assertEqual(
+            len(captured.output), 1, "one warning, not one per source tried"
+        )
         self.assertIn("WARNING", captured.output[0])
         self.assertIn("Hardcover", captured.output[0])
         self.assertIn("rate limiting", captured.output[0])
@@ -2702,14 +2813,18 @@ class TheSourcePriorityListTests(CorrectionTestCase):
 
     def test_a_book_that_matches_warns_about_nothing(self):
         with self.assertNoLogs("colophon", level="WARNING"):
-            self.corrector_over(self.a_second_source_holding_the_isbn()).correct(self.book())
+            self.corrector_over(self.a_second_source_holding_the_isbn()).correct(
+                self.book()
+            )
 
     # --- the log line ------------------------------------------------------
 
     def test_each_written_value_is_attributed_to_the_source_that_supplied_it(self):
         second = self.a_second_source_holding_the_isbn()
 
-        outcome = self.corrector_over(FakeSource(found=None), second).correct(self.book())
+        outcome = self.corrector_over(FakeSource(found=None), second).correct(
+            self.book()
+        )
 
         for change in outcome.changed:
             self.assertEqual(change.source, "google_books")
@@ -2718,7 +2833,9 @@ class TheSourcePriorityListTests(CorrectionTestCase):
     def test_the_match_says_which_source_made_it(self):
         second = self.a_second_source_holding_the_isbn()
 
-        outcome = self.corrector_over(FakeSource(found=None), second).correct(self.book())
+        outcome = self.corrector_over(FakeSource(found=None), second).correct(
+            self.book()
+        )
 
         self.assertIn("google_books matched ISBN", outcome.fragment())
 
@@ -2735,8 +2852,7 @@ class ARealGoogleRecordingThroughTheCorrectorTests(CorrectionTestCase):
     def google(self, replay=None):
         return GoogleBooks(
             "a-key",
-            transport=replay
-            or GoogleReplay("by-title-cragside-other-fields.json"),
+            transport=replay or GoogleReplay("by-title-cragside-other-fields.json"),
         )
 
     def book(self):
@@ -2788,7 +2904,9 @@ class ARealGoogleRecordingThroughTheCorrectorTests(CorrectionTestCase):
 
     def test_no_series_is_written_and_none_is_removed(self):
         """Google's reply has no series in it, so the file's own is left alone."""
-        path = write_epub(self.folder / "Cragside.epub", SERIES_ALREADY_ON_IT, version="3.0")
+        path = write_epub(
+            self.folder / "Cragside.epub", SERIES_ALREADY_ON_IT, version="3.0"
+        )
 
         self.corrector(
             source=self.google(), fetch=lambda url: GOOGLE_COVER.read_bytes()
@@ -2856,7 +2974,9 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
         A book that arrived carrying Calibre's series tags keeps them: a source
         with no series data has nothing to say about them, so it says nothing.
         """
-        path = write_epub(self.folder / "Cragside.epub", SERIES_ALREADY_ON_IT, version="2.0")
+        path = write_epub(
+            self.folder / "Cragside.epub", SERIES_ALREADY_ON_IT, version="2.0"
+        )
 
         self.corrector(source=self.google()).correct(path)
 
@@ -3003,7 +3123,9 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
 
 class WhenTheSourceFailsTests(CorrectionTestCase):
     def test_a_source_that_cannot_answer_leaves_the_book_alone(self):
-        source = FakeSource(error=SourceError("Hardcover rejected the token (HTTP 401)"))
+        source = FakeSource(
+            error=SourceError("Hardcover rejected the token (HTTP 401)")
+        )
         path = self.book()
         before = path.read_bytes()
 
@@ -3021,7 +3143,9 @@ class WhenTheSourceFailsTests(CorrectionTestCase):
 
         outcome = self.corrector(backups=RefusingBackups()).correct(path)
 
-        self.assertEqual(path.read_bytes(), before, "the book must not change unbacked-up")
+        self.assertEqual(
+            path.read_bytes(), before, "the book must not change unbacked-up"
+        )
         self.assertIn("nothing written", outcome.fragment())
 
     def test_an_epub_error_while_marking_a_book_is_handled_not_raised(self):
@@ -3079,7 +3203,9 @@ class DryRunTests(CorrectionTestCase):
 
 
 class FragmentsTests(CorrectionTestCase):
-    def test_the_fragment_names_the_match_the_confidence_the_fields_and_their_source(self):
+    def test_the_fragment_names_the_match_the_confidence_the_fields_and_their_source(
+        self,
+    ):
         outcome = self.corrector().correct(self.book())
 
         fragment = outcome.fragment()
@@ -3243,9 +3369,7 @@ class RecordTests(CorrectionTestCase):
     def test_a_book_nothing_matched_records_nothing(self):
         record = self.record()
 
-        self.deliver(
-            self.book(), record, source=FakeSource(found=None, candidates=[])
-        )
+        self.deliver(self.book(), record, source=FakeSource(found=None, candidates=[]))
 
         self.assertEqual(record.names(), ())
 
@@ -3268,7 +3392,9 @@ class RecordTests(CorrectionTestCase):
 
         with mock.patch.object(colophon_epub, "correct", side_effect=refuse_the_write):
             self.deliver(
-                self.book(), record, source=self.source_saying(("L.J. Ross",), (318638,))
+                self.book(),
+                record,
+                source=self.source_saying(("L.J. Ross",), (318638,)),
             )
 
         self.assertEqual(record.names(), ())
@@ -3361,9 +3487,7 @@ class GenreMappingTests(CorrectionTestCase):
     def spent(self, *names):
         """The same client with the UTC day's only call already spent."""
         counter = self.folder / "llm-spent.json"
-        counter.write_text(
-            json.dumps({"date": today(), "calls": 1}), encoding="utf-8"
-        )
+        counter.write_text(json.dumps({"date": today(), "calls": 1}), encoding="utf-8")
         return Llm(
             provider="deepseek",
             model="deepseek-flash",
@@ -3432,14 +3556,12 @@ class GenreMappingTests(CorrectionTestCase):
 
         outcome = self.deliver(self.book(), corrector)
 
-        self.assertEqual(self.asked(corrector), ["Murder", "Crime", "Thriller", "Mystery"])
+        self.assertEqual(
+            self.asked(corrector), ["Murder", "Crime", "Thriller", "Mystery"]
+        )
         self.assertEqual(read(self.folder / "Cragside.epub").subjects, ("Crime",))
         self.assertEqual(
-            [
-                change.value
-                for change in outcome.changed
-                if change.field == "genres"
-            ],
+            [change.value for change in outcome.changed if change.field == "genres"],
             ["Crime"],
             "one entry per allowed genre, not one per source genre",
         )
@@ -3593,7 +3715,9 @@ class GenreMappingTests(CorrectionTestCase):
         outcome = self.deliver(self.book(), corrector)
 
         self.assertEqual(read(self.folder / "Cragside.epub").subjects, ())
-        self.assertFalse(outcome.waiting, "a book is not held for a model nobody set up")
+        self.assertFalse(
+            outcome.waiting, "a book is not held for a model nobody set up"
+        )
 
     def test_a_genre_call_that_could_not_be_made_does_not_hold_the_book(self):
         """The wait belongs to a match the LLM was needed for, not to a tag.
@@ -3690,9 +3814,7 @@ class GenreMappingTests(CorrectionTestCase):
 
         self.deliver(self.book(), corrector, record=record)
 
-        rows = {
-            (row[0], row[1]): row for row in record.genres()
-        }
+        rows = {(row[0], row[1]): row for row in record.genres()}
         self.assertEqual(
             set(rows),
             {
@@ -3920,4 +4042,3 @@ class GenreMappingTests(CorrectionTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

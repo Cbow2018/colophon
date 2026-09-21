@@ -74,7 +74,9 @@ class LoadConfigTests(unittest.TestCase):
             load_config(env={"COLOPHON_CONFIG": str(path)})
 
         self.assertIn("open_library", str(caught.exception))
-        self.assertIn("google_books", str(caught.exception), "it lists what it does know")
+        self.assertIn(
+            "google_books", str(caught.exception), "it lists what it does know"
+        )
 
     def test_a_source_named_twice_is_rejected(self):
         path = self.write_config('sources = ["hardcover", "hardcover"]\n')
@@ -171,8 +173,16 @@ class LoadConfigTests(unittest.TestCase):
 
     def test_booleans_accept_the_usual_spellings(self):
         for text, expected in [
-            ("true", True), ("True", True), ("1", True), ("yes", True), ("on", True),
-            ("false", False), ("FALSE", False), ("0", False), ("no", False), ("off", False),
+            ("true", True),
+            ("True", True),
+            ("1", True),
+            ("yes", True),
+            ("on", True),
+            ("false", False),
+            ("FALSE", False),
+            ("0", False),
+            ("no", False),
+            ("off", False),
         ]:
             with self.subTest(text=text):
                 config = load_config(env={"COLOPHON_DRY_RUN": text})
@@ -287,7 +297,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertFalse(config.add_cover)
 
     def test_the_fields_table_sets_one_rule_at_a_time(self):
-        path = self.write_config("[fields]\ntitle = \"skip\"\n")
+        path = self.write_config('[fields]\ntitle = "skip"\n')
 
         config = load_config(env={"COLOPHON_CONFIG": str(path)})
 
@@ -331,7 +341,7 @@ class LoadConfigTests(unittest.TestCase):
         )
 
     def test_a_rule_nobody_has_heard_of_is_rejected(self):
-        path = self.write_config("[fields]\ntitle = \"replace\"\n")
+        path = self.write_config('[fields]\ntitle = "replace"\n')
 
         with self.assertRaises(ConfigError) as caught:
             load_config(env={"COLOPHON_CONFIG": str(path)})
@@ -341,16 +351,18 @@ class LoadConfigTests(unittest.TestCase):
 
     def test_a_field_nobody_has_heard_of_is_rejected(self):
         """A misspelt field would otherwise be a rule that silently never runs."""
-        path = self.write_config("[fields]\ndiscription = \"fill\"\n")
+        path = self.write_config('[fields]\ndiscription = "fill"\n')
 
         with self.assertRaises(ConfigError) as caught:
             load_config(env={"COLOPHON_CONFIG": str(path)})
 
         self.assertIn("discription", str(caught.exception))
-        self.assertIn("description", str(caught.exception), "it lists the fields it knows")
+        self.assertIn(
+            "description", str(caught.exception), "it lists the fields it knows"
+        )
 
     def test_a_rule_is_read_regardless_of_case(self):
-        path = self.write_config("[fields]\ntitle = \"Skip\"\n")
+        path = self.write_config('[fields]\ntitle = "Skip"\n')
 
         config = load_config(env={"COLOPHON_CONFIG": str(path)})
 

@@ -164,7 +164,7 @@ def run(relay, poll_seconds, stop):
 def warn_if_root(uid):
     if uid == 0:
         LOG.warning(
-            "running as root; set user: \"PUID:PGID\" in docker compose so books "
+            'running as root; set user: "PUID:PGID" in docker compose so books '
             "come out owned by you"
         )
 

@@ -85,14 +85,17 @@ class ReadingTests(unittest.TestCase):
 class IsbnTests(EpubTestCase):
     def book_with(self, identifiers, **kwargs):
         metadata = "\n".join(
-            f'    <dc:identifier {attribute}>{text}</dc:identifier>'
+            f"    <dc:identifier {attribute}>{text}</dc:identifier>"
             for attribute, text in identifiers
         )
         return write_epub(self.folder / "Cragside.epub", metadata, **kwargs)
 
     def test_it_reads_an_isbn_13_from_an_epub_2_identifier_scheme(self):
         path = self.book_with(
-            [('opf:scheme="ISBN"', "9781786813891"), ('opf:scheme="URI"', "urn:uuid:1")],
+            [
+                ('opf:scheme="ISBN"', "9781786813891"),
+                ('opf:scheme="URI"', "urn:uuid:1"),
+            ],
             version="2.0",
         )
 
@@ -104,13 +107,18 @@ class IsbnTests(EpubTestCase):
         self.assertEqual(read(path).isbn, "9781786813891")
 
     def test_it_strips_the_hyphens_so_a_source_can_be_asked_for_it(self):
-        path = self.book_with([('opf:scheme="ISBN"', "978-1-78681-389-1")], version="2.0")
+        path = self.book_with(
+            [('opf:scheme="ISBN"', "978-1-78681-389-1")], version="2.0"
+        )
 
         self.assertEqual(read(path).isbn, "9781786813891")
 
     def test_it_prefers_the_isbn_13_when_the_file_carries_both(self):
         path = self.book_with(
-            [('opf:scheme="ISBN"', "1786813895"), ('opf:scheme="ISBN"', "9781786813891")],
+            [
+                ('opf:scheme="ISBN"', "1786813895"),
+                ('opf:scheme="ISBN"', "9781786813891"),
+            ],
             version="2.0",
         )
 
@@ -129,7 +137,9 @@ class IsbnTests(EpubTestCase):
         self.assertIsNone(read(path).isbn)
 
     def test_a_book_with_no_identifiers_at_all_has_no_isbn(self):
-        path = write_epub(self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>")
+        path = write_epub(
+            self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>"
+        )
 
         self.assertIsNone(read(path).isbn)
 
@@ -235,7 +245,10 @@ class CorrectingTests(EpubTestCase):
         path = self.gutenberg("the-masque-of-the-red-death-epub3.epub")
         before = entries_of(path)
 
-        correct(path, Edits(title="A Different Title", series="The Red Death", series_number=6))
+        correct(
+            path,
+            Edits(title="A Different Title", series="The Red Death", series_number=6),
+        )
 
         after = entries_of(path)
         self.assertEqual(list(after), list(before))
@@ -248,9 +261,9 @@ class CorrectingTests(EpubTestCase):
 
         correct(path, Edits(title="A Different Title"))
 
-        whole_book = entries_of(path)["OEBPS/8992904816723053170_1064-h-2.htm.xhtml"].decode(
-            "utf-8", "replace"
-        )
+        whole_book = entries_of(path)[
+            "OEBPS/8992904816723053170_1064-h-2.htm.xhtml"
+        ].decode("utf-8", "replace")
         self.assertIn("Section 1. General Terms of Use", whole_book)
         self.assertIn("Project Gutenberg License", whole_book)
 
@@ -301,7 +314,9 @@ class AuthorTests(EpubTestCase):
 
         correct(path, Edits(authors=("LJ Ross",)))
 
-        dangling = [name for name, refines in refining_metas(path) if refines == "#author_1"]
+        dangling = [
+            name for name, refines in refining_metas(path) if refines == "#author_1"
+        ]
         self.assertEqual(dangling, [])
 
     def test_it_adds_a_second_author(self):
@@ -313,7 +328,9 @@ class AuthorTests(EpubTestCase):
         self.assertEqual(read(path).authors, ("LJ Ross", "LJ Ross's Friend"))
 
     def test_it_adds_an_author_to_a_book_that_had_none(self):
-        path = write_epub(self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>")
+        path = write_epub(
+            self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>"
+        )
 
         correct(path, Edits(authors=("LJ Ross",)))
 
@@ -346,8 +363,12 @@ class SeriesEdgeCaseTests(EpubTestCase):
         correct(path, Edits(series="DCI Ryan", series_number=6))
 
         found = collections(path)
-        self.assertEqual(found["set-1"], {"name": "The Complete DCI Ryan", "collection-type": "set"})
-        self.assertIn(("DCI Ryan", "series", "6"), [tuple(v.values()) for v in found.values()])
+        self.assertEqual(
+            found["set-1"], {"name": "The Complete DCI Ryan", "collection-type": "set"}
+        )
+        self.assertIn(
+            ("DCI Ryan", "series", "6"), [tuple(v.values()) for v in found.values()]
+        )
 
     def test_a_series_number_between_two_books_is_kept_as_it_is(self):
         path = write_epub(self.folder / "Cragside.epub", SIMPLE)
@@ -380,7 +401,8 @@ class KepubTests(EpubTestCase):
     def test_the_kobo_spans_survive_a_correction(self):
         path = write_epub(
             self.folder / "Cragside.kepub.epub",
-            SIMPLE + '\n    <dc:identifier opf:scheme="ISBN">9781786813891</dc:identifier>',
+            SIMPLE
+            + '\n    <dc:identifier opf:scheme="ISBN">9781786813891</dc:identifier>',
             content=KEPUB_CHAPTER,
         )
 
@@ -420,7 +442,10 @@ class LeavingABookAloneTests(EpubTestCase):
         with zipfile.ZipFile(path, "w") as book:
             book.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
             book.writestr("META-INF/container.xml", CONTAINER)
-            book.writestr("OEBPS/content.opf", '<?xml version="1.0"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="3.0"/>')
+            book.writestr(
+                "OEBPS/content.opf",
+                '<?xml version="1.0"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="3.0"/>',
+            )
         before = path.read_bytes()
 
         with self.assertRaises(EpubError):
@@ -442,7 +467,9 @@ class CoverTests(EpubTestCase):
 
         self.assertEqual(changed, ("cover",))
         items = manifest_items(path)
-        declared = [item for item in items.values() if item.get("properties") == "cover-image"]
+        declared = [
+            item for item in items.values() if item.get("properties") == "cover-image"
+        ]
         self.assertEqual(len(declared), 1)
         self.assertEqual(declared[0]["media-type"], "image/png")
         self.assertEqual(entries_of(path)[f"OEBPS/{declared[0]['href']}"], PNG)
@@ -529,8 +556,12 @@ class CoverTests(EpubTestCase):
 
         items = manifest_items(path)
         self.assertIsNotNone(cover_meta(path))
-        self.assertIn("cover-image", [item.get("properties") for item in items.values()])
-        self.assertEqual(len([i for i in items.values() if i["media-type"] == "image/png"]), 1)
+        self.assertIn(
+            "cover-image", [item.get("properties") for item in items.values()]
+        )
+        self.assertEqual(
+            len([i for i in items.values() if i["media-type"] == "image/png"]), 1
+        )
 
 
 def _without_its_cover(path):
@@ -652,7 +683,12 @@ class OtherFieldTests(EpubTestCase):
     def test_it_overwrites_what_the_book_already_had(self):
         path = write_epub(self.folder / "Cragside.epub", WITH_THE_OTHER_FIELDS)
 
-        changed = correct(path, Edits(description="A different blurb.", publisher="Independently Published"))
+        changed = correct(
+            path,
+            Edits(
+                description="A different blurb.", publisher="Independently Published"
+            ),
+        )
 
         self.assertEqual(set(changed), {"description", "publisher"})
         self.assertEqual(text_of(path, "description"), "A different blurb.")
@@ -668,11 +704,11 @@ class OtherFieldTests(EpubTestCase):
         self.assertEqual(path.read_bytes(), before)
 
     def test_the_isbn_and_the_language_can_be_written_too(self):
-        path = write_epub(self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>")
-
-        changed = correct(
-            path, Edits(isbn="9781521748831", language="en")
+        path = write_epub(
+            self.folder / "Cragside.epub", "    <dc:title>Cragside</dc:title>"
         )
+
+        changed = correct(path, Edits(isbn="9781521748831", language="en"))
 
         self.assertEqual(set(changed), {"isbn", "language"})
         self.assertEqual(read(path).isbn, "9781521748831")
@@ -702,7 +738,7 @@ class OtherFieldTests(EpubTestCase):
             with self.subTest(carried=carried):
                 path = write_epub(
                     self.folder / "Cragside.epub",
-                    f'    <dc:title>Cragside</dc:title>\n'
+                    f"    <dc:title>Cragside</dc:title>\n"
                     f'    <dc:identifier opf:scheme="ISBN">{carried}</dc:identifier>',
                     version="2.0",
                 )
@@ -716,7 +752,7 @@ class OtherFieldTests(EpubTestCase):
     def test_a_different_isbn_is_rewritten_in_place(self):
         path = write_epub(
             self.folder / "Cragside.epub",
-            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:title>Cragside</dc:title>\n"
             '    <dc:identifier opf:scheme="ISBN">1786813895</dc:identifier>',
             version="2.0",
         )
@@ -833,7 +869,7 @@ class TheUnverifiedMarkTests(EpubTestCase):
 
     def test_the_tag_goes_beside_the_book_s_own_subjects(self):
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:title>Cragside</dc:title>\n"
             "    <dc:subject>Detective and mystery stories</dc:subject>"
         )
 
@@ -858,16 +894,18 @@ class TheGenresTests(EpubTestCase):
 
     def test_it_reads_the_books_own_subjects(self):
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:title>Cragside</dc:title>\n"
             "    <dc:subject>Detective and mystery stories</dc:subject>\n"
             "    <dc:subject>Northumberland</dc:subject>"
         )
 
-        self.assertEqual(read(path).subjects, ("Detective and mystery stories", "Northumberland"))
+        self.assertEqual(
+            read(path).subjects, ("Detective and mystery stories", "Northumberland")
+        )
 
     def test_the_colophon_mark_is_not_one_of_the_books_own_subjects(self):
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:title>Cragside</dc:title>\n"
             f"    <dc:subject>{UNVERIFIED_TAG}</dc:subject>"
         )
 
@@ -890,8 +928,7 @@ class TheGenresTests(EpubTestCase):
 
     def test_a_genre_already_on_the_book_is_not_written_again(self):
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
-            "    <dc:subject>Crime</dc:subject>"
+            "    <dc:title>Cragside</dc:title>\n    <dc:subject>Crime</dc:subject>"
         )
         before = path.read_bytes()
 
@@ -903,19 +940,19 @@ class TheGenresTests(EpubTestCase):
     def test_a_genre_spelt_differently_is_still_the_same_genre(self):
         """Two tags for one shelf label is the whole thing this prevents."""
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
-            "    <dc:subject>crime</dc:subject>"
+            "    <dc:title>Cragside</dc:title>\n    <dc:subject>crime</dc:subject>"
         )
 
         changed = correct(path, Edits(genres=("Crime",)))
 
         self.assertEqual(changed, ())
-        self.assertEqual(subjects(path), ["crime"], "the book's own spelling is left alone")
+        self.assertEqual(
+            subjects(path), ["crime"], "the book's own spelling is left alone"
+        )
 
     def test_only_the_genres_that_are_new_are_added(self):
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
-            "    <dc:subject>Crime</dc:subject>"
+            "    <dc:title>Cragside</dc:title>\n    <dc:subject>Crime</dc:subject>"
         )
 
         changed = correct(path, Edits(genres=("Crime", "Mystery")))
@@ -925,7 +962,7 @@ class TheGenresTests(EpubTestCase):
 
     def test_the_books_own_subjects_are_all_kept(self):
         path = self.a_book(
-            '    <dc:title>Cragside</dc:title>\n'
+            "    <dc:title>Cragside</dc:title>\n"
             "    <dc:subject>Detective and mystery stories</dc:subject>\n"
             "    <dc:subject>Northumberland</dc:subject>"
         )
@@ -938,7 +975,7 @@ class TheGenresTests(EpubTestCase):
         )
 
     def test_the_unverified_mark_survives_a_genre_write(self):
-        path = self.a_book('    <dc:title>Cragside</dc:title>')
+        path = self.a_book("    <dc:title>Cragside</dc:title>")
         correct(path, Edits(unverified=True))
 
         changed = correct(path, Edits(genres=("Crime",)))

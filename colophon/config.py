@@ -203,17 +203,13 @@ def load_config(env=None):
     values["sources"] = _to_sources(_setting(env, values, "sources", list))
     values["fields"] = _to_fields(values.pop("fields", {}))
     values["authors"] = _to_authors(values.pop("authors", {}))
-    values["allowed_genres"] = _to_genres(
-        _setting(env, values, "allowed_genres", list)
-    )
+    values["allowed_genres"] = _to_genres(_setting(env, values, "allowed_genres", list))
     values["record_path"] = Path(_setting(env, values, "record_path", str))
     values["add_cover"] = _to_bool(
         _setting(env, values, "add_cover", bool), "add_cover"
     )
     for name in ("strong_score", "singleton_score", "medium_score"):
-        values[name] = _to_threshold(
-            _setting(env, values, name, (int, float)), name
-        )
+        values[name] = _to_threshold(_setting(env, values, name, (int, float)), name)
     values["llm_full_scan"] = _to_bool(
         _setting(env, values, "llm_full_scan", bool), "llm_full_scan"
     )
@@ -359,8 +355,7 @@ def _to_sources(value):
 
     if not sources:
         raise ConfigError(
-            "sources should name at least one source, e.g. "
-            + ", ".join(KNOWN_SOURCES)
+            "sources should name at least one source, e.g. " + ", ".join(KNOWN_SOURCES)
         )
     for name in sources:
         if name not in KNOWN_SOURCES:
@@ -395,7 +390,7 @@ def _to_authors(given):
     for key, value in given.items():
         if not isinstance(value, str) or not value.strip():
             raise ConfigError(
-                f'authors names {key!r} as {value!r}, which is not a spelling to '
+                f"authors names {key!r} as {value!r}, which is not a spelling to "
                 "write; expected a non-empty string"
             )
         normalised = normalise(key)
@@ -458,7 +453,7 @@ def _to_fields(given):
     by hand.
     """
     if not isinstance(given, dict):
-        raise ConfigError("fields should be a table, e.g. [fields] title = \"skip\"")
+        raise ConfigError('fields should be a table, e.g. [fields] title = "skip"')
 
     rules = dict(FIELD_DEFAULTS)
     for field, rule in given.items():

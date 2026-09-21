@@ -421,9 +421,7 @@ def score_candidate(file_book, candidate):
     author_similarity, author_reason = _author_similarity(
         file_book.authors, candidate.authors
     )
-    author_agrees = (
-        author_similarity is not None and author_similarity >= AUTHOR_AGREES
-    )
+    author_agrees = author_similarity is not None and author_similarity >= AUTHOR_AGREES
 
     counted = [(TITLE_WEIGHT, title_penalty)]
     if author_agrees:
@@ -821,7 +819,9 @@ def _split_subtitle(raw):
 
 def _generic(subtitle):
     """Whether a subtitle says what kind of book this is, rather than which one."""
-    return bool(_GENERIC_SUBTITLE.search(subtitle)) or subtitle.lower().startswith(("a ", "an "))
+    return bool(_GENERIC_SUBTITLE.search(subtitle)) or subtitle.lower().startswith(
+        ("a ", "an ")
+    )
 
 
 def _squeeze(text):

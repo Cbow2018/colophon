@@ -148,9 +148,7 @@ class IdentityTests(RecordTestCase):
         """So the next book from that row is an id lookup, not a name one."""
         self.record.save(self.resolve((LJ,), identities=(ROSS_ID,)))
 
-        self.record.save(
-            self.resolve((SPACED,), identities=(SPACED_ID,))
-        )
+        self.record.save(self.resolve((SPACED,), identities=(SPACED_ID,)))
 
         self.assertEqual(self.standard(AUTHOR, HARDCOVER, str(SPACED_ID)), LJ)
 
@@ -192,7 +190,9 @@ class OverrideTests(RecordTestCase):
         decided this name was the user's and not the record's.
         """
         self.record.save(
-            self.resolve((LJ,), identities=(ROSS_ID,), overrides={"lj ross": "L J Ross"})
+            self.resolve(
+                (LJ,), identities=(ROSS_ID,), overrides={"lj ross": "L J Ross"}
+            )
         )
 
         self.assertEqual(self.record.names(), ())
@@ -200,7 +200,9 @@ class OverrideTests(RecordTestCase):
     def test_the_record_learns_nothing_from_an_overridden_pass(self):
         """So taking the override back out leaves the next book to set the standard."""
         self.record.save(
-            self.resolve((LJ,), identities=(ROSS_ID,), overrides={"lj ross": "L J Ross"})
+            self.resolve(
+                (LJ,), identities=(ROSS_ID,), overrides={"lj ross": "L J Ross"}
+            )
         )
 
         self.assertEqual(self.spellings((SPACED,), source=GOOGLE), [SPACED])
@@ -222,7 +224,9 @@ class OverrideTests(RecordTestCase):
 
         self.assertEqual(self.standard(AUTHOR, BY_NAME, "lj ross"), LJ)
 
-        self.assertEqual(self.spellings((LJ,)), [LJ], "and out of the config it is back")
+        self.assertEqual(
+            self.spellings((LJ,)), [LJ], "and out of the config it is back"
+        )
 
     def test_an_override_is_one_hop_and_is_not_followed_again(self):
         """`A -> B` and `B -> C` writes B; a chain is not a thing to guess at."""
@@ -235,7 +239,9 @@ class BookKeyTests(unittest.TestCase):
     """What a book is recognised by when it is looked up a second time."""
 
     def test_an_isbn_is_the_key(self):
-        self.assertEqual(book_key("9781521748831", "Anything", ("Anyone",)), "9781521748831")
+        self.assertEqual(
+            book_key("9781521748831", "Anything", ("Anyone",)), "9781521748831"
+        )
 
     def test_the_title_and_author_are_the_key_when_there_is_no_isbn(self):
         self.assertEqual(book_key(None, "Cragside", ("L.J. Ross",)), "cragside lj ross")
@@ -284,7 +290,9 @@ class MatchTests(RecordTestCase):
         self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
     def test_a_draw_goes_to_the_source_the_user_trusts_more(self):
-        self.record.save((), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE))
+        self.record.save(
+            (), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE)
+        )
 
         self.record.save(
             (),
@@ -295,9 +303,13 @@ class MatchTests(RecordTestCase):
         self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
     def test_a_draw_does_not_promote_a_source_the_user_ranked_lower(self):
-        self.record.save((), Match("9781521748831", HARDCOVER, 0.95), priority=(HARDCOVER, GOOGLE))
+        self.record.save(
+            (), Match("9781521748831", HARDCOVER, 0.95), priority=(HARDCOVER, GOOGLE)
+        )
 
-        self.record.save((), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE))
+        self.record.save(
+            (), Match("9781521748831", GOOGLE, 0.95), priority=(HARDCOVER, GOOGLE)
+        )
 
         self.assertEqual(self.held("9781521748831", "source"), HARDCOVER)
 
@@ -437,7 +449,9 @@ class GenresTests(RecordTestCase):
         self.record.save_genres(((HARDCOVER, "Murder", "Crime", "Murder"),))
 
         self.assertEqual(self.record.mapping(HARDCOVER, "Murder"), "Crime")
-        self.assertEqual(self.record.genres(), ((HARDCOVER, "Murder", "Crime", "True Crime:Murder"),))
+        self.assertEqual(
+            self.record.genres(), ((HARDCOVER, "Murder", "Crime", "True Crime:Murder"),)
+        )
 
     def test_nothing_but_a_save_writes_a_mapping(self):
         self.assertEqual(self.record.genres(), ())

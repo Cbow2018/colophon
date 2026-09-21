@@ -46,7 +46,9 @@ class KeepingTests(BackupsTestCase):
         kept = self.backups.keep(self.original(text="second"))
 
         self.assertEqual(kept, self.folder / "Cragside (2).epub")
-        self.assertEqual((self.folder / "Cragside.epub").read_text(encoding="utf-8"), "first")
+        self.assertEqual(
+            (self.folder / "Cragside.epub").read_text(encoding="utf-8"), "first"
+        )
         self.assertEqual(kept.read_text(encoding="utf-8"), "second")
 
     def test_a_name_without_an_extension_is_numbered_too(self):
@@ -59,7 +61,9 @@ class KeepingTests(BackupsTestCase):
     def test_it_leaves_no_half_written_file_behind(self):
         self.backups.keep(self.original())
 
-        self.assertEqual([path.name for path in self.folder.iterdir()], ["Cragside.epub"])
+        self.assertEqual(
+            [path.name for path in self.folder.iterdir()], ["Cragside.epub"]
+        )
 
     def test_it_makes_the_folder_if_it_is_not_there(self):
         missing = Path(self._tmp.name) / "elsewhere"
@@ -138,7 +142,9 @@ class ExpiringTests(BackupsTestCase):
 
         deleted = self.backups.expire()
 
-        self.assertEqual(sorted(path.name for path in deleted), ["One.epub", "Two.epub"])
+        self.assertEqual(
+            sorted(path.name for path in deleted), ["One.epub", "Two.epub"]
+        )
         self.assertEqual(list(self.folder.iterdir()), [])
 
     def test_it_never_deletes_the_hidden_files_it_shares_the_folder_with(self):

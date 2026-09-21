@@ -361,7 +361,9 @@ class TheOtherFieldsTests(unittest.TestCase):
         replay = Replay("by-title-cragside-other-fields.json")
 
         GoogleBooks(KEY, transport=replay).by_title(["Cragside"], "en", "L. J. Ross")
-        asked = urllib.parse.parse_qs(urllib.parse.urlparse(replay.sent["url"]).query)["fields"][0]
+        asked = urllib.parse.parse_qs(urllib.parse.urlparse(replay.sent["url"]).query)[
+            "fields"
+        ][0]
 
         for field in ("description", "publishedDate", "publisher", "imageLinks"):
             with self.subTest(field=field):
@@ -376,7 +378,9 @@ class TheOtherFieldsTests(unittest.TestCase):
     def test_the_description_is_the_source_s_own_words_character_for_character(self):
         """Never rewritten, never generated: the recording's own string."""
         recorded = json.loads(
-            (RECORDED / "by-title-cragside-other-fields.json").read_text(encoding="utf-8")
+            (RECORDED / "by-title-cragside-other-fields.json").read_text(
+                encoding="utf-8"
+            )
         )
         expected = next(
             item["volumeInfo"]["description"]
@@ -411,7 +415,9 @@ class TheOtherFieldsTests(unittest.TestCase):
 
     def test_the_isbn_lookup_carries_the_same_fields(self):
         """The ISBN path reads the same reply shape, so it fills the same values."""
-        source = GoogleBooks(KEY, transport=Replay("by-isbn-cragside-other-fields.json"))
+        source = GoogleBooks(
+            KEY, transport=Replay("by-isbn-cragside-other-fields.json")
+        )
 
         book = source.by_isbn(CRAGSIDE)
 
@@ -435,9 +441,9 @@ class GenreTests(unittest.TestCase):
         replay = Replay("isbn-cragside-categories.json")
 
         GoogleBooks(KEY, transport=replay).by_isbn(CRAGSIDE)
-        asked = urllib.parse.parse_qs(
-            urllib.parse.urlparse(replay.sent["url"]).query
-        )["fields"][0]
+        asked = urllib.parse.parse_qs(urllib.parse.urlparse(replay.sent["url"]).query)[
+            "fields"
+        ][0]
 
         self.assertIn("items/volumeInfo/categories", asked)
 
@@ -448,9 +454,9 @@ class GenreTests(unittest.TestCase):
 
     def test_a_character_heading_is_carried_too_and_judged_later(self):
         """`Finlay-Ryan, Maxwell (Fictitious character)` is the model's to refuse."""
-        candidates = GoogleBooks(KEY, transport=Replay("by-title-cragside.json")).by_title(
-            ["Cragside"], "en", "L. J. Ross"
-        )
+        candidates = GoogleBooks(
+            KEY, transport=Replay("by-title-cragside.json")
+        ).by_title(["Cragside"], "en", "L. J. Ross")
         genres = {book.isbn: book.genres for book in candidates}
 
         self.assertEqual(genres["9781521748831"], (("Murder", "Murder"),), "a genre")

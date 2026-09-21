@@ -184,7 +184,9 @@ def write_epub(path, metadata, version="3.0", content=CHAPTER, extra_entries=())
     with zipfile.ZipFile(path, "w") as book:
         book.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
         book.writestr("META-INF/container.xml", CONTAINER)
-        book.writestr("OEBPS/content.opf", PACKAGE.format(version=version, metadata=metadata))
+        book.writestr(
+            "OEBPS/content.opf", PACKAGE.format(version=version, metadata=metadata)
+        )
         book.writestr("OEBPS/chapter.xhtml", content)
         for name, body in extra_entries:
             book.writestr(name, body)
@@ -215,6 +217,6 @@ def add_isbn(path, isbn):
 def _with_isbn(opf, isbn):
     text = opf.decode("utf-8")
     at = text.index("<dc:identifier")
-    return (text[:at] + f"<dc:identifier>urn:isbn:{isbn}</dc:identifier>\n    " + text[at:]).encode(
-        "utf-8"
-    )
+    return (
+        text[:at] + f"<dc:identifier>urn:isbn:{isbn}</dc:identifier>\n    " + text[at:]
+    ).encode("utf-8")

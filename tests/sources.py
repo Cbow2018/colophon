@@ -78,6 +78,7 @@ def no_network(url):
     """
     raise SourceError(f"a test tried to fetch {url} from the network")
 
+
 # What Hardcover has for the three books whose files carry no ISBN. Belsay is
 # #23 on the record, which the file's title never says.
 CRAGSIDE_CANDIDATE = Candidate(
@@ -139,7 +140,12 @@ class FakeSource:
     """
 
     def __init__(
-        self, found=NO_COVER_MATCH, error=None, candidates=(), title_error=None, name=SOURCE
+        self,
+        found=NO_COVER_MATCH,
+        error=None,
+        candidates=(),
+        title_error=None,
+        name=SOURCE,
     ):
         self.name = name
         self.found = found
