@@ -395,18 +395,90 @@ class AuthorComparisonTests(unittest.TestCase):
         self.assertLess(joined.author_similarity, written.author_similarity)
 
     def test_each_creator_is_calibrated_and_the_calibrated_values_averaged(self):
-        """§3.4: `L. J. Ross` is 0.6814 against `L. K. Ross` and 1.0 against the
-        record's `L. J. Ross`, so the field is their average, 0.8407.
+        """§3.4: each file creator takes its **best** match, then those average.
 
-        Calibrating the average of the raw ratios instead gives 0.7914, which is
-        the order §3.4 says is wrong.
+        The file names `L. J. Ross` twice and the record names `L. K. Ross` and
+        `L. J. Ross`. Each of the file's two creators scores 0.6814 against one
+        record author and 1.0000 against the other, so each contributes its
+        maximum, 1.0000, and the field is their average: 1.0000.
+
+        The two orderings §3.4 forbids both give something else. Averaging
+        across the *record's* authors first — the cartesian mean — is
+        (0.6814 + 1.0 + 0.6814 + 1.0)/4 = 0.8407, and calibrating the average of
+        the raw ratios is 0.7914.
         """
         match = self.author_match(
             ("L. J. Ross", "L. J. Ross"), ("L. K. Ross", "L. J. Ross")
         )
 
-        self.assertAlmostEqual(match.author_similarity, (0.6814 + 1.0) / 2, places=4)
+        self.assertAlmostEqual(match.author_similarity, (1.0 + 1.0) / 2, places=4)
+        self.assertNotAlmostEqual(match.author_similarity, 0.8407, places=4)
         self.assertNotAlmostEqual(match.author_similarity, 0.7914, places=4)
+        self.assertTrue(match.author_agrees)
+
+    def test_one_creator_against_two_record_authors_takes_the_best(self):
+        """§3.4: a record listing a second name the file omits costs nothing.
+
+        `L. J. Ross` against `L. J. Ross` is 1.0000 and against `M.J. Porter`
+        0.0200 (§1.3's list). The file names one creator, so the field is that
+        creator's best match: 1.0000, and the gate passes. The cartesian mean
+        would be (1.0000 + 0.0200)/2 = 0.5100, which sits barely over the floor
+        and would fall under it for any second name scoring worse than 0.
+        """
+        match = self.author_match(LJ, ("L. J. Ross", "M.J. Porter"))
+
+        self.assertAlmostEqual(match.author_similarity, 1.0000, places=4)
+        self.assertTrue(match.author_agrees)
+
+    def test_one_creator_against_three_record_authors_takes_the_best(self):
+        """§3.4: three record authors — a co-author, a translator, an illustrator.
+
+        The same creator against `L. J. Ross` 1.0000, `M.J. Porter` 0.0200 and
+        `Carly Reagon` 0.0568. The best is 1.0000, so the gate passes; the
+        cartesian mean would be (1.0000 + 0.0200 + 0.0568)/3 = 0.3589, under the
+        0.5 floor, which is the failure §3.4 exists to prevent.
+        """
+        match = self.author_match(LJ, ("L. J. Ross", "M.J. Porter", "Carly Reagon"))
+
+        self.assertAlmostEqual(match.author_similarity, 1.0000, places=4)
+        self.assertTrue(match.author_agrees)
+
+    def test_two_creators_each_take_their_own_best_and_the_two_average(self):
+        """§3.4's arithmetic, spelled out when the maxima come from one record author.
+
+        The file names `L. J. Ross` and `Carly Reagon`; the record names
+        `L. K. Ross` and `Carly Reagon`.
+
+        * `L. J. Ross`'s best against the record is 0.6814 — against `L. K. Ross`,
+          since against `Carly Reagon` it is 0.0568.
+        * `Carly Reagon`'s best is 1.0000, against the record's own `Carly Reagon`.
+
+        The per-creator maxima are 0.6814 and 1.0000, so the field is
+        (0.6814 + 1.0000)/2 = 0.8407 and the gate passes. It is the same number
+        the cartesian mean gives here — each creator's maximum happens to come
+        from a different record author — which is exactly why the cartesian mean
+        is not detectable from a mix of one-to-one pairs and needed the
+        one-creator cases above.
+        """
+        match = self.author_match(
+            ("L. J. Ross", "Carly Reagon"), ("L. K. Ross", "Carly Reagon")
+        )
+
+        self.assertAlmostEqual(match.author_similarity, (0.6814 + 1.0000) / 2, places=4)
+        self.assertAlmostEqual(match.author_similarity, 0.8407, places=4)
+        self.assertTrue(match.author_agrees)
+
+    def test_one_creator_against_two_record_authors_with_no_match_fails(self):
+        """§3.4 with §1.3's floor: no record author reaches it, so the gate fails.
+
+        `L. J. Ross` scores 0.0200 against `M.J. Porter` and 0.0568 against
+        `Carly Reagon`, so the best is 0.0568 — a single comparison either way,
+        since the file names one creator — and 0.0568 is under 0.5.
+        """
+        match = self.author_match(LJ, ("M.J. Porter", "Carly Reagon"))
+
+        self.assertAlmostEqual(match.author_similarity, 0.0568, places=4)
+        self.assertFalse(match.author_agrees)
 
     def test_a_file_that_names_no_creator_never_agrees(self):
         """§1.3: the file must name at least one creator."""

@@ -619,10 +619,17 @@ def _author_similarity(file_authors, record_authors):
     """How well the file's creators are covered by the record's, and why.
 
     Each creator the file names contributes the calibrated similarity of its
-    best match against any author the record names, and those values are
-    averaged. Calibrating after averaging the raw ratios would be a different
-    answer: the curve is a judgement, and averaging judgements is what "the
-    author agrees" means when a file names several creators.
+    **best** match against any author the record names, and those values are
+    averaged. So a record that lists a second name the file omits - a
+    co-author, a translator, an illustrator - costs the field nothing: the
+    creator's best match is still the one that agrees.
+
+    The two orderings this rules out both give a different answer. Averaging
+    over every file creator against every record author is the cartesian mean,
+    which divides a creator that matched by however many names the record
+    happened to list; and averaging the raw ratios before calibrating them lets
+    one very wrong creator be diluted by one very right one before the judgement
+    is applied.
 
     Returns `(similarity, reason)`, with the similarity None when either side
     names nobody - silence is not agreement, and a file that names no author can
@@ -634,7 +641,7 @@ def _author_similarity(file_authors, record_authors):
         return None, "the file names no author"
     if not found:
         return None, "the record names no author"
-    best = [_similarity(_ratio(key, other)) for key in wanted for other in found]
+    best = [max(_similarity(_ratio(key, other)) for other in found) for key in wanted]
     similarity = sum(best) / len(best)
     if similarity >= AUTHOR_AGREES:
         return similarity, "an author agrees"
