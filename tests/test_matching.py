@@ -831,11 +831,11 @@ class BandTests(unittest.TestCase):
         §4.1's window is (0.8584, 0.9070] and a singleton refuses it at 0.95.
         The margin at 2.15 is thinner - the same author scores 0.8814 there -
         and §4.1 refuses that too. This implementation prints 0.8815 at 2.15,
-        one ten-thousandth above the note: it rounds the author's similarity to
-        four places before the penalty is applied, where §6 item 3's 0.8814
-        comes from the unrounded ratio. The difference is recorded in
-        `pr-cbo-58.md` under "Expected values I changed", and the score is
-        asserted at three places for that reason.
+        one ten-thousandth above the note: it applies §3.2's segment to the
+        **unrounded** similarity, where §6 item 3's 0.8814 comes from applying
+        that segment to the ratio as the note's own table prints it, 0.8571.
+        The difference is recorded in `pr-cbo-58.md` under "Expected values I
+        changed", and the score is asserted at three places for that reason.
         """
         file_book = FileBook(MESSY, LJ, date="2017-07-07")
         cases = (
