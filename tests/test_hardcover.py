@@ -205,8 +205,12 @@ class TitleLookupTests(unittest.TestCase):
 
     def test_it_reads_berwick_and_belsay_too(self):
         """Belsay's file carries no series number; Hardcover has #23."""
-        berwick = self.source(Replay("by-title-berwick.json")).by_title([BERWICK_TITLE], "en")
-        belsay = self.source(Replay("by-title-belsay.json")).by_title([BELSAY_TITLE], "en")
+        berwick = self.source(Replay("by-title-berwick.json")).by_title(
+            [BERWICK_TITLE], "en"
+        )
+        belsay = self.source(Replay("by-title-belsay.json")).by_title(
+            [BELSAY_TITLE], "en"
+        )
 
         self.assertEqual(berwick[0].series_number, "24")
         self.assertEqual(belsay[0].title, "Belsay")
@@ -224,7 +228,10 @@ class TitleLookupTests(unittest.TestCase):
                             "id": 1198994,
                             "title": "Cragside",
                             "contributions": [
-                                {"contribution": "Author", "author": {"name": "L.J. Ross"}}
+                                {
+                                    "contribution": "Author",
+                                    "author": {"name": "L.J. Ross"},
+                                }
                             ],
                             "book_series": [],
                         },
@@ -236,7 +243,10 @@ class TitleLookupTests(unittest.TestCase):
                             "id": 1198994,
                             "title": "Cragside",
                             "contributions": [
-                                {"contribution": "Author", "author": {"name": "L.J. Ross"}}
+                                {
+                                    "contribution": "Author",
+                                    "author": {"name": "L.J. Ross"},
+                                }
                             ],
                             "book_series": [],
                         },
@@ -256,8 +266,16 @@ class TitleLookupTests(unittest.TestCase):
         reply = {
             "data": {
                 "editions": [
-                    {"title": "Cragside", "language": None, "book": {"title": "Cragside"}},
-                    {"title": "Cragside", "language": None, "book": {"title": "Cragside"}},
+                    {
+                        "title": "Cragside",
+                        "language": None,
+                        "book": {"title": "Cragside"},
+                    },
+                    {
+                        "title": "Cragside",
+                        "language": None,
+                        "book": {"title": "Cragside"},
+                    },
                 ]
             }
         }
@@ -337,7 +355,9 @@ class TitleLookupTests(unittest.TestCase):
 
 class ErrorTests(unittest.TestCase):
     def test_a_rejected_token_is_a_source_problem(self):
-        source = Hardcover(TOKEN, transport=answering(401, b'{"error":"invalid_token"}'))
+        source = Hardcover(
+            TOKEN, transport=answering(401, b'{"error":"invalid_token"}')
+        )
 
         with self.assertRaises(SourceError) as caught:
             source.by_isbn(CRAGSIDE)
@@ -351,7 +371,9 @@ class ErrorTests(unittest.TestCase):
             source.by_isbn(CRAGSIDE)
 
     def test_rate_limiting_is_a_source_problem(self):
-        source = Hardcover(TOKEN, transport=answering(429, b'{"error":"Too Many Requests"}'))
+        source = Hardcover(
+            TOKEN, transport=answering(429, b'{"error":"Too Many Requests"}')
+        )
 
         with self.assertRaises(SourceError):
             source.by_isbn(CRAGSIDE)
@@ -392,6 +414,7 @@ class ErrorTests(unittest.TestCase):
 
     def test_the_token_never_reaches_the_error_message(self):
         """Even when the failure itself quotes the headers it was given."""
+
         def echoing(url, headers, body):
             raise OSError(f"could not send {headers}")
 
@@ -434,7 +457,9 @@ class SecretFileTests(unittest.TestCase):
                 )
                 source.by_isbn(CRAGSIDE)
 
-                self.assertEqual(replay.sent["headers"]["Authorization"], f"Bearer {TOKEN}")
+                self.assertEqual(
+                    replay.sent["headers"]["Authorization"], f"Bearer {TOKEN}"
+                )
 
     def test_no_secret_file_means_there_is_no_source(self):
         self.assertIsNone(Hardcover.from_secret_file(self.folder / "hardcover_token"))
@@ -512,7 +537,9 @@ class TheOtherFieldsTests(unittest.TestCase):
             [CRAGSIDE_TITLE], "en"
         )
 
-        self.assertTrue(candidates[0].description.startswith("FROM THE #1 INTERNATIONAL"))
+        self.assertTrue(
+            candidates[0].description.startswith("FROM THE #1 INTERNATIONAL")
+        )
         self.assertEqual(candidates[0].publisher, "Independently Published")
         self.assertTrue(candidates[0].cover.startswith("https://assets.hardcover.app/"))
 
@@ -606,9 +633,7 @@ class GenreTests(unittest.TestCase):
 
     def test_the_only_genre_can_be_one_the_model_will_refuse(self):
         """*Berwick*'s single genre is `Fiction`, which is not a shelf label."""
-        book = self.source("by-isbn-9781529978940-genres.json").by_isbn(
-            "9781529978940"
-        )
+        book = self.source("by-isbn-9781529978940-genres.json").by_isbn("9781529978940")
 
         self.assertEqual(book.genres, (("Fiction", "Fiction"),))
 
@@ -620,9 +645,9 @@ class GenreTests(unittest.TestCase):
 
     def test_an_isbn_hardcover_has_no_edition_of_is_an_empty_reply(self):
         """A different empty from "no genres": there is no book at all."""
-        self.assertIsNone(self.source("by-isbn-9781473225374-genres.json").by_isbn(
-            self.NO_EDITION
-        ))
+        self.assertIsNone(
+            self.source("by-isbn-9781473225374-genres.json").by_isbn(self.NO_EDITION)
+        )
 
     def test_both_queries_ask_for_the_genres(self):
         """The two shipped queries are the whole ask; nothing else fetches a book."""

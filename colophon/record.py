@@ -155,7 +155,9 @@ class Record:
         try:
             connection = sqlite3.connect(path)
         except sqlite3.Error as error:
-            raise RecordError(f"could not open the record at {path}: {error}") from error
+            raise RecordError(
+                f"could not open the record at {path}: {error}"
+            ) from error
         connection.row_factory = sqlite3.Row
         record = cls(connection, path)
         try:
@@ -387,8 +389,7 @@ class Record:
         return tuple(
             (row["source"], row["genre"], row["mapped"], row["seen"])
             for row in self.connection.execute(
-                "SELECT source, genre, mapped, seen FROM genres "
-                "ORDER BY source, genre"
+                "SELECT source, genre, mapped, seen FROM genres ORDER BY source, genre"
             )
         )
 

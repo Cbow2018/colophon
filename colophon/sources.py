@@ -76,7 +76,9 @@ def genre_parts(value):
     parts are what is asked about and cached, and the whole string is the only
     record of what the source actually wrote.
     """
-    return tuple(part.strip() for part in _GENRE_SEPARATOR.split(str(value)) if part.strip())
+    return tuple(
+        part.strip() for part in _GENRE_SEPARATOR.split(str(value)) if part.strip()
+    )
 
 
 def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):

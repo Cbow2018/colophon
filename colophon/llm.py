@@ -222,9 +222,9 @@ class Llm:
         # header, so sending it would buy nothing and hand a local server a secret.
         # A key file that exists for a custom endpoint is sent, because an endpoint
         # nobody has described to us may well be one that wants it.
-        self._sends_key = bool(key) and PROVIDERS.get(
-            provider, _A_KEYED_ENDPOINT
-        ).needs_key
+        self._sends_key = (
+            bool(key) and PROVIDERS.get(provider, _A_KEYED_ENDPOINT).needs_key
+        )
         self._transport = transport or self._post
 
     @classmethod
@@ -252,7 +252,9 @@ class Llm:
             # A custom endpoint has to say where it is and what to ask for: the
             # two things a preset exists to supply. Refused here rather than sent
             # blank, because a blank model is a 400 that comes back every day.
-            missing = "llm_base_url" if not base_url else "llm_model" if not model else None
+            missing = (
+                "llm_base_url" if not base_url else "llm_model" if not model else None
+            )
             if missing:
                 raise LlmError(
                     f"llm_provider names {name!r}, which is not one of Colophon's "

@@ -578,11 +578,7 @@ class Corrector:
             # A candidate that is not an explanation of this book is never
             # written from on the rules' say-so at any setting; it goes to the
             # model below with every other one the rules could not use.
-            if (
-                match is not None
-                and match.agrees
-                and match.score >= self.strong_score
-            ):
+            if match is not None and match.agrees and match.score >= self.strong_score:
                 return self._write(path, match.candidate, match.score, book=book)
             # No match yet, so this source's best few are what the model may be
             # shown. The cap is per source, so a second source's best record is

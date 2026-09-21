@@ -205,7 +205,9 @@ def _own_subjects(metadata):
     """
     return tuple(
         text
-        for text in ((element.text or "").strip() for element in _elements(metadata, "subject"))
+        for text in (
+            (element.text or "").strip() for element in _elements(metadata, "subject")
+        )
         if text and not text.startswith(COLOPHON_PREFIX)
     )
 
@@ -259,7 +261,8 @@ def _read_series(metadata):
         return found.get(CALIBRE_SERIES), found.get(CALIBRE_SERIES_INDEX)
     return (
         (collection.text or "").strip() or None,
-        found.get(CALIBRE_SERIES_INDEX) or _refined(metadata, collection, GROUP_POSITION),
+        found.get(CALIBRE_SERIES_INDEX)
+        or _refined(metadata, collection, GROUP_POSITION),
     )
 
 
@@ -462,7 +465,9 @@ def _parse(path, declared):
     try:
         return ET.fromstring(declared)
     except ET.ParseError as error:
-        raise EpubError(f"{path} has an unreadable package document: {error}") from error
+        raise EpubError(
+            f"{path} has an unreadable package document: {error}"
+        ) from error
 
 
 def _refuse_if_locked(book, path):
@@ -474,7 +479,9 @@ def _refuse_if_locked(book, path):
     try:
         encryption = ET.fromstring(declared)
     except ET.ParseError as error:
-        raise EpubError(f"{path} has an unreadable {ENCRYPTION_PATH}: {error}") from error
+        raise EpubError(
+            f"{path} has an unreadable {ENCRYPTION_PATH}: {error}"
+        ) from error
     for method in encryption.iter(f"{{{XMLENC}}}EncryptionMethod"):
         if method.get("Algorithm") != FONT_OBFUSCATION:
             raise EpubError(f"{path} is encrypted; not touching it")
@@ -758,7 +765,9 @@ def _set_series(metadata, edits):
         # taken off rather than left.
         if _drop_meta(metadata, CALIBRE_SERIES_INDEX):
             number_moved = True
-        if collection is not None and _drop_refined(metadata, collection, GROUP_POSITION):
+        if collection is not None and _drop_refined(
+            metadata, collection, GROUP_POSITION
+        ):
             number_moved = True
 
     return series_moved, number_moved
@@ -904,6 +913,7 @@ def _cover_id(metadata):
                 return found
     return None
 
+
 def _declared_cover(package):
     """Whether an EPUB 3 manifest item claims to be the cover image."""
     manifest = package.find(f"{{{OPF}}}manifest")
@@ -1033,12 +1043,19 @@ def _rewrite(path, opf_path, document, image=None):
     """
     half_written = path.parent / f".{path.name}.colophon-new"
     try:
-        with zipfile.ZipFile(path) as book, zipfile.ZipFile(half_written, "w") as rewritten:
+        with (
+            zipfile.ZipFile(path) as book,
+            zipfile.ZipFile(half_written, "w") as rewritten,
+        ):
             stamped = _EPOCH
             for entry in book.infolist():
                 if stamped is _EPOCH:
                     stamped = entry.date_time
-                body = document if entry.filename == opf_path else book.read(entry.filename)
+                body = (
+                    document
+                    if entry.filename == opf_path
+                    else book.read(entry.filename)
+                )
                 _copy_entry(rewritten, entry, body)
             if image is not None:
                 name, cover = image
