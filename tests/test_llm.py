@@ -883,7 +883,7 @@ class ChooserTests(unittest.TestCase):
             transport=Replay(*names, **kwargs),
         )
 
-    def corrector(self, llm, candidates=(BELSAY_RECORD, BERWICK, THE_INFIRMARY), confidence=None):
+    def corrector(self, llm, candidates=(BELSAY_RECORD, BERWICK, THE_INFIRMARY), strong_score=None):
         """The candidates the recordings were made against, and no others.
 
         *Holy Island* is deliberately not among them: the file is that book, and
@@ -891,7 +891,7 @@ class ChooserTests(unittest.TestCase):
         answered and the LLM would never be reached.
         """
         source = FakeSource(found=None, candidates=list(candidates))
-        settings = {} if confidence is None else {"confidence": confidence}
+        settings = {} if strong_score is None else {"strong_score": strong_score}
         return Corrector(
             sources=[source],
             backups=self.backups,
@@ -966,7 +966,7 @@ class ChooserTests(unittest.TestCase):
         """The LLM's own number is what the threshold is applied to."""
         path = self.book()
 
-        outcome = self.corrector(self.llm(body=_reply(1, 0.85))).correct(path)
+        outcome = self.corrector(self.llm(body=_reply(1, 0.89))).correct(path)
 
         self.assertTrue(outcome.matched)
         self.assertEqual(read(path).title, "Belsay")
@@ -1059,12 +1059,13 @@ class ChooserTests(unittest.TestCase):
 
         At 0.3 the rules' own arithmetic would accept one of these records - they
         agree on the author and on no title at all - so what refuses it is
-        `agrees`. Refused there, the book reaches the chooser rather than being
-        written from a record that is not an explanation of it.
+        `agrees`, which §1.3 caps at 0.7 whatever the threshold is set to.
+        Refused there, the book reaches the chooser rather than being written
+        from a record that is not an explanation of it.
         """
         llm = self.llm("belsay-picked.json")
 
-        outcome = self.corrector(llm, confidence=0.3).correct(self.book())
+        outcome = self.corrector(llm, strong_score=0.3).correct(self.book())
 
         self.assertEqual(len(llm._transport.sent), 1, "the model was asked")
         self.assertTrue(outcome.matched)
@@ -1371,3 +1372,4 @@ class ConfiguredLimitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

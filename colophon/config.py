@@ -40,11 +40,23 @@ DEFAULT_RECORD_PATH = "/backups/.colophon.db"
 FIELD_RULES = ("skip", "fill", "overwrite")
 
 # How sure a title-and-author match has to be before it is written, unless the
-# user says otherwise. The design spec's own number, decided once here and
-# imported by the corrector so the two cannot drift: 1.0 is reachable - a title
-# and an author that both agree exactly score exactly 1.0 - so this is a
-# threshold rather than a value nothing could clear.
-DEFAULT_CONFIDENCE = 0.85
+# user says otherwise. Three thresholds, and the bands they draw:
+#
+# * `DEFAULT_STRONG_SCORE` is the multi-candidate bar. A pool of two or more is
+#   written when its best candidate clears it and is separated from the runner-up
+#   by the gap.
+# * `DEFAULT_SINGLETON_SCORE` is the bar for a pool of one, which has no
+#   runner-up to corroborate it and so has to be near-exact on everything the
+#   file states.
+# * `DEFAULT_MEDIUM_SCORE` is where the LLM tiebreaker starts. A candidate under
+#   the strong bar but over this one is a question worth asking; under it, the
+#   book is marked unverified without a call.
+#
+# `strong_score` and `medium_score` are **provisional** and move when the
+# thresholds are tuned against a real library (`docs/research/cbo-58.md` §4.4).
+DEFAULT_STRONG_SCORE = 0.89
+DEFAULT_SINGLETON_SCORE = 0.95
+DEFAULT_MEDIUM_SCORE = 0.80
 
 # Every field Colophon can write, and the rule it gets unless the user says
 # otherwise. The defaults are the design spec's own list, with one deliberate
@@ -134,15 +146,18 @@ class Config:
     # Whether to add a cover to a book that has none. A book that already has
     # one keeps it: that is what the setting means, so there is no rule to set.
     add_cover: bool = True
-    # How sure a title-and-author match has to be before it is written. At 1.0 a
-    # title and an author that both agree exactly are accepted, and every near
-    # miss is left marked unverified instead: a record whose title only contains
-    # the file's, one that kept a subtitle, one whose series position disagrees.
-    # One exact match falls short too - a file whose title carries a series
-    # position, matched to a record carrying a different one, scores 0.9 - and
-    # that is intended rather than a gap. It is not a way to ignore titles: an
-    # exact title-and-author match is a title match, and it clears 1.0.
-    confidence: float = DEFAULT_CONFIDENCE
+    # The three thresholds the bands are drawn from, and what each means, are on
+    # `DEFAULT_STRONG_SCORE` above. All three are policy - how cautious the user
+    # wants their own library corrected - rather than calibration, which is why
+    # they are settings and the weights, the gap and the author floor are not.
+    strong_score: float = DEFAULT_STRONG_SCORE
+    singleton_score: float = DEFAULT_SINGLETON_SCORE
+    medium_score: float = DEFAULT_MEDIUM_SCORE
+    # Whether to put a book to the LLM whenever the rules could not decide it,
+    # rather than only when it landed in the medium band. It widens which
+    # uncertain books reach the model; it does not disable early exit, and it
+    # does not make a book the rules already graded strong spend a call.
+    llm_full_scan: bool = False
 
 
 def load_config(env=None):
@@ -195,8 +210,12 @@ def load_config(env=None):
     values["add_cover"] = _to_bool(
         _setting(env, values, "add_cover", bool), "add_cover"
     )
-    values["confidence"] = _to_confidence(
-        _setting(env, values, "confidence", (int, float))
+    for name in ("strong_score", "singleton_score", "medium_score"):
+        values[name] = _to_threshold(
+            _setting(env, values, name, (int, float)), name
+        )
+    values["llm_full_scan"] = _to_bool(
+        _setting(env, values, "llm_full_scan", bool), "llm_full_scan"
     )
 
     return Config(**values)
@@ -270,8 +289,8 @@ def _to_positive_int(value, name):
     return number
 
 
-def _to_confidence(value):
-    """A confidence threshold: a fraction above zero and no more than one.
+def _to_threshold(value, name):
+    """A band threshold: a fraction above zero and no more than one.
 
     Zero is refused because a threshold nothing can fail is not a threshold, and
     anything above one is refused because no match can reach it - the comparison
@@ -281,11 +300,9 @@ def _to_confidence(value):
     try:
         number = float(value)
     except (TypeError, ValueError) as error:
-        raise ConfigError(f"confidence should be a number, not {value!r}") from error
+        raise ConfigError(f"{name} should be a number, not {value!r}") from error
     if not 0 < number <= 1:
-        raise ConfigError(
-            f"confidence should be above 0 and at most 1, not {number:g}"
-        )
+        raise ConfigError(f"{name} should be above 0 and at most 1, not {number:g}")
     return number
 
 

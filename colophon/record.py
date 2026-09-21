@@ -497,6 +497,14 @@ def book_key(isbn, title, authors=()):
     isbn = str(isbn or "").strip()
     if isbn:
         return isbn
+    # `matching.normalise` is frozen as this key on purpose, and it is *not* the
+    # function the matcher compares with: `matching.comparison_text` strips
+    # accents and articles on top of what this does, and is free to change. A
+    # durable key has to be conservative and stable — a spelling written into a
+    # library is kept, and re-keying would put a second spelling of every author
+    # beside the first (CBO-41) — while a comparison key should be aggressive.
+    # Two titles the matcher considers one can therefore key apart here, and the
+    # duplication is deliberate rather than something to unify.
     parts = [normalise(title)]
     parts.extend(normalise(name) for name in authors or ())
     return " ".join(part for part in parts if part)
