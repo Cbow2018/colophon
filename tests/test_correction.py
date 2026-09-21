@@ -1366,6 +1366,15 @@ class FromConfigTests(unittest.TestCase):
 
         self.assertEqual(corrector.bands, Bands(strong=0.7, singleton=0.9, medium=0.6))
 
+    def test_the_full_scan_flag_a_config_carries_reaches_the_pass(self):
+        """§4.3: the flag is the only thing that decides how wide the model's
+        population is, so it has to survive the trip from the file."""
+        config = self.config(sources=(), llm_full_scan=False)
+
+        corrector = Corrector.from_config(config, Backups(self.folder / "backups"))
+
+        self.assertFalse(corrector.llm_full_scan)
+
     def test_a_pass_with_no_thresholds_bands_on_the_designed_ones(self):
         """§4.1 and §4.4: the numbers a caller that says nothing about them gets.
 

@@ -1446,6 +1446,23 @@ class WhichBandReachesTheModelTests(unittest.TestCase):
         self.assertTrue(outcome.unverified)
         self.assertFalse(outcome.waiting, "marked, not held: nothing went unanswered")
 
+    def test_the_medium_threshold_is_what_draws_that_band(self):
+        """§4.5: `medium_score` is a setting, so the band follows it.
+
+        The same low-band pool with the medium bar under its score: the book is
+        a medium-band book now, and medium is what the chooser is for - which is
+        the whole job of the setting, and it does it with the widened population
+        turned off.
+        """
+        llm = self.llm("belsay-absent.json")
+
+        outcome = self.corrector(
+            llm, A_LOW_BAND, llm_full_scan=False, medium_score=0.4
+        ).correct(self.book())
+
+        self.assertEqual(len(llm._transport.sent), 1, "medium reaches the model")
+        self.assertTrue(outcome.unverified, "and a null pick is not applied")
+
 
 def _reply_with(content, confidence=None, finish="stop"):
     """A reply body the way the API shapes one, carrying this content.
