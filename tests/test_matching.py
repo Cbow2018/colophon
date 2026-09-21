@@ -415,7 +415,7 @@ class AuthorComparisonTests(unittest.TestCase):
 
         self.assertAlmostEqual(match.author_similarity, (1.0 + 1.0) / 2, places=4)
         self.assertNotAlmostEqual(match.author_similarity, 0.8407, places=4)
-        self.assertNotAlmostEqual(match.author_similarity, 0.7914, places=4)
+        self.assertNotAlmostEqual(match.author_similarity, 0.8429, places=4)
         self.assertTrue(match.author_agrees)
 
     def test_one_creator_against_two_record_authors_takes_the_best(self):
