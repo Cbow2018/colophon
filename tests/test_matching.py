@@ -48,9 +48,11 @@ TITLE_W, AUTHOR_W, SERIES_W, YEAR_W = 1.00, 0.80, 0.20, 0.15
 # §3.2's calibration, as the note gives it: the anchors, the dead band at the
 # top and the floor at the bottom. `penalty(raw)` is what §2's accumulator
 # multiplies by the field's weight, so every score below can be written as
-# `1 - Σ(weight × penalty) / denominator` and checked by hand. The ratios the
-# tests use are exact by construction: two runs of `n` and `n - drop` identical
-# characters compare at `2(n - drop) / (2n - drop)`.
+# `1 - Σ(weight × penalty) / denominator` and checked by hand. Where a test
+# compares two synthetic runs of `n` and `m` identical characters, the ratio is
+# exact by construction: the longest match is the shorter run, so it is `2m/(n +
+# m)` — and the article rule leaves the shortest run alone, which is the 0.375
+# §3.2's floor test needs.
 STRETCH = (
     (0.35, 1.00), (0.50, 0.88), (0.60, 0.78), (0.70, 0.63),
     (0.80, 0.45), (0.90, 0.22), (1.00, 0.00),
@@ -405,7 +407,7 @@ class AuthorComparisonTests(unittest.TestCase):
         The two orderings §3.4 forbids both give something else. Averaging
         across the *record's* authors first — the cartesian mean — is
         (0.6814 + 1.0 + 0.6814 + 1.0)/4 = 0.8407, and calibrating the average of
-        the raw ratios is 0.7914.
+        the raw ratios is 0.8429.
         """
         match = self.author_match(
             ("L. J. Ross", "L. J. Ross"), ("L. K. Ross", "L. J. Ross")
