@@ -110,36 +110,60 @@ skip_suffixes = [".part", ".tmp", ".!qb", ".crdownload"]
 log_level = "INFO"
 
 # How sure a title-and-author match has to be before Colophon writes it, as a
-# number above 0 and at most 1. A candidate's confidence is how well its title
-# and its author agree with what the file says. 0.85 is the design's default.
+# number above 0 and at most 1. A candidate's score is how well the record
+# agrees with what the file says: 1.0 means nothing the file states contradicts
+# it, and every field that disagrees is a subtraction from that. The weights are
+# title 1.00, author 0.80, series position 0.20 and year 0.15, and the score is
+# one minus their penalties over the weight actually compared, so a file that
+# carries only some of those fields is graded on the ones it does carry.
 #
-# A book nothing matches that confidently is not corrected at all: it keeps the
-# metadata it came with and is marked instead - tagged `colophon:unverified`,
-# with "Metadata could not be verified by Colophon." at the end of its
-# description - so you can find it in your library without reading logs. Drop a
-# marked book in again once a source has it and the mark comes off.
+# Three thresholds turn that number into a band:
 #
-# 1.0 accepts a title and an author that both agree exactly, and marks
-# everything else unverified instead of writing it - a record whose title merely
-# contains the file's, one that kept a subtitle the file dropped, one at a
-# different place in the series - however good it looks.
+#   strong_score    0.89  the bar for a pool of two or more candidates, which
+#                         must also be 0.08 clear of the runner-up
+#   singleton_score 0.95  the bar for a pool of one, which has no runner-up to
+#                         corroborate it and so has to be near-exact
+#   medium_score    0.80  where the LLM tiebreaker starts
 #
-# One exact match is still marked, and it is worth knowing about: a file whose
-# title carries a series position, matched to a record carrying a different one,
-# scores 0.9 rather than 1.0. Either side saying nothing about the position
-# scores 1.0, as does agreement, so most files - which carry no position in the
-# title - are unaffected by this.
+# A book in the strong band is corrected. A book in the medium band is put to
+# the LLM if one is configured, and otherwise marked; a book in the low or none
+# band is marked without a call. Marking means it keeps the metadata it came
+# with - tagged `colophon:unverified`, with "Metadata could not be verified by
+# Colophon." at the end of its description - so you can find it in your library
+# without reading logs. Drop a marked book in again once a source has it and the
+# mark comes off.
 #
-# It is not a way to say "use the ISBN and ignore titles". A title and an author
-# that agree exactly still clear 1.0, so books are still corrected by title under
-# this setting - just nothing less certain than that. The line below is the
-# default; uncomment and change it to overrule that. It is written before the
-# [fields] table on purpose: in TOML everything after a table header belongs to
-# that table.
+# A record has to clear more than the number. The file must name an author, the
+# record must name one, and the two must be close enough to be the same person;
+# when they are not, the author's weight leaves the calculation and the score is
+# held under 0.7, so a matching title on its own is never written.
+#
+# `strong_score` and `medium_score` are provisional: they were chosen to fit the
+# design's worked cases and are meant to be measured against a real library
+# before they are trusted. See docs/research/cbo-58.md, §4.4.
+#
+# The thresholds are policy - how cautious you want your own library corrected -
+# which is why they are settings. The weights, the runner-up gap and the author
+# floor are the metric's own calibration and are not.
+#
+# These lines are the defaults; uncomment and change one to overrule it. They are
+# written before the [fields] table on purpose: in TOML everything after a table
+# header belongs to that table.
 #
 # Anything above 1.0 is refused rather than treated as "match nothing": no
 # candidate can score above 1.0, so it is a typo, not an intention.
-# confidence = 0.85
+# strong_score = 0.89
+# singleton_score = 0.95
+# medium_score = 0.80
+
+# Whether to put a book to the LLM whenever the rules could not decide it,
+# rather than only when it landed in the medium band. On, a book whose right
+# record scored badly - because the query was bad, not because the record is
+# wrong - still gets asked about. It does not disable the early exit: a book the
+# rules already graded strong never spends a call either way.
+#
+# The line below is commented out because `false` is already what Colophon does.
+# llm_full_scan = false
 
 # Add a cover to a book that has none, from the source that matched it. A book
 # that arrived with a cover keeps it: this setting only ever adds one. Only the

@@ -387,6 +387,14 @@ Colophon is AI-assisted and human-reviewed at every step. The design was worked
 out in conversation, each ticket is built test-first, and every change is read
 and approved by a person before it is merged.
 
+The matcher's distance-and-confidence design — a weighted penalty per field, a
+calibrated similarity, and a runner-up gap deciding between bands — was modelled
+on beets' approach to the same problem. No beets source was read or adapted:
+`colophon/matching.py` is written from Colophon's own design note
+([docs/research/cbo-58.md](docs/research/cbo-58.md)), which describes the
+mechanism in this project's terms and derives its own numbers. The acknowledgement
+is a courtesy, not a provenance claim.
+
 ## Licence
 
 AGPL-3.0. If you run a modified Colophon as a service, you must publish your

@@ -135,11 +135,12 @@ UNVERIFIED_TAG = "colophon:unverified"
 UNVERIFIED_SENTENCE = "Metadata could not be verified by Colophon."
 
 # A candidate that agrees on both halves and still falls short of the threshold.
-# `Cragside: A DCI Ryan Mystery` contains the file's cleaned title (0.9) and L.J.
-# Ross is the file's author (1.0), which weigh 0.94; the record claims position 11
-# where the file's title claims 6, which takes 0.1 off, leaving 0.84. That is the
-# shape of a near miss - which is why a source cannot be asked for one, since
-# Hardcover answers only titles it spells exactly.
+# Its title is the file's own with the bracket taken off, so §3.3 scores the two
+# full titles as identical (1.0000) and L.J. Ross is the file's author (1.0000);
+# the record claims position 11 where the file's title claims 6, which §2 weighs
+# at 0.20 over a 2.00 denominator, leaving 0.9070. That is the shape of a near
+# miss - which is why a source cannot be asked for one, since Hardcover answers
+# only titles it spells exactly.
 A_NEAR_MISS = Candidate(
     source="hardcover",
     title="Cragside: A DCI Ryan Mystery",
@@ -1690,13 +1691,17 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         )
 
     def test_the_threshold_is_adjustable_and_below_it_a_near_miss_is_accepted(self):
-        """At 0.80 the 0.84 candidate is good enough; at the default 0.85 it is not."""
-        for threshold, expected in ((0.8, True), (0.85, False)):
-            with self.subTest(confidence=threshold):
+        """At 0.85 the 0.9070 candidate is good enough; at 0.95 it is not.
+
+        The comparison grades a candidate rather than answering yes or no, so a
+        threshold is a setting with a range to sit in rather than a wall.
+        """
+        for threshold, expected in ((0.85, True), (0.95, False)):
+            with self.subTest(strong_score=threshold):
                 path = self.book("Cragside.epub", CRAGSIDE)
                 source = FakeSource(found=None, candidates=[A_NEAR_MISS])
 
-                outcome = self.corrector(source=source, confidence=threshold).correct(path)
+                outcome = self.corrector(source=source, strong_score=threshold).correct(path)
 
                 self.assertEqual(outcome.matched, expected)
                 self.assertEqual(outcome.unverified, not expected)
@@ -1712,16 +1717,16 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         """The threshold is the number; `agrees` is the floor under it.
 
         `Another Infirmary` is a real book of this one's name by someone else, so
-        the title agrees exactly, the author does not, and the number is 0.6 -
-        which the default 0.85 refuses and a lowered 0.5 would accept on the
-        arithmetic alone. It is not an explanation of this file whatever the
-        number says, so the rules must not write it, and the author left on the
-        file is what shows they did not.
+        the title agrees exactly, the author does not, and §1.3's cap holds the
+        number at 0.7 - which the default threshold refuses and a lowered 0.5
+        would accept on the arithmetic alone. It is not an explanation of this
+        file whatever the number says, so the rules must not write it, and the
+        author left on the file is what shows they did not.
         """
         path = self.book("The Infirmary.epub", THE_INFIRMARY)
         source = FakeSource(found=None, candidates=[ANOTHER_INFIRMARY])
 
-        outcome = self.corrector(source=source, confidence=0.5).correct(path)
+        outcome = self.corrector(source=source, strong_score=0.5).correct(path)
 
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified)
@@ -1734,46 +1739,46 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         It is a setting rather than a wall because a title and an author that both
         agree exactly score exactly 1.0, which is what makes `(0, 1]` the range
-        instead of `(0, 1)`. What it refuses is everything under that, which is
-        every near miss the comparison can produce: the highest of them is a
-        contained title with the author and the series both agreeing, at 0.99. So
-        the line 1.0 draws is *certainty*, not *route* - an ISBN match always
-        clears it, and so does an exact title-and-author match.
+        instead of `(0, 1)`. What it refuses is everything under that: a record
+        whose title and author both agree exactly and whose series position
+        disagrees scores 0.90 (§2.1 row 4), so 1.0 refuses it. So the line 1.0
+        draws is *certainty*, not *route* - an ISBN match always clears it, and
+        so does an exact title-and-author match.
         """
         # Reachable, and reached by title.
         perfect = self.book("Perfect.epub", CRAGSIDE)
         perfect_source = FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE])
 
-        outcome = self.corrector(source=perfect_source, confidence=1.0).correct(perfect)
+        outcome = self.corrector(source=perfect_source, strong_score=1.0).correct(perfect)
 
         self.assertTrue(outcome.matched, "an exact title and author is exactly 1.0")
         self.assertFalse(outcome.unverified)
         self.assertIsNone(outcome.isbn, "and it is a title match, not an ISBN one")
         self.assertEqual(outcome.sought, "Cragside", "found by its title")
 
-        # The best a near miss can do: contained title, author and series both
-        # agreeing. 0.99, and 1.0 refuses it.
+        # The best a near miss can do: the title and the author both agree
+        # exactly and the series position does not. 0.90, and 1.0 refuses it.
         best_near_miss = Candidate(
             source="hardcover",
             title="Cragside: A DCI Ryan Mystery",
             authors=("L.J. Ross",),
             series="DCI Ryan Mysteries",
-            series_number="6",
+            series_number="11",
             language="en",
         )
         for threshold, expected in ((1.0, False), (0.85, True)):
-            with self.subTest(confidence=threshold):
+            with self.subTest(strong_score=threshold):
                 path = self.book(f"Contained-{threshold}.epub", CRAGSIDE)
 
                 outcome = self.corrector(
                     source=FakeSource(found=None, candidates=[best_near_miss]),
-                    confidence=threshold,
+                    strong_score=threshold,
                 ).correct(path)
 
                 self.assertEqual(
                     outcome.matched,
                     expected,
-                    f"0.99 {'clears' if expected else 'does not clear'} {threshold}",
+                    f"0.90 {'clears' if expected else 'does not clear'} {threshold}",
                 )
                 self.assertEqual(outcome.unverified, not expected)
                 self.assertEqual(
@@ -1789,16 +1794,16 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
 
         A title and an author can both agree exactly and the comparison still not
         be certain: when the file's title carries a series position and the record
-        carries a different one, that disagreement takes 0.1 off, leaving 0.9. So
-        at a threshold of 1.0 this book is marked unverified - which is the
-        intended reading of that setting, not a gap in it. It is also the case
-        that shows what 1.0 does *not* exclude: the same book with the position
+        carries a different one, §2.1 row 4 says the score is 0.9070. So at a
+        threshold of 0.95 this book is marked unverified - which is the intended
+        reading of that setting, not a gap in it. It is also the case that shows
+        what a high threshold does *not* exclude: the same book with the position
         agreeing, or with no position on one side, is a 1.0 and is written.
         """
         file_title = "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)"
 
-        for position, expected_confidence in (
-            ("11", 0.9),
+        for position, expected_score in (
+            ("11", 0.90),
             ("6", 1.0),
             (None, 1.0),
         ):
@@ -1813,35 +1818,36 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
                 )
 
                 outcome = self.corrector(
-                    source=FakeSource(found=None, candidates=[candidate]), confidence=1.0
+                    source=FakeSource(found=None, candidates=[candidate]),
+                    strong_score=0.95,
                 ).correct(path)
 
                 self.assertEqual(
                     outcome.confidence,
-                    expected_confidence,
-                    "an exact title and author weigh 1.0, and a disagreeing "
-                    "position takes 0.1 off it",
+                    expected_score,
+                    "an exact title and author weigh 1.0, and §2's series "
+                    "weight takes 0.20 off a 2.00 denominator",
                 )
                 self.assertEqual(
                     outcome.matched,
-                    expected_confidence >= 1.0,
+                    expected_score >= 0.95,
                     f"a {position} position against the file's 6 "
-                    f"{'clears' if expected_confidence >= 1.0 else 'does not clear'} 1.0",
+                    f"{'clears' if expected_score >= 0.95 else 'does not clear'} 0.95",
                 )
                 self.assertEqual(
                     read(path).title,
-                    "Cragside" if expected_confidence >= 1.0 else file_title,
-                    "a 0.9 is marked, so nothing of the record is written",
+                    "Cragside" if expected_score >= 0.95 else file_title,
+                    "a 0.90 is marked, so nothing of the record is written",
                 )
 
     def test_a_threshold_of_one_refuses_a_near_miss_too(self):
-        """The 0.84 near miss is nowhere near the top of the range."""
+        """The 0.9070 near miss is nowhere near the top of the range."""
         path = self.book("Cragside.epub", CRAGSIDE)
         source = FakeSource(found=None, candidates=[A_NEAR_MISS])
 
-        outcome = self.corrector(source=source, confidence=1.0).correct(path)
+        outcome = self.corrector(source=source, strong_score=1.0).correct(path)
 
-        self.assertFalse(outcome.matched, "0.84 does not clear 1.0")
+        self.assertFalse(outcome.matched, "0.9070 does not clear 1.0")
         self.assertTrue(outcome.unverified)
 
     def test_the_best_of_several_candidates_is_the_one_accepted(self):
@@ -1882,22 +1888,23 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
     def test_a_near_miss_says_which_book_it_was_and_what_was_wrong_with_it(self):
         """A book that was found, trusted less, but still named.
 
-        The candidate is the right author and a title that only contains the
-        file's, with the wrong position in the series on top: 0.84, under the
-        threshold, and named rather than silently dropped.
+        The candidate is the right author and the file's own title with the
+        bracket taken off, so the title and the author both agree exactly and
+        only the series position disagrees: 0.90, under the 0.95 threshold this
+        pass applies, and named rather than silently dropped.
         """
         path = self.book("Cragside.epub", CRAGSIDE)
 
         outcome = self.corrector(
-            source=FakeSource(found=None, candidates=[A_NEAR_MISS])
+            source=FakeSource(found=None, candidates=[A_NEAR_MISS]), strong_score=0.95
         ).correct(path)
 
         self.assertFalse(outcome.matched)
         self.assertIn(
             "no source among hardcover has an edition called Cragside", outcome.fragment()
         )
-        self.assertIn("confidence 0.84", outcome.fragment())
-        self.assertIn("contained", outcome.fragment())
+        self.assertIn("confidence 0.90", outcome.fragment())
+        self.assertIn("the full titles agree", outcome.fragment())
 
     def test_a_book_the_source_has_nothing_like_is_not_named_at_all(self):
         """Nothing in the reply agrees on title or author, so there is no near miss."""
@@ -2008,11 +2015,11 @@ class BooksWithoutAnIsbnTests(CorrectionTestCase):
         )
 
         outcome = self.corrector(
-            source=FakeSource(found=None, candidates=[nearly])
+            source=FakeSource(found=None, candidates=[nearly]), strong_score=0.95
         ).correct(path)
 
         line = outcome.fragment()
-        self.assertIn("confidence 0.84", line)
+        self.assertIn("confidence 0.90", line)
         self.assertIn(f"marked {UNVERIFIED_TAG}", line)
 
     def test_a_title_the_source_does_not_know_is_not_a_match(self):
@@ -2583,9 +2590,10 @@ class TheSourcePriorityListTests(CorrectionTestCase):
     def test_no_source_offering_anything_good_enough_names_the_near_miss(self):
         """A near miss is named, and the book is left alone.
 
-        The right author and a title that only contains the file's, with the
-        wrong position in the series on top: 0.84, under the threshold, and
-        named rather than silently dropped.
+        The right author and the file's own title with the bracket taken off, so
+        the title and the author both agree exactly and only the series position
+        disagrees: 0.90, under the 0.95 threshold this pass applies, and named
+        rather than silently dropped.
         """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
         original_entries = entries_of(path)
@@ -2599,6 +2607,7 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         outcome = self.corrector_over(
             FakeSource(found=None, candidates=[nearly]),
             self.a_second_source(candidate=nearly),
+            strong_score=0.95,
         ).correct(path)
 
         self.assertFalse(outcome.matched)
@@ -2606,7 +2615,7 @@ class TheSourcePriorityListTests(CorrectionTestCase):
             "no source among hardcover, google_books has an edition called Cragside",
             outcome.fragment(),
         )
-        self.assertIn("confidence 0.84", outcome.fragment())
+        self.assertIn("confidence 0.90", outcome.fragment())
         # A near miss is still a miss: none of the candidate's values are written,
         # and the book is marked rather than corrected - which is what CBO-39 adds
         # to this case. Take the mark off and the file is the one that arrived,
@@ -3642,6 +3651,7 @@ class GenreMappingTests(CorrectionTestCase):
             source=FakeSource(found=None, candidates=[A_NEAR_MISS]),
             genres=self.ALLOWED,
             llm=self.spent("genre-mapping-murder.json"),
+            strong_score=0.95,
         )
 
         outcome = self.deliver(path, corrector)
@@ -3910,3 +3920,4 @@ class GenreMappingTests(CorrectionTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

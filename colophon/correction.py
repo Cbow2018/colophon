@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from colophon import epub
-from colophon.config import DEFAULT_CONFIDENCE, FIELD_DEFAULTS, KNOWN_FIELDS
+from colophon.config import DEFAULT_STRONG_SCORE, FIELD_DEFAULTS, KNOWN_FIELDS
 from colophon.epub import UNVERIFIED_TAG, Edits, EpubError, unmarked
 from colophon.googlebooks import GoogleBooks
 from colophon.hardcover import Hardcover
@@ -29,10 +29,10 @@ from colophon.llm import (
 )
 from colophon.matching import (
     FileBook,
-    nearest_candidate,
     primary_language,
-    score_candidate,
+    rank,
     search_titles,
+    top_candidates,
 )
 from colophon.record import AUTHOR, SERIES, Match, book_key
 from colophon.sources import SourceError, fetcher_for
@@ -67,11 +67,6 @@ TITLE_MATCHED_BY = "title and author"
 
 # Who chose the record a book was corrected from, when it was not the rules.
 LLM_CHOOSER = "llm"
-
-# How many candidates one source may contribute to a single prompt. A long tail
-# of lookalikes would otherwise bury the right record and cost tokens for it.
-# `top_candidates` is where it is applied, once per source's own reply.
-CANDIDATES_PER_SOURCE = 5
 
 # What a change is attributed to when Colophon itself made it rather than a
 # source: the unverified tag, and the note in the description beside it. It is
@@ -355,7 +350,7 @@ class Corrector:
         fields=None,
         add_cover=True,
         fetch=None,
-        confidence=DEFAULT_CONFIDENCE,
+        strong_score=DEFAULT_STRONG_SCORE,
         llm=None,
         record=None,
         overrides=None,
@@ -369,12 +364,15 @@ class Corrector:
         # opinion about, so it is simply not written.
         self.fields = dict(fields or FIELD_DEFAULTS)
         self.add_cover = add_cover
-        # How sure a title-and-author match has to be before it counts as one.
-        # The design spec's 0.85, adjustable, and the only thing that decides
-        # whether a candidate is a match or a near miss. The LLM's own pick is
-        # held to the same number, which is a change to what the ticket implies:
-        # see docs/research/cbo-40-llm-fallback-chooser.md, Q4.
-        self.confidence = confidence
+        # How sure a title-and-author match has to be before it counts as one:
+        # `strong_score`, the multi-candidate bar, and the only thing that
+        # decides whether a candidate is a match or a near miss. The bands and
+        # the second threshold a singleton is held to are CBO-59's; this walk
+        # still reads one number, so nothing about how it stops has changed. The
+        # LLM's own pick is held to the same number, which is a change to what
+        # the ticket implies: see docs/research/cbo-40-llm-fallback-chooser.md,
+        # Q4.
+        self.strong_score = strong_score
         # The fallback chooser, or None when the user has not set one up. No LLM
         # means uncertain books take the unverified path rather than waiting.
         self.llm = llm
@@ -438,7 +436,7 @@ class Corrector:
             dry_run=config.dry_run,
             fields=config.fields,
             add_cover=config.add_cover,
-            confidence=config.confidence,
+            strong_score=config.strong_score,
             llm=llm,
             record=record,
             overrides=dict(config.authors),
@@ -549,7 +547,10 @@ class Corrector:
         # A `dc:language` may be regional (`en-GB`) or three-letter (`eng`); the
         # source indexes editions by the primary code, so that is what is asked.
         language = primary_language(book.language) or None
-        file_book = FileBook(book.title, book.authors, language)
+        # The file's own date is what §2's year field compares, and the sources
+        # carry theirs on the candidate. A file with no date simply does not have
+        # that field compared, which is why a sparse file is not punished for it.
+        file_book = FileBook(book.title, book.authors, language, book.date)
         author = next((name for name in book.authors if str(name).strip()), None)
 
         nearest = None
@@ -565,11 +566,14 @@ class Corrector:
             except SourceError as error:
                 return self._failed(source, error, title)
 
-            # One pass: the nearest candidate is measured once, and what was
-            # measured is what gets written or named.
-            match = nearest_candidate(file_book, candidates)
+            # One pass: the pool is measured once, and what was measured is what
+            # gets written or named. The single best match is the leader, which
+            # is what a caller that means to write a book acts on; the ordering
+            # and the gap are what CBO-59's banding reads.
+            ranked = rank(file_book, candidates)
+            match = ranked.leader
             # Both the number and `agrees`, because the threshold is a setting:
-            # at 0.85 the ceiling under a candidate that agrees on neither half
+            # at 0.89 the ceiling under a candidate that agrees on neither half
             # already refuses it, and at a lower one the number alone would not.
             # A candidate that is not an explanation of this book is never
             # written from on the rules' say-so at any setting; it goes to the
@@ -577,9 +581,9 @@ class Corrector:
             if (
                 match is not None
                 and match.agrees
-                and match.confidence >= self.confidence
+                and match.score >= self.strong_score
             ):
-                return self._write(path, match.candidate, match.confidence, book=book)
+                return self._write(path, match.candidate, match.score, book=book)
             # No match yet, so this source's best few are what the model may be
             # shown. The cap is per source, so a second source's best record is
             # never crowded out by the first source's long tail - which is the
@@ -593,7 +597,7 @@ class Corrector:
             if (
                 match is not None
                 and match.agrees
-                and (nearest is None or match.confidence > nearest.confidence)
+                and (nearest is None or match.score > nearest.score)
             ):
                 nearest = match
 
@@ -647,7 +651,7 @@ class Corrector:
         except (LlmError, LlmLimited) as error:
             return self._wait(path, error), None
 
-        if choice.candidate is not None and choice.confidence >= self.confidence:
+        if choice.candidate is not None and choice.confidence >= self.strong_score:
             return self._write(
                 path, choice.candidate, choice.confidence, book=book, llm=choice
             ), choice
@@ -700,7 +704,7 @@ class Corrector:
             # sought under is the fallback when nothing can be named at all, and
             # also when the candidate a source offered has no title to name it by.
             sought=(nearest.candidate.title or title) if nearest is not None else title,
-            confidence=nearest.confidence if nearest is not None else None,
+            confidence=nearest.score if nearest is not None else None,
             passed_over=nearest.why if nearest is not None else None,
             tried=tuple(tried),
         )
@@ -1155,37 +1159,6 @@ def forget_yesterdays_waits(waiting, today):
     """
     for path in [path for path, (day, _) in waiting.items() if day != today]:
         del waiting[path]
-
-
-def top_candidates(file_book, candidates):
-    """The candidates worth putting to the LLM, best first.
-
-    One source's reply at a time, and at most `CANDIDATES_PER_SOURCE` of them,
-    because a source can return a long
-    tail of lookalikes and every one of them costs tokens and buries the right
-    record a little deeper. The cap is on the *best* few rather than the first
-    few: the ones the source listed first are in whatever order its own search
-    ranked them, while the score is what this project's rules make of them
-    against this file. The best candidate is therefore candidate 1 in the
-    prompt, which is the number a reply is read against.
-
-    The cap is per source, so this is called once per source's own reply and not
-    over everything the sources offered between them: otherwise the first source
-    to answer would spend the whole prompt and a second source's best record
-    would never be shown.
-
-    Being ranked here does not mean being accepted: a candidate that agrees on
-    neither title nor author is not an explanation of the book to the rules, and
-    is still offered to the model - they read the title and the author, and the
-    reason a book needs an LLM is usually that those two are not enough.
-    """
-    scored = [
-        (score_candidate(file_book, candidate), candidate) for candidate in candidates
-    ]
-    # Largest first; ties keep the order the source offered them in, which is
-    # what `sorted` does with a stable sort and a single key.
-    scored.sort(key=lambda pair: pair[0].confidence, reverse=True)
-    return [candidate for _, candidate in scored[:CANDIDATES_PER_SOURCE]]
 
 
 def _series_consistent(edits, found, book):

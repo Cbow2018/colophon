@@ -193,27 +193,47 @@ class LoadConfigTests(unittest.TestCase):
             ("COLOPHON_LOG_LEVEL", "chatty"),
             ("COLOPHON_BACKUP_RETENTION_DAYS", "0"),
             ("COLOPHON_BACKUP_RETENTION_DAYS", "ages"),
-            ("COLOPHON_CONFIDENCE", "certain"),
-            ("COLOPHON_CONFIDENCE", "0"),
-            ("COLOPHON_CONFIDENCE", "1.5"),
-            ("COLOPHON_CONFIDENCE", "-0.1"),
+            ("COLOPHON_STRONG_SCORE", "certain"),
+            ("COLOPHON_STRONG_SCORE", "0"),
+            ("COLOPHON_STRONG_SCORE", "1.5"),
+            ("COLOPHON_STRONG_SCORE", "-0.1"),
+            ("COLOPHON_SINGLETON_SCORE", "certain"),
+            ("COLOPHON_SINGLETON_SCORE", "0"),
+            ("COLOPHON_MEDIUM_SCORE", "1.5"),
+            ("COLOPHON_LLM_FULL_SCAN", "maybe"),
         ]:
             with self.subTest(name=name, value=value), self.assertRaises(ConfigError):
                 load_config(env={name: value})
 
-    def test_the_confidence_threshold_defaults_to_the_design_spec_s_085(self):
+    def test_the_three_thresholds_default_to_the_design_s_own_numbers(self):
+        """§4.1: `strong_score` 0.89, `singleton_score` 0.95, `medium_score` 0.80.
+
+        The first and the third are provisional and move in §4.4's tuning pass;
+        the numbers here are the ones the design ships with.
+        """
         config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
 
-        self.assertEqual(config.confidence, 0.85)
+        self.assertEqual(config.strong_score, 0.89)
+        self.assertEqual(config.singleton_score, 0.95)
+        self.assertEqual(config.medium_score, 0.80)
+        self.assertFalse(config.llm_full_scan, "the flag ships off")
 
-    def test_the_threshold_can_be_set_in_the_file_or_the_environment(self):
+    def test_the_old_confidence_key_is_gone_rather_than_aliased(self):
+        """§4.5: renaming it is the point, so a stale key is refused, not read."""
         path = self.write_config("confidence = 0.9\n")
 
-        from_file = load_config(env={"COLOPHON_CONFIG": str(path)})
-        from_env = load_config(env={"COLOPHON_CONFIDENCE": "0.7"})
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
 
-        self.assertEqual(from_file.confidence, 0.9)
-        self.assertEqual(from_env.confidence, 0.7, "the environment wins")
+    def test_the_thresholds_can_be_set_in_the_file_or_the_environment(self):
+        path = self.write_config("strong_score = 0.9\nmedium_score = 0.75\n")
+
+        from_file = load_config(env={"COLOPHON_CONFIG": str(path)})
+        from_env = load_config(env={"COLOPHON_STRONG_SCORE": "0.7"})
+
+        self.assertEqual(from_file.strong_score, 0.9)
+        self.assertEqual(from_file.medium_score, 0.75)
+        self.assertEqual(from_env.strong_score, 0.7, "the environment wins")
 
     def test_a_threshold_of_one_is_allowed_because_a_perfect_match_is_reachable(self):
         """The range is `(0, 1]`, and the top of it is a setting rather than a wall.
@@ -223,12 +243,12 @@ class LoadConfigTests(unittest.TestCase):
         boundary is tested from both sides: 1.0 is accepted, and just above it is
         refused because no candidate could ever clear it.
         """
-        config = load_config(env={"COLOPHON_CONFIDENCE": "1.0"})
+        config = load_config(env={"COLOPHON_STRONG_SCORE": "1.0"})
 
-        self.assertEqual(config.confidence, 1.0)
+        self.assertEqual(config.strong_score, 1.0)
         for refused in ("1.0000001", "1.5"):
             with self.subTest(given=refused), self.assertRaises(ConfigError):
-                load_config(env={"COLOPHON_CONFIDENCE": refused})
+                load_config(env={"COLOPHON_STRONG_SCORE": refused})
 
     def test_every_field_has_a_rule_and_the_defaults_are_the_ones_documented(self):
         """The design spec's own list, which is what a fresh install gets."""
@@ -357,12 +377,26 @@ class LoadConfigTests(unittest.TestCase):
         )
         self.assertEqual(config.sources, KNOWN_SOURCES)
         self.assertTrue(config.add_cover)
-        self.assertEqual(config.confidence, 0.85, "the example's threshold is the default")
+        self.assertEqual(
+            config.strong_score, 0.89, "the example's threshold is the default"
+        )
+        self.assertEqual(config.singleton_score, 0.95)
+        self.assertEqual(config.medium_score, 0.80)
+        self.assertFalse(config.llm_full_scan)
         self.assertTrue(config.dry_run, "the example ships as a dry run")
         self.assertEqual(
             config.allowed_genres, (), "and with no tags list, as it ships"
         )
-        for name in ("add_cover", "confidence", "title", "language", "allowed_genres"):
+        for name in (
+            "add_cover",
+            "strong_score",
+            "singleton_score",
+            "medium_score",
+            "llm_full_scan",
+            "title",
+            "language",
+            "allowed_genres",
+        ):
             with self.subTest(setting=name):
                 self.assertIn(f"# {name} = ", written, "shown, and commented out")
 
