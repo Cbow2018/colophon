@@ -2885,14 +2885,15 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         self.assertEqual(outcome.confidence, 1.0, "and the tie is what stopped it")
         self.assertEqual(len(source.asked_titles), 1, "one request, one pool")
 
-    def test_the_pool_is_what_corrects_the_book_the_first_source_got_wrong(self):
-        """Gathered, the pool sees an edition the first source alone did not.
+    def test_the_pool_is_what_picks_the_record_that_gets_written(self):
+        """Gathered, the pool prefers the better of two records of one edition.
 
-        Source one offers a different printing of the work - the same title and
-        author a year out, which is §2.1 row 4's 0.9070 and what the shipped
-        walk writes from. Source two has the edition the file is, and the pool
-        grades the two together: the file's own edition leads by 0.09, so it is
-        that record, not source one's, that is written.
+        Source one's record carries the edition's ISBN and the wrong series
+        position; source two's has no ISBN and the right one. The two are
+        different records to `dedupe`, which groups by ISBN first, so the pool
+        holds both and grades them together: the 1.0 leads the 0.9070 by 0.09,
+        which is over the band's gap, so it is source two's record the book is
+        written from - not the first one a source happened to offer.
         """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE_DATED, version="2.0")
         first = FakeSource(
@@ -2904,7 +2905,8 @@ class TheSourcePriorityListTests(CorrectionTestCase):
                     authors=("L.J. Ross",),
                     series="DCI Ryan Mysteries",
                     series_number="11",
-                    date="2018-03-01",
+                    date="2017-07-07",
+                    isbn=ISBN,
                     language="en",
                 )
             ],
@@ -2924,7 +2926,8 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         outcome = self.corrector_over(first, second).correct(path)
 
         self.assertTrue(outcome.matched, outcome.fragment())
-        self.assertEqual(outcome.source, "google_books", "the edition the file is")
+        self.assertEqual(outcome.confidence, 1.0, "the edition the file is")
+        self.assertEqual(outcome.source, "google_books", "so that is whose values are")
         self.assertEqual(calibre_series(path), ("DCI Ryan Mysteries", "6"))
 
     def test_a_pooled_singleton_in_the_medium_band_is_not_written(self):
