@@ -97,6 +97,8 @@ query BooksByTitle($titles: [String!]!%s) {
     }
   ) {
     title
+    isbn_13
+    isbn_10
     publisher { name }
     release_date
     image { url }
