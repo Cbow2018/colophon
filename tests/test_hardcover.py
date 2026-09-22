@@ -202,6 +202,8 @@ class TitleLookupTests(unittest.TestCase):
         self.assertEqual(cragside.series, "DCI Ryan Mysteries")
         self.assertEqual(cragside.series_number, "6")
         self.assertEqual(cragside.language, "en")
+        # Read off the edition, which is the only place Hardcover keeps one.
+        self.assertEqual(cragside.isbn, CRAGSIDE)
 
     def test_it_reads_berwick_and_belsay_too(self):
         """Belsay's file carries no series number; Hardcover has #23."""
@@ -653,6 +655,122 @@ class GenreTests(unittest.TestCase):
         """The two shipped queries are the whole ask; nothing else fetches a book."""
         self.assertIn("cached_tags", hardcover.QUERY)
         self.assertIn("cached_tags", hardcover.TITLE_QUERY)
+
+
+# Every field Colophon writes that Hardcover holds, and the name the schema
+# gives it on the wire. `Candidate` calls the release date `date` and the ISBN
+# `isbn`; the edition calls them `release_date` and `isbn_10`/`isbn_13`, and
+# either ISBN answers for the one payload field, which is why one entry here
+# names two columns. A field Colophon writes appears in the query that fetches
+# it or the write silently has nothing to write: that is CBO-73, where the
+# title query traded the ISBNs away for the publisher and the date.
+ASKED_FOR = {
+    "title": ("title",),
+    "authors": ("author",),
+    "series": ("book_series",),
+    "series_number": ("position",),
+    "description": ("description",),
+    "publisher": ("publisher",),
+    "date": ("release_date",),
+    "isbn": ("isbn_10", "isbn_13"),
+    "language": ("language",),
+}
+
+
+def selection_set(query):
+    """The fields a query returns, with every argument taken out of it.
+
+    Arguments go first because the `where` clause spells out field names too,
+    and `QUERY` filters on `isbn_13` while selecting it. Checking the whole
+    string cannot tell a field that is fetched from one that is only filtered
+    on, and a query doing the latter returns no ISBN while reading as correct.
+    """
+    fields, depth, arguments = None, 0, 0
+    for character in query:
+        if character == "(":
+            arguments += 1
+        elif character == ")":
+            arguments -= 1
+        elif arguments:
+            continue
+        elif character == "{":
+            depth += 1
+            if fields is None:
+                fields = ""
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return fields
+        elif fields is not None:
+            fields += character
+    return fields or ""
+
+
+def asks_for(query):
+    """Which of the fields Colophon writes this query fetches. See `ASKED_FOR`."""
+    fields = selection_set(query)
+    return {
+        name for name, wanted in ASKED_FOR.items() if any(w in fields for w in wanted)
+    }
+
+
+class QueryFieldTests(unittest.TestCase):
+    """What each shipped query asks Hardcover for, read off the wire.
+
+    The committed fixtures predate CBO-38 and still carry the ISBNs, so a reply
+    parsed out of one says nothing about what the query asks for today. These
+    read the request instead: a field missing from it is a field lost, whatever
+    an older recording happens to contain.
+    """
+
+    def sent(self, language):
+        """The query `by_title` puts on the wire for a language of this length."""
+        replay = Replay()
+        Hardcover(TOKEN, transport=replay).by_title(["A Title"], language)
+        return replay.sent["body"]["query"]
+
+    def test_every_written_field_is_asked_for_on_every_path(self):
+        """The general form of CBO-73: nothing Colophon writes is left unfetched."""
+        paths = {
+            "the ISBN path": self.isbn_path_query(),
+            "a two-letter language": self.sent("en"),
+            "a three-letter language": self.sent("eng"),
+            "no language at all": self.sent(None),
+        }
+
+        for path, query in paths.items():
+            with self.subTest(path=path):
+                self.assertEqual(
+                    asks_for(query),
+                    set(ASKED_FOR),
+                    f"{path} does not fetch everything Colophon writes",
+                )
+
+    def test_the_title_variants_ask_for_the_same_fields(self):
+        """Three copies of one query is how CBO-73 happened: they must not drift."""
+        by_length = [self.sent("en"), self.sent("eng"), self.sent(None)]
+
+        self.assertEqual([asks_for(query) for query in by_length], [set(ASKED_FOR)] * 3)
+
+    def test_a_field_only_filtered_on_is_not_fetched(self):
+        """The shape the checks above have to fail on, since CBO-73 was that shape.
+
+        An ISBN asked about but not asked for is a query that returns no ISBN,
+        and `_eq` in the argument spells the field name just as the selection
+        does. Reading the whole string passes this, which is why it is read
+        without the arguments.
+        """
+        filtered = hardcover.QUERY.replace("    isbn_13\n    isbn_10\n", "")
+
+        self.assertIn("isbn_13", filtered)
+        self.assertNotIn("isbn_13", selection_set(filtered))
+        self.assertEqual(set(ASKED_FOR) - asks_for(filtered), {"isbn"})
+
+    def isbn_path_query(self):
+        """The query `by_isbn` puts on the wire."""
+        replay = Replay()
+        Hardcover(TOKEN, transport=replay).by_isbn(CRAGSIDE)
+        return replay.sent["body"]["query"]
 
 
 class GenreSplitTests(unittest.TestCase):
