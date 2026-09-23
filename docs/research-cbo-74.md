@@ -457,6 +457,43 @@ There is a third thing in it: `book.cached_tags` is present with keys `Tag, Mood
 Genre, Content Warning`. So the live title reply carries `cached_tags` — which the
 committed pre-CBO-38 title fixtures lack — and the query asks for it.
 
+### 3.3.1 Session 2: the Hardcover numbers, re-taken (2026-09-23)
+
+The recording above is committed, and the whole corpus is re-recorded. Re-measured
+against the replacement, **every Hardcover title-path edition in the corpus is
+dated — 13 of 13**, and every Hardcover fixture in the corpus is dated 1/1.
+
+| Fixture | Editions | Dated | Dates |
+| -- | -- | -- | -- |
+| `by-title-cragside.json` | 1 | 1 | `2017-07-07` |
+| `by-title-cragside-other-fields.json` | 1 | 1 | `2017-07-07` |
+| `by-title-berwick.json` | 2 | 2 | `2026-02-26` (both) |
+| `by-title-belsay.json` | 1 | 1 | `2025-01-31` |
+| `by-title-the-infirmary.json` | 4 | 4 | `2019-02-10`, `2019-02-10`, `2019-01-01`, `2025-10-09` |
+| `by-title-the-infirmary-other-fields.json` | 4 | 4 | the same four |
+
+**CBO-68's decision 4 is answered in the affirmative**: Hardcover populates
+`release_date` on title replies, so D3's primary key is not degenerate on
+Hardcover and the Infirmary's three L.J. Ross editions can be ordered by it.
+
+Three things fall out of the re-record that the old fixtures could not show:
+
+1. **The Infirmary's four editions are two works, not one.** The reply carries two
+   distinct `book.id`s — 1198266 for the three L.J. Ross editions, 2284109 for the
+   fourth — so the collapse CBO-65 and §1 describe is now visible in a fixture and
+   not only argued from one.
+2. **The tiebreak is not idle.** `by-title-berwick.json`'s two editions carry the
+   **same** date, `2026-02-26`. §3.1's first consequence (that a date-less
+   Hardcover degenerates D3 to its tiebreak) no longer holds, but two editions of
+   one work agreeing on a date is exactly the case the tiebreak exists for.
+3. **§4's Poe numbers are dead.** They were computed off a 10-item reply to a
+   request the client no longer makes; the re-record returned 20 volumes. The
+   frozen `hand-made/poe-core-cases.json` preserves the five-volume tie and the
+   gap of 0.0000, and that is all of §4 that survives.
+
+**CBO-68 must not re-quote the 0-of-8.** It was a recording-era gap, not a source
+gap, and the fixtures now prove the opposite.
+
 ## 4. The recording matrix
 
 Ordered by what unblocks CBO-68 first, then CBO-69, then the rest. **Do not run
