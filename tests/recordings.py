@@ -339,11 +339,23 @@ SKIPPED = {
     "googlebooks/hand-made/poe-core-cases.json": (
         "hand-made: a frozen case, never re-recorded"
     ),
+    "googlebooks/hand-made/no-categories.json": (
+        "hand-made: the CBO-38-era ISBN reply, from before the mask asked for "
+        "categories, freezing what a volume with no categories answers"
+    ),
     "hardcover/hand-made/work-without-title.json": (
         "hand-made: a frozen case, never re-recorded"
     ),
     "hardcover/hand-made/wider-than-the-question.json": (
         "hand-made: a frozen case, never re-recorded"
+    ),
+    "hardcover/hand-made/sparse-isbn-reply.json": (
+        "hand-made: the pre-CBO-38 ISBN reply, freezing what a sparse reply "
+        "answers for the ids, the tags, the publisher and the cover"
+    ),
+    "hardcover/hand-made/cbo-38-without-tags.json": (
+        "hand-made: the CBO-38-era title reply, from before CBO-42 asked for "
+        "cached_tags"
     ),
 }
 
