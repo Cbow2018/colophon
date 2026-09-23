@@ -517,7 +517,13 @@ class HandMadeCaseTests(unittest.TestCase):
         self.assertEqual(payload["totalItems"], 300, "the reply's own count is kept")
         self.assertEqual(
             [item["id"] for item in payload["items"]],
-            ["q6T5zQEACAAJ", "XcE-EAAAQBAJ", "_hSNzQEACAAJ", "du6sYyygMgIC", "nPByzgEACAAJ"],
+            [
+                "q6T5zQEACAAJ",
+                "XcE-EAAAQBAJ",
+                "_hSNzQEACAAJ",
+                "du6sYyygMgIC",
+                "nPByzgEACAAJ",
+            ],
         )
 
     def test_the_casing_cbo_69_reproduces_is_the_one_that_is_frozen(self):
@@ -537,7 +543,9 @@ class HandMadeCaseTests(unittest.TestCase):
         candidates = source.by_title(
             ["The Masque of the Red Death"], "en", "Edgar Allan Poe"
         )
-        scores = [score_candidate(FILE_BOOK, candidate).score for candidate in candidates]
+        scores = [
+            score_candidate(FILE_BOOK, candidate).score for candidate in candidates
+        ]
 
         self.assertEqual(len(scores), 5, "five volumes, five candidates")
         self.assertEqual(set(scores), {scores[0]}, f"not a tie: {scores}")
