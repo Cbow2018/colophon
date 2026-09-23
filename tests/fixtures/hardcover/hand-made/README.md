@@ -77,9 +77,11 @@ contain.
 The re-recordable ISBN and title recordings stay in the parent directory, even the
 ones that have drifted, because a ticket does not rest on a drifted reply — it
 rests on a reply that was true when it was taken and that nothing may now
-overwrite. `by-isbn-two-series.json` is the one to watch: it is a *deliberate*
-off-spec recording rather than a drifted one, kept because its whole point is the
-natural order Hardcover returns, which the shipped query's `order_by` destroys. It
-is called out at `README.md:199-202` and is exempted by name in the fixture↔query
-guard. It stays live because re-recording it is a decision nobody has taken, not
-because it is evidence CBO-74 froze.
+overwrite.
+
+`by-isbn-two-series.json` was expected to be the exception: recorded *without* the
+query's `order_by` on purpose, because the point of it was the natural order
+Hardcover returns, the featured series last. **The 2026-09-23 re-record showed
+that claim was false** — asked with the shipped `order_by`, Hardcover returns the
+featured row first anyway, so the fixture was never evidence about ordering and is
+now an ordinary live recording. See the parent `README.md`.

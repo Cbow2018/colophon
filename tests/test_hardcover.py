@@ -175,7 +175,15 @@ class LookupTests(unittest.TestCase):
         self.assertIsNone(book.series_number)
 
     def test_it_prefers_the_series_hardcover_marks_as_featured(self):
-        """Mistborn is in three series, and Hardcover lists the featured one last."""
+        """Mistborn is in three series, and only one of them is the book's own.
+
+        The recording has the featured row first and the other two after it, so
+        this no longer shows the client correcting a server that puts the featured
+        one last — the old recording was made without the query's `order_by` and
+        did show that, and the 2026-09-23 re-record proved the claim false. What
+        it shows now is that `_series` picks the row carrying `featured` rather
+        than simply taking the first.
+        """
         source = self.source(Replay("by-isbn-two-series.json"))
 
         book = source.by_isbn(MISTBORN)
