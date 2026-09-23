@@ -15,6 +15,24 @@ query changes, and let the test that reads it assert the shape rather than the
 values. A fixture here is the opposite. Re-recording one destroys the case, and
 there is no test that can tell that from a fix.
 
+## `no-categories.json`
+
+A real recording, taken from this repository's own history rather than invented:
+`by-isbn-cragside-other-fields.json` as it stood before the 2026-09-23 re-record,
+when the shipped mask did not yet ask for `items/volumeInfo/categories`. Recovered
+with `git show <the commit before the re-record>:tests/fixtures/googlebooks/by-isbn-cragside-other-fields.json`.
+
+It is a CBO-38-era ISBN reply: one Cragside volume carrying `title`, `authors`,
+`publishedDate`, `description`, `industryIdentifiers` and `language`, and **no
+`categories`**. The mask asks for categories today and the re-record returned
+them, so `test_googlebooks.GenreTests.test_a_candidate_with_no_categories_carries_no_genres`
+would otherwise be asserting an absence against a reply that has the field. The
+case is that a volume with no categories answers no genres — absent, not a bug.
+
+One file, one reader, and it is not the same claim as `poe-core-cases.json` below:
+this one freezes a *shape* the client has to handle, that one freezes *values* two
+tickets rest on.
+
 ## `poe-core-cases.json`
 
 Five volumes out of the ten in the live `googlebooks/by-title-poe.json`, frozen
@@ -74,6 +92,8 @@ a re-record is indistinguishable from a fix. That is what this file is for.
 
 ## Adding a fixture here
 
-Only when a ticket's case would be destroyed by re-recording, and only with a row
-in this README naming the ticket, the case, and why the live file cannot carry it.
-If a live recording would do, it belongs in the parent directory.
+Only when re-recording would destroy the case: a ticket's evidence, or a client
+behaviour a test asserts that a live file can stop demonstrating. Each one needs a
+row in this README naming the ticket (or the behaviour), the case, and why the live
+file cannot carry it. If a live recording would do, it belongs in the parent
+directory.

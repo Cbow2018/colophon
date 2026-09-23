@@ -183,5 +183,112 @@ class PaceTests(unittest.TestCase):
         sleep.assert_not_called()
 
 
+class CaptureKeyTests(unittest.TestCase):
+    """The captures are kept under a key that names the source as well as the file.
+
+    `by-title-cragside.json` is declared under both sources. Keying the captures
+    on the fixture name alone let the second source's reply stand in for the
+    first: `fixtures/hardcover/` got a Google body and `fixtures/googlebooks/`
+    got a Hardcover one, and the run reported success throughout.
+    """
+
+    def test_the_corpus_really_does_share_names_across_sources(self):
+        """If this stops being true the tests below prove nothing."""
+        names = [row["fixture"] for row in recorder.RECORDINGS]
+        shared = {name for name in names if names.count(name) > 1}
+
+        self.assertEqual(
+            shared,
+            {
+                "by-isbn-cragside-authors.json",
+                "by-title-belsay.json",
+                "by-title-berwick.json",
+                "by-title-cragside-other-fields.json",
+                "by-title-cragside.json",
+                "by-title-the-infirmary.json",
+            },
+        )
+
+    def test_each_capture_is_keyed_by_its_source_and_its_name(self):
+        keys = [recorder.label(row) for row in recorder.RECORDINGS]
+
+        self.assertEqual(len(keys), len(set(keys)), "two rows share a capture key")
+
+    def test_one_sources_reply_cannot_stand_in_for_the_others(self):
+        rows = [
+            {"source": "hardcover", "fixture": "by-title-cragside.json"},
+            {"source": "googlebooks", "fixture": "by-title-cragside.json"},
+        ]
+
+        replies = {recorder.label(row): row["source"] for row in rows}
+
+        self.assertEqual(len(replies), 2)
+        self.assertEqual(replies["hardcover/by-title-cragside.json"], "hardcover")
+        self.assertEqual(replies["googlebooks/by-title-cragside.json"], "googlebooks")
+
+    def test_a_body_of_the_wrong_shape_is_refused_rather_than_written(self):
+        """A cross-source mix-up stops the run instead of corrupting the corpus."""
+        rows = [{"source": "hardcover", "fixture": "by-title-cragside.json"}]
+        google_body = {"totalItems": 2, "items": []}
+
+        with self.assertRaises(AssertionError) as caught:
+            recorder.write(rows, {recorder.label(rows[0]): google_body})
+
+        message = str(caught.exception)
+        self.assertIn("googlebooks", message)
+        self.assertIn("hardcover", message)
+
+    def test_each_sources_reply_lands_in_its_own_directory(self):
+        """The whole run, with the two sources answering differently on purpose."""
+        rows = [
+            {"source": "hardcover", "fixture": "by-title-cragside.json"},
+            {"source": "googlebooks", "fixture": "by-title-cragside.json"},
+            {"source": "hardcover", "fixture": "by-title-belsay.json"},
+            {"source": "googlebooks", "fixture": "by-title-belsay.json"},
+        ]
+        bodies = {
+            "hardcover": {"data": {"editions": [{"title": "from hardcover"}]}},
+            "googlebooks": {"totalItems": 1, "items": [{"id": "from google"}]},
+        }
+        written = {}
+
+        def capture(row, *_args, **_kwargs):
+            return bodies[row["source"]], None
+
+        with (
+            mock.patch.object(recorder, "capture", side_effect=capture),
+            mock.patch("sys.stdout", new=io.StringIO()),
+            mock.patch.object(
+                recorder,
+                "fixture_path",
+                side_effect=lambda name, source: Path(f"{source}/{name}"),
+            ),
+            mock.patch.object(
+                Path,
+                "write_text",
+                lambda self, text, encoding=None: written.update({str(self): text}),
+            ),
+            mock.patch.object(Path, "relative_to", lambda self, other: self),
+        ):
+            replies, problem = recorder.collect(rows, "a-token", "a-key", 0)
+            recorder.write(rows, replies)
+
+        self.assertIsNone(problem)
+        self.assertEqual(
+            {path.replace("\\", "/") for path in written},
+            {
+                "hardcover/by-title-cragside.json",
+                "googlebooks/by-title-cragside.json",
+                "hardcover/by-title-belsay.json",
+                "googlebooks/by-title-belsay.json",
+            },
+        )
+        for path, text in written.items():
+            source = path.replace("\\", "/").split("/")[0]
+            expected = "from hardcover" if source == "hardcover" else "from google"
+            with self.subTest(path=path):
+                self.assertIn(expected, text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -224,6 +224,29 @@ def tokens():
     return token, key, missing
 
 
+SHAPE_KEYS = {"hardcover": "data", "googlebooks": "totalItems"}
+
+
+def check_shape(row, payload):
+    """Whether this body is one this source could have sent, as a complaint or None.
+
+    The cheap half of the cross-source check: Hardcover answers under `data` and
+    Google under `totalItems`, so a body keyed the other way is provably not this
+    source's reply. It exists because a mix-up here is silent - the file is
+    written, the run prints success, and the wrong bytes are committed as a
+    recording of a query that never produced them.
+    """
+    wanted = SHAPE_KEYS[row["source"]]
+    found = [name for name, key in SHAPE_KEYS.items() if key in payload]
+    if wanted in payload:
+        return None
+    other = f", which is a {found[0]} body" if found else ""
+    return (
+        f"{label(row)}: the reply has no {wanted!r} key{other}; "
+        f"a {row['source']} reply cannot look like this"
+    )
+
+
 def collect(rows, token, key, pace_seconds=HARDCOVER_PACE_SECONDS):
     """Fetch every row, then write them all: nothing lands unless all of it does."""
     replies = {}
@@ -231,7 +254,13 @@ def collect(rows, token, key, pace_seconds=HARDCOVER_PACE_SECONDS):
         payload, problem = capture(row, token, key, pace_seconds)
         if problem:
             return None, f"{label(row)}: {problem}"
-        replies[row["fixture"]] = payload
+        problem = check_shape(row, payload)
+        if problem:
+            return None, problem
+        # Keyed by source as well as name: the two sources reuse fixture names,
+        # and keying on the name alone let one source's reply be written as the
+        # other's.
+        replies[label(row)] = payload
         print(f"  {label(row):<60} {describe(payload)}")
     return replies, None
 
@@ -239,9 +268,11 @@ def collect(rows, token, key, pace_seconds=HARDCOVER_PACE_SECONDS):
 def write(rows, replies):
     for row in rows:
         path = fixture_path(row["fixture"], row["source"])
-        path.write_text(
-            json.dumps(replies[row["fixture"]], indent=2) + "\n", encoding="utf-8"
-        )
+        payload = replies[label(row)]
+        problem = check_shape(row, payload)
+        if problem:
+            raise AssertionError(problem)
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(f"wrote {path.relative_to(ROOT)}")
 
 

@@ -79,6 +79,7 @@ from tests.sources import (
 from tests.tempdir import TemporaryDirectory
 from tests.test_googlebooks import Replay as GoogleReplay
 from tests.test_googlebooks import ReplayByQuery
+from tests.test_hardcover import HAND_MADE as HARDCOVER_HAND_MADE
 from tests.test_hardcover import Replay
 from tests.test_llm import Replay as LlmReplay
 from tests.test_llm import today
@@ -3945,9 +3946,14 @@ class GenreMappingTests(CorrectionTestCase):
             )
         )
 
-    def hardcover_over(self, name):
-        """A real Hardcover client, replaying a recorded reply."""
-        return Hardcover("hardcover-token", transport=Replay(name))
+    def hardcover_over(self, name, folder=None):
+        """A real Hardcover client, replaying a recorded reply.
+
+        `folder` is for the frozen cases in `hand-made/`, which a test asserting
+        an absence has to read: a re-record answers the absence.
+        """
+        transport = Replay(name) if folder is None else Replay(name, folder=folder)
+        return Hardcover("hardcover-token", transport=transport)
 
     def deliver(self, path, corrector, record=None):
         """Correct a book the way the relay does, record write and all."""
@@ -4129,7 +4135,9 @@ class GenreMappingTests(CorrectionTestCase):
     def test_a_recording_made_before_this_ticket_has_no_genres_to_ask_about(self):
         """A reply with no `cached_tags` is absent, not a bug."""
         corrector = self.corrector(
-            source=self.hardcover_over("by-isbn-found.json"),
+            source=self.hardcover_over(
+                "sparse-isbn-reply.json", folder=HARDCOVER_HAND_MADE
+            ),
             genres=self.ALLOWED,
             llm=self.llm("genre-mapping-murder.json"),
         )

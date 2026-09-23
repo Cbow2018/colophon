@@ -492,7 +492,8 @@ class GenreTests(unittest.TestCase):
     def test_a_candidate_with_no_categories_carries_no_genres(self):
         """The older recordings were made before the mask asked for any."""
         book = GoogleBooks(
-            KEY, transport=Replay("by-isbn-cragside-other-fields.json")
+            KEY,
+            transport=Replay("no-categories.json", folder=HAND_MADE),
         ).by_isbn(CRAGSIDE)
 
         self.assertEqual(book.genres, ())

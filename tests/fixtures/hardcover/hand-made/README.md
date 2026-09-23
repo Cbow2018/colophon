@@ -10,9 +10,11 @@ This is the rule for both `fixtures/hardcover/hand-made/` and
 because the distinction is a different *reason to exist* and a directory is the
 only form that cannot be forgotten when someone adds the next one.
 
-Both files below were named `hand-made-*.json` and sat among the live recordings
-until CBO-74, which is exactly the ambiguity the directory removes: the only
-signal was a word in the filename, and nothing said what it obliged anyone to do.
+## The frozen shapes: replies no book has
+
+These two were named `hand-made-*.json` and sat among the live recordings until
+CBO-74, which is exactly the ambiguity the directory removes: the only signal was
+a word in the filename, and nothing said what it obliged anyone to do.
 
 | File | Was | Reads it | The case, and why a live recording cannot carry it |
 | --- | --- | --- | --- |
@@ -23,12 +25,61 @@ Both are CBO-35's and CBO-36's, and the two ISBNs they carry
 (`9780000000003`, `9780000000004`) are Colophon's own inventions rather than
 numbers any book has — as hand-made as the bodies are.
 
-**What is not here.** The re-recordable ISBN and title recordings stay in the
-parent directory, even the ones that have drifted, because a ticket does not rest
-on a drifted reply — it rests on a reply that was true when it was taken and that
-nothing may now overwrite. `by-isbn-two-series.json` is the one to watch: it is a
-*deliberate* off-spec recording rather than a drifted one, kept because its whole
-point is the natural order Hardcover returns, which the shipped query's `order_by`
-destroys. It is called out at `README.md:199-202` and is exempted by name in the
-fixture↔query guard. It stays live because re-recording it is a decision nobody
-has taken, not because it is evidence CBO-74 froze.
+## The absence cases: replies from before a field existed
+
+These three are **real recordings**, taken from this repository's own history
+rather than invented. The 2026-09-23 re-record gave each of them the field the
+test asserts is missing, which is the correct outcome for the corpus and the end
+of the case — a test cannot assert an absence against a reply that has the field.
+Recovered with `git show <the commit before the re-record>:<path>`.
+
+| File | Was | Recording era | Reads it |
+| --- | --- | --- | --- |
+| `sparse-isbn-reply.json` | `by-isbn-found.json` | pre-CBO-38 | `test_hardcover.LookupTests.test_a_reply_that_does_not_carry_an_id_leaves_it_empty`, `test_hardcover.GenreTests.test_a_recording_made_before_this_ticket_carries_none_either`, `test_correction.GenreMappingTests.test_a_recording_made_before_this_ticket_has_no_genres_to_ask_about` |
+| `sparse-isbn-reply.json` | `by-isbn-no-series.json` | pre-CBO-38 | `test_hardcover.TheOtherFieldsTests.test_a_book_with_no_publisher_or_cover_carries_neither` |
+| `cbo-38-without-tags.json` | `by-title-cragside-other-fields.json` | CBO-38, before CBO-42 | `test_hardcover.TheOtherFieldsTests.test_the_title_path_carries_them_too` |
+
+**One file serves four tests, and that is the point of them.** Its edition carries
+exactly `title`, `isbn_13`, `isbn_10`, `language`, `book`, and its book carries
+exactly `title`, `contributions`, `book_series` — no `description`, no `image`, no
+`release_date`, no `cached_tags`, and no `id` on the author or the series. Four
+assertions in the client are about that one sparse shape:
+
+- `book.author_ids == (None,)` and `book.series_id is None` — CBO-41's ids are
+  absent, and absent is not a bug (`hardcover.py` reads a missing id as `None`);
+- `book.genres == ()` — CBO-42's `cached_tags` is absent, and absent answers no
+  genres;
+- `book.publisher is None` and `book.cover is None` — CBO-38's two edition fields
+  are absent, and neither is invented.
+
+`by-isbn-found.json` and `by-isbn-no-series.json` had byte-identical key sets at
+the edition and book level, so either body serves all four; the Cragside one is
+kept because three of the four tests are about Cragside.
+
+`cbo-38-without-tags.json` is the same kind of thing one era later: the title
+path's reply once CBO-38 had widened the query but before CBO-42 asked for
+`cached_tags`. It carries `description`, `publisher`, `release_date` and `image`,
+and no tags. The `TheOtherFieldsTests` family reads it for the *presence* half of
+CBO-38; `test_the_title_path_carries_them_too` reads it for the blurb and the
+publisher, and would fail against the live file only because the live file has
+grown tags since.
+
+**Why these are here rather than left live.** A re-record answers the absence, so
+a test asserting an absence against a live file is a test with an expiry date that
+nobody wrote down. That is exactly what happened on 2026-09-23: four tests went
+red at once, not because the client broke but because Hardcover answered more of
+the question. Freezing the sparse reply makes the client's behaviour on a sparse
+reply a permanent claim instead of a side effect of what one recording happened to
+contain.
+
+## What is not here
+
+The re-recordable ISBN and title recordings stay in the parent directory, even the
+ones that have drifted, because a ticket does not rest on a drifted reply — it
+rests on a reply that was true when it was taken and that nothing may now
+overwrite. `by-isbn-two-series.json` is the one to watch: it is a *deliberate*
+off-spec recording rather than a drifted one, kept because its whole point is the
+natural order Hardcover returns, which the shipped query's `order_by` destroys. It
+is called out at `README.md:199-202` and is exempted by name in the fixture↔query
+guard. It stays live because re-recording it is a decision nobody has taken, not
+because it is evidence CBO-74 froze.

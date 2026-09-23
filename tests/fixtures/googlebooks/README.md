@@ -46,11 +46,12 @@ against a file spelling it `LJ Ross`: the stops and the spacing do not matter.
 `by-title-nothing.json` is CBO-39's as well as CBO-37's: the unverified path
 begins when no source has the book, so the branch that reads this was asked of
 the live API again with the widened `fields` mask and answered byte-identical
-bytes. Since the reply *is* the empty answer, a second recording of it would be
-the same file twice, so the one CBO-37 made is the one CBO-39's relay test reads,
-through a real `GoogleBooks` client. What the probe established is that the empty
-answer is what a title Google does not have comes back as - not an error - and
-that is now pinned by a test rather than by a second copy of the same 53 bytes.
+bytes. **That was true of the unmasked mask and is no longer true of the shipped
+one.** Both empty files were re-recorded on 2026-09-23, and the shipped mask
+returns `{"totalItems": 0}` — 17 bytes, with no `kind` — where the unmasked
+request returned 53 bytes with `kind: "books#volumes"`. No test reads `kind`, so
+the change is invisible to the suite; it is recorded here because the byte count
+below used to be the evidence that the two recordings agreed.
 
 The two `the-infirmary` recordings are the lookalike pair: two different books
 share a title, and only the author separates them.
@@ -108,9 +109,10 @@ because there is no series to write. See
 `docs/research/cbo-37-google-books.md`.
 
 **No `items` key when nothing matched.** `by-isbn-no-edition.json` and
-`by-title-nothing.json` are both 53 bytes:
-`{"kind": "books#volumes", "totalItems": 0}`. Reading `items` without a default
-would crash on the most ordinary outcome there is.
+`by-title-nothing.json` are both 17 bytes as of the 2026-09-23 re-record:
+`{"totalItems": 0}`. Reading `items` without a default would crash on the most
+ordinary outcome there is. (Before that they were the unmasked 53 bytes,
+`{"kind": "books#volumes", "totalItems": 0}` — same absence, one more key.)
 
 ## The fields CBO-38's rules write
 

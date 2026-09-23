@@ -153,10 +153,17 @@ RECORDINGS = (
         "lookup": "title",
         "book": THE_INFIRMARY_REAGON,
     },
-    # `by-title-nothing.json` is deliberately not here: its reply is the empty
-    # answer, and see `SKIPPED` for why that one stays as it is.
-    # The Google ISBN path. `by-isbn-no-edition.json` is deliberately not here
-    # either, for the same reason.
+    # The empty reply to a title Google does not have. It was recorded unmasked,
+    # so it carried a `kind` key and 53 bytes; the shipped mask returns
+    # `{"totalItems": 0}` and 17, and no test reads `kind`. CBO-39's relay test
+    # replays this file, and what it needs is an empty answer, not those two keys.
+    {
+        "source": "googlebooks",
+        "fixture": "by-title-nothing.json",
+        "lookup": "title",
+        "book": NOTHING,
+    },
+    # The Google ISBN path.
     {
         "source": "googlebooks",
         "fixture": "by-isbn-cragside.json",
@@ -192,6 +199,14 @@ RECORDINGS = (
         "fixture": "by-isbn-unrelated.json",
         "lookup": "isbn",
         "isbn": UNRELATED_ISBN,
+    },
+    # The empty reply to an ISBN no book carries. The same 53-to-17 change as
+    # `by-title-nothing.json` above, for the same reason.
+    {
+        "source": "googlebooks",
+        "fixture": "by-isbn-no-edition.json",
+        "lookup": "isbn",
+        "isbn": NO_EDITION_ISBN,
     },
     # The Hardcover ISBN path.
     {
@@ -320,18 +335,6 @@ SKIPPED = {
     ),
     "googlebooks/error-missing-query.json": (
         "a 400 from a deliberately missing q, which the shipped client cannot send"
-    ),
-    # These two *do* have a request; they are skipped because their size is a
-    # property of the mask rather than of the book. They are unmasked recordings
-    # of the empty answer, 53 bytes with a `kind`. Google's masked empty answer is
-    # 17 bytes, `{"totalItems": 0}`, so re-recording either one would change the
-    # only two keys the file has. README.md:46-53 argues the reply *is* the empty
-    # answer and a second recording of it would be the same answer twice.
-    "googlebooks/by-title-nothing.json": (
-        "the empty answer, kept as the unmasked 53 bytes; the masked reply is 17"
-    ),
-    "googlebooks/by-isbn-no-edition.json": (
-        "the empty answer, kept as the unmasked 53 bytes; the masked reply is 17"
     ),
     "googlebooks/hand-made/poe-core-cases.json": (
         "hand-made: a frozen case, never re-recorded"

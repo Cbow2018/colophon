@@ -155,6 +155,34 @@ python tools\record-fixtures.py --pace 3
 - **Write a partial run.** Every capture is made before the first file is
   written, so a run that fails on fixture 20 leaves all 33 committed fixtures
   exactly as they were.
+- **Let one source answer for the other.** The two sources reuse fixture names —
+  six of them, including `by-title-cragside.json` — so a capture is kept under
+  its source *and* its name, and a body is refused outright if it has the other
+  source's shape. See below for why that is not hypothetical.
+
+### The collision that got through once
+
+The first successful re-record wrote both sources' replies to the wrong files for
+all six shared names and reported success throughout. `collect` keyed its captures
+on the fixture name alone, so the Google reply for `by-title-cragside.json`
+overwrote the Hardcover one; `write` then looked each file up by that same bare
+name and wrote whichever reply had survived, to **both** directories. Five
+`hardcover/` files ended up holding Google bodies and one `googlebooks/` file a
+Hardcover body, and nothing in the run said so.
+
+The fix is `label(row)` — `source/name` — as the key in both directions, plus
+`check_shape`, which refuses a body whose top level is the other source's. The
+first would have prevented it; the second is what turns the next such mistake into
+a stopped run rather than a corpus that lies. `tests/test_recording_tools.py`
+covers both.
+
+**Why it was caught late.** The tests that would have noticed were the ones
+replaying the *clobbered* files, and they failed as `Hardcover's reply did not
+contain any editions` — a client-side error message for a file that was simply the
+wrong source's. The fixture↔query guard would not have caught it either: it
+compares field sets against a query, and it has no way to know which *source*
+produced the body. This is the strongest argument for the shape check existing
+inside the recorder rather than being left to a test.
 
 Adding `--dry-run` does the printing above without asking anything or writing
 anything. It is the same output as `--list`, so it is only worth reaching for when

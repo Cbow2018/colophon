@@ -87,8 +87,10 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(book.series_id, 23832)
 
     def test_a_reply_that_does_not_carry_an_id_leaves_it_empty(self):
-        """The older recordings have no ids; a missing one is absent, not a bug."""
-        book = self.source(Replay("by-isbn-found.json")).by_isbn(CRAGSIDE)
+        """The pre-CBO-41 recordings have no ids; a missing one is absent, not a bug."""
+        book = self.source(Replay("sparse-isbn-reply.json", folder=HAND_MADE)).by_isbn(
+            CRAGSIDE
+        )
 
         self.assertEqual(book.authors, ("L.J. Ross",))
         self.assertEqual(book.author_ids, (None,))
@@ -536,16 +538,23 @@ class TheOtherFieldsTests(unittest.TestCase):
         )
 
     def test_a_book_with_no_publisher_or_cover_carries_neither(self):
-        """Hardcover has neither for Normal People, and neither is invented."""
-        book = self.source("by-isbn-no-series.json").by_isbn(NORMAL_PEOPLE)
+        """Hardcover had neither for Normal People, and neither was invented.
+
+        The reply showing that is the pre-CBO-38 one, kept in `hand-made/`: a
+        re-record gives the book a publisher and a cover, which is the answer to
+        CBO-38 and the end of this case.
+        """
+        book = self.source(Replay("sparse-isbn-reply.json", folder=HAND_MADE)).by_isbn(
+            NORMAL_PEOPLE
+        )
 
         self.assertIsNone(book.publisher)
         self.assertIsNone(book.cover)
 
     def test_the_title_path_carries_them_too(self):
-        candidates = self.source("by-title-cragside-other-fields.json").by_title(
-            [CRAGSIDE_TITLE], "en"
-        )
+        candidates = self.source(
+            Replay("cbo-38-without-tags.json", folder=HAND_MADE)
+        ).by_title([CRAGSIDE_TITLE], "en")
 
         self.assertTrue(
             candidates[0].description.startswith("FROM THE #1 INTERNATIONAL")
@@ -649,7 +658,9 @@ class GenreTests(unittest.TestCase):
 
     def test_a_recording_made_before_this_ticket_carries_none_either(self):
         """A missing `cached_tags` is absent, not a bug."""
-        book = self.source("by-isbn-found.json").by_isbn(CRAGSIDE)
+        book = self.source(Replay("sparse-isbn-reply.json", folder=HAND_MADE)).by_isbn(
+            CRAGSIDE
+        )
 
         self.assertEqual(book.genres, ())
 
