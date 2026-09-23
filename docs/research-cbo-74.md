@@ -277,12 +277,18 @@ subtitle**, so re-recording removes the field from every file that has it — wh
 is the whole of CBO-75's fixture evidence.
 
 **`isbn-cragside-categories.json` is the fixture that proves the mask changed, and
-the `googlebooks/README.md` is stale about it.** `:139-154` says the shipped
+the `googlebooks/README.md` was stale about it.** `:139-154` said the shipped
 `FIELDS` does not carry `items/volumeInfo/categories` and that "CBO-42 appends it to
 the mask". Read at `593f14a`, `FIELDS` (`colophon/googlebooks.py:52-58`) **already
 ends with `"items/volumeInfo/categories"`** — CBO-42's addition is in the tree. So
 the fixture is conformant, not drifted, and the README sentence is a documentation
 defect rather than a code one. §7 therefore has no decision to make about the mask.
+
+*(Session 2 fixed the README, and the re-record made the fixture ordinary: it was
+recorded with that field appended to a mask that lacked it, and now answers the
+shipped mask like every other ISBN recording. The `mask_selection` guard test reads
+`FIELDS` itself, so the README and the mask cannot drift apart again without
+something failing.)*
 
 ### 2.4 So how many instances?
 

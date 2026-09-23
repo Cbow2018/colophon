@@ -279,16 +279,16 @@ replies to questions the client does not ask.
 | `hardcover/hand-made/work-without-title.json` | hand-made: a frozen case |
 | `hardcover/hand-made/wider-than-the-question.json` | hand-made: a frozen case |
 
-**The two Google empty replies are the interesting pair, and they are *not*
-re-recorded even though a request exists.** `googlebooks/by-title-nothing.json`
-and `googlebooks/by-isbn-no-edition.json` were recorded **without a mask**, so
-they are the unmasked 53-byte `{"kind": "books#volumes", "totalItems": 0}`.
-Google's masked empty reply is **17 bytes** —
-`{"totalItems": 0}`, with no `kind` at all — so re-recording either one would
-change the file's only two keys. `googlebooks/README.md:46-53` argues they stay as
-they are: the reply *is* the empty answer, and a second recording would be the
-same answer twice. Their size is a property of the mask, which is exactly the kind
-of thing a field-set guard on an empty body cannot see.
+**The two Google empty replies are the interesting pair, and they were re-recorded
+with everything else.** `googlebooks/by-title-nothing.json` and
+`googlebooks/by-isbn-no-edition.json` had been recorded **without a mask**, so they
+were the unmasked 53-byte `{"kind": "books#volumes", "totalItems": 0}`. Google's
+masked empty reply is **17 bytes** — `{"totalItems": 0}`, with no `kind` at all —
+so re-recording changed the file's only two keys. No test reads `kind`, so the
+suite cannot tell the difference; the `googlebooks/README.md` note that argued the
+53 bytes were evidence the two recordings agreed has been corrected. The change is
+worth knowing about because it is the kind a field-set guard on an empty body
+cannot see: there is no field set to compare.
 
 ## Unguarded
 
@@ -298,6 +298,14 @@ and `fixture ↔ query` (CBO-74) fails when a committed fixture's field set is n
 the one its declared query would return today. Both are static. **Neither ever
 contacts a source**, so everything below is invisible to both, and "guarded"
 must not be read as "covered".
+
+**A third guard does not exist, and CBO-73's "Sequencing" line points at the wrong
+ticket for it.** That line says "Fix this, re-record (CBO-76), then CBO-68 session
+2". CBO-76 is a real ticket and is not about re-recording: it is *Build §4.4's
+tuning set — no threshold in this design has ever been tuned*, which is 20–50
+labelled books and a threshold report. The re-record it names is this document's
+subject and was CBO-74's. Flagged rather than corrected in CBO-73, which is closed
+and is a record of what was decided then.
 
 ### `maxResults`, and request parameters generally
 

@@ -138,7 +138,7 @@ nothing else, because that is what Google answered.
 the two files carry a blurb, and the 1084-character one is byte-for-byte what
 Hardcover has for the same book.
 
-## CBO-42: `categories`, which the shipped mask no longer asks for
+## CBO-42: `categories`, which the shipped mask now asks for
 
 CBO-42 (genre mapping) needs Google's genres, and they are `volumeInfo.categories`.
 The CBO-37 recording above, `by-title-cragside.json`, was made through an older
@@ -151,13 +151,25 @@ RASDtAEACAAJ  'Cragside'  ->  categories: ['Murder']
 ```
 
 One is a library subject heading — a character, not a genre — and the other is a
-genre. **The shipped `FIELDS` mask returns neither**: it enumerates the fields to
-return, and `items/volumeInfo/categories` is not among them, so the field is
-absent from every reply the current client gets. CBO-42 appends it to the mask.
+genre.
+
+**The shipped `FIELDS` mask carries `items/volumeInfo/categories`**, as its last
+entry (`colophon/googlebooks.py:52-58`). This README said the opposite until
+CBO-74: that the mask did not carry it and that CBO-42 appended it. CBO-42's
+addition *is* the shipped mask, and had been since that ticket merged — the
+sentence described the state before it. The re-record settled the question the
+sentence raised: every masked reply now carries `categories` when the volume has
+any, and omits the key entirely when it has none.
 
 | File | Query | What came back | How |
 | --- | --- | --- | --- |
-| `isbn-cragside-categories.json` | `isbn:9781521748831`, the shipped mask with `items/volumeInfo/categories` appended | 1 volume, *Cragside*, `categories: ["Murder"]` | recorded |
+| `isbn-cragside-categories.json` | `isbn:9781521748831`, the shipped mask | 1 volume, *Cragside*, `categories: ["Murder"]` | recorded |
+
+That file was recorded with `items/volumeInfo/categories` *appended* to a mask that
+lacked it, which is why it was once evidence of a difference between it and the
+shipped mask. It is not any more: re-recorded on 2026-09-23 against the shipped
+mask, it is an ordinary recording, and the mask it answers is the one the client
+sends.
 
 Two volumes disagreeing about one book's genre is not a defect to fix: the
 character heading is Google's own catalogue data, and the same probe shows the
