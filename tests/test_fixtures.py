@@ -533,6 +533,55 @@ class CorpusTests(unittest.TestCase):
 
         self.assertEqual(undeclared, [])
 
+    def test_every_exemption_is_one_a_real_fixture_needs(self):
+        """No entry may be dead. An exemption nothing reaches is a hole that reads
+        like coverage, and it is also the one kind of entry nothing else catches:
+        a wrong reason and an unneeded one both look exactly like a working guard.
+        """
+        needed = set()
+        for row in recordings.RECORDINGS:
+            record = recordings.fixture_path(row["fixture"], row["source"])
+            body = json.loads(record.read_text("utf-8"))
+            needed |= paths_the_query_asks_for_and_the_reply_lacks(row, body)
+
+        dead = sorted(set(NULL_BUT_SELECTED) - needed)
+        missing = sorted(needed - set(NULL_BUT_SELECTED))
+
+        self.assertEqual(dead, [], f"exemptions no fixture reaches: {dead}")
+        self.assertEqual(missing, [], f"absences with no exemption: {missing}")
+
+
+def paths_the_query_asks_for_and_the_reply_lacks(row, body):
+    """Selected paths no record carries, which are what `NULL_BUT_SELECTED` covers.
+
+    The same two sets `complaints` compares, so an entry cannot be dead here and
+    live there: whatever this returns is exactly what the guard had to exempt for
+    the corpus to be green.
+    """
+    records = records_of(row["source"], body)
+    if not records:
+        return set()
+
+    request = recordings.sent_request(row)
+    if row["source"] == "hardcover":
+        selection = next(iter(parse_selection(request["query"]).values()), {})
+    else:
+        mask = google_selection(request["fields"])
+        selection = mask.pop("items", {})
+
+    prefix = volume_prefix(row["source"])
+    selected = {prefix + path for path in selected_paths(selection)}
+    leaves = {prefix + path for path in selected_leaves(selection)}
+    carried = set()
+    for record in records:
+        carried |= {prefix + path for path in payload_paths(record)}
+
+    return {
+        (row["source"], row["fixture"], path[len(prefix) :])
+        for path in selected - carried
+        if not under_a_leaf(path, leaves)
+    }
+
 
 if __name__ == "__main__":
     unittest.main()
