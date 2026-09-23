@@ -129,6 +129,12 @@ SERIES_ALREADY_ON_IT = """    <dc:title>The Masque of the Red Death</dc:title>
 # made with and therefore what a replay has to match before handing it back.
 TITLE_ASKED = 'intitle:"The Masque of the Red Death" inauthor:"Edgar Allan Poe"'
 
+# The live recording, not the frozen case: `hand-made/poe-core-cases.json` holds
+# the five tied volumes CBO-68 and CBO-69 rest on, and this file is re-recorded
+# whenever the query changes. The test below wants the live reply, because its
+# point is that the real client reads and scores whatever Google really returned.
+POE_RECORDING = "by-title-poe.json"
+
 # What the unverified marker is made of, as the design spec spells it. Held here
 # rather than imported, so a test cannot agree with the code by sharing its
 # constant: the value is the spec's, not the implementation's.
@@ -3410,18 +3416,22 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
 
         The Gutenberg book carries no ISBN, so it goes down the title path, asks
         Google the question `colophon/googlebooks.py` builds, and is graded
-        against what Google actually returned - which is ten volumes of the same
-        story, five of them agreeing with the file on everything it states.
-        Every one of those five scores 1.0, so the gap is 0.0 and §1.2 calls
-        that saturated: the reply is read and scored, and the book is marked
-        rather than written from a printing picked by nothing but list order.
-        This is the recording in `fixtures/googlebooks/by-title-poe.json`, and
-        nothing here is hand-written - which is the point, because a hand-made
+        against what Google actually returned - which was ten volumes of the same
+        story, five of them agreeing with the file on everything it states and
+        tying at 0.9231, so the gap is 0.0000 and §1.2 calls that saturated: the
+        reply is read and scored, and the book is marked rather than written from
+        a printing picked by nothing but list order.
+
+        The 0.9231 is not 1.0 because the file carries a year, `2010-06-06`, and
+        none of the five does; the tie is the finding, not the absolute value.
+        `hand-made/poe-core-cases.json` freezes those five volumes, because a
+        re-record returns up to forty and would move the tie's membership.
+        Nothing here is hand-written - which is the point, because a hand-made
         candidate can only ever agree with whatever the client was written to
         produce.
         """
         path = self.a_real_book()
-        replay = ReplayByQuery(**{TITLE_ASKED: "by-title-poe.json"})
+        replay = ReplayByQuery(**{TITLE_ASKED: POE_RECORDING})
         source = GoogleBooks("a-key", transport=replay)
 
         outcome = self.corrector(source=source).correct(path)

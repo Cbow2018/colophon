@@ -15,6 +15,10 @@ from colophon.sources import SourceError, genre_parts
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "hardcover"
+# The cases a ticket rests on rather than the API's own words: never re-recorded,
+# and each named in `fixtures/hardcover/hand-made/README.md`. See `RECORDED`'s own
+# README for the rule.
+HAND_MADE = RECORDED / "hand-made"
 TOKEN = "hardcover-token-that-must-never-be-logged"
 
 CRAGSIDE = "9781521748831"
@@ -34,10 +38,14 @@ THE_INFIRMARY_TITLE = "The Infirmary"
 
 
 class Replay:
-    """Stands in for the network: hands back a recorded reply, remembers the request."""
+    """Stands in for the network: hands back a recorded reply, remembers the request.
 
-    def __init__(self, name="by-isbn-found.json", status=200):
-        self.body = (RECORDED / name).read_bytes()
+    `folder` is for the two hand-made fixtures, which live beside the live
+    recordings rather than among them.
+    """
+
+    def __init__(self, name="by-isbn-found.json", status=200, folder=RECORDED):
+        self.body = (folder / name).read_bytes()
         self.status = status
         self.sent = None
 
@@ -139,7 +147,7 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(book.authors, ("J.R.R. Tolkien",))
 
     def test_it_falls_back_to_the_edition_title_when_the_work_has_none(self):
-        source = self.source(Replay("hand-made-work-without-title.json"))
+        source = self.source(Replay("work-without-title.json", folder=HAND_MADE))
 
         book = source.by_isbn(A_HAND_MADE_BOOK)
 
@@ -148,7 +156,7 @@ class LookupTests(unittest.TestCase):
 
     def test_it_takes_authors_and_leaves_the_translator_behind(self):
         """A reply wider than the question is filtered again, not trusted."""
-        source = self.source(Replay("hand-made-wider-than-the-question.json"))
+        source = self.source(Replay("wider-than-the-question.json", folder=HAND_MADE))
 
         book = source.by_isbn(A_WIDER_REPLY)
 

@@ -137,8 +137,8 @@ absent rather than as a bug — the same stated difference as the ids above.
 | `nothing-found.json` | 9781786813891 | `{"data": {"editions": []}}` — no editions at all | recorded |
 | `by-isbn-two-series.json` | 9780765311788 | *Mistborn: The Final Empire*, in three series at once | recorded, without the query's ordering |
 | `by-isbn-edition-title.json` | 9780007458424 | the edition is called *The Hobbit*; the work is not | recorded |
-| `hand-made-work-without-title.json` | 9780000000003 | a work with no title of its own | hand-made |
-| `hand-made-wider-than-the-question.json` | 9780000000004 | a reply with a translator and a narrator in it | hand-made |
+| `hand-made/work-without-title.json` | 9780000000003 | a work with no title of its own | hand-made |
+| `hand-made/wider-than-the-question.json` | 9780000000004 | a reply with a translator and a narrator in it | hand-made |
 
 ## By title — the query for a book whose file carries no ISBN
 
@@ -190,11 +190,17 @@ the two sets are not consistent with each other; this is the stated difference.
 The recorded bodies are the API's own, re-indented so they can be read in a
 diff; nothing inside them is changed.
 
-Two of the ISBN recordings are hand-made, and named so, because no real book has
-shown the shape: `books.title` is nullable in Hardcover's schema, and a reply
-*wider* than the question - a translator where only authors were asked for - is
-the case `colophon/hardcover.py` filters again in case the source ever returns
-one.
+`hand-made/` is the exception to how this directory works: a fixture in here is a
+live recording that may be re-recorded whenever the query changes, and one in
+`hand-made/` is a case a ticket rests on that no re-record may overwrite. The
+rule is stated in full at `hand-made/README.md`.
+
+Two of the ISBN recordings are hand-made, and now sit in `hand-made/` rather than
+among the live recordings, because no real book has shown the shape:
+`books.title` is nullable in Hardcover's schema, and a reply *wider* than the
+question - a translator where only authors were asked for - is the case
+`colophon/hardcover.py` filters again in case the source ever returns one.
+`hand-made/README.md` states the rule and names the test that reads each one.
 
 `by-isbn-two-series.json` is the only recording made without the shipped
 query's `order_by`, because the point of it is the order Hardcover returns
