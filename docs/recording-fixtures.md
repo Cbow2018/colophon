@@ -23,6 +23,14 @@ inside `hand-made/` is not, and re-recording one destroys the case it exists for
 `googlebooks/hand-made/README.md` and `hardcover/hand-made/README.md` say which
 ticket each one holds up.
 
+`googlebooks/by-title-poe.json` is both, and is the case that shows why the
+distinction has to be a directory. The live file **is** re-recorded, and its reply
+grew from 10 volumes to 40 when it was, because `MAX_RESULTS` is 40 and the 10 was
+Google's default page size from a recording made before the parameter was sent.
+The tie CBO-68 §4 and CBO-69 rest on is not in the live file and must not be
+asserted from it: it is frozen in `hand-made/poe-core-cases.json`, and every test
+about the tie reads that instead.
+
 ## Before you start
 
 You need two secrets, and they never go into a file in this repository:
@@ -235,21 +243,22 @@ The fixture guard compares the *reply's shape* against the request's selected
 fields. It does not compare the rest of the request, so a parameter can change
 under a fixture and nothing fails.
 
-`by-title-poe.json` is the case that proves it matters. `MAX_RESULTS` is 40
-(`colophon/googlebooks.py:68`) and is sent on every title lookup, but the fixture
-holds **10** volumes — Google's default page size, so it was recorded before the
-parameter was sent at all. Every key set in it still matches, and `ReplayByQuery`
-matches on `q` alone (`tests/test_googlebooks.py`), so the mismatch is invisible
-from every direction. It is a 10-item reply to a request the client no longer
-makes, and the replacement is not a like-for-like measurement: the five-way tie
-`googlebooks/hand-made/poe-core-cases.json` exists for is exactly what a 40-volume
-reply changes.
+`by-title-poe.json` is the case that proves it matters, and it is the drift that
+produced the file it is now. `MAX_RESULTS` is 40 (`colophon/googlebooks.py:68`)
+and is sent on every title lookup, but that fixture held **10** volumes — Google's
+default page size, so it was recorded before the parameter was sent at all. Every
+key set in it matched, and `ReplayByQuery` matches on `q` alone
+(`tests/test_googlebooks.py`), so the mismatch was invisible from every direction:
+a 10-item reply to a request the client had stopped making.
 
-The same class covers `langRestrict`, and any parameter added to `_ask` later.
-`Replay.sent` already holds the whole URL, so a guard that compared the whole
-request would catch this; the fixture guard deliberately does not, because that
-is a different claim from "the fixture matches the query that would produce it".
-**Nothing currently asserts `maxResults`.**
+The re-record made it a 40-volume reply, because that is what the client actually
+asks for. **Nothing asserts that.** A future change to `MAX_RESULTS`, or to
+`langRestrict`, or a parameter added to `_ask` later, drifts exactly as silently —
+the count is a property of the whole request and no comparison of field sets can
+reach it. `Replay.sent` already holds the whole URL, so a guard comparing the
+whole request would catch this; the fixture guard deliberately does not, because
+that is a different claim from "the fixture matches the query that would produce
+it". **Nothing currently asserts `maxResults`.**
 
 ### A field that is selected, present, and always empty
 
