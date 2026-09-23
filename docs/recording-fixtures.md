@@ -115,22 +115,45 @@ python tools\record-fixtures.py hardcover/by-title-cragside.json googlebooks/by-
 Each line printed is one capture, and the summary says what came back:
 
 ```
-Recording 35 fixtures against the shipped queries.
+Recording 33 fixtures against the shipped queries.
+Pacing Hardcover at 1.5s between requests (20 of them, about 0.5 minutes); a 429 is waited out and retried.
   hardcover/by-title-cragside.json                  1 editions, 1 dated
-  googlebooks/by-title-poe.json                     40 volumes, totalItems 300
+  googlebooks/by-title-poe.json                     20 volumes, totalItems 300
   ...
 
 wrote tests/fixtures/hardcover/by-title-cragside.json
 wrote tests/fixtures/googlebooks/by-title-poe.json
 ```
 
-Two things the script will not do:
+### Hardcover rate-limits, so the run paces itself
+
+Hardcover's free tier limits requests per second and answers **429** with
+`Try again in 1 seconds` when asked faster. The 33 declared fixtures are 20
+Hardcover requests and 13 Google ones, which is enough to hit it. The recorder
+therefore:
+
+- **paces Hardcover** at `--pace` seconds between requests (default **1.5**,
+  measured from the start of the previous request, not the end), so a full run
+  takes about half a minute of waiting. Google is not paced: its quota is daily
+  rather than per-second, and 13 requests will not reach it.
+- **waits out a 429 and asks again**, for the delay the reply itself names — the
+  `Retry-After` header if there is one, otherwise the number in the message. Five
+  attempts, then the run stops with the reason and writes nothing.
+
+If a run still trips the limit, raise the pace:
+
+```powershell
+python tools\record-fixtures.py --pace 3
+```
+
+### What the script will not do
 
 - **Write a refusal.** A non-2xx status, a GraphQL `errors` body or a Google
   `error` body is reported and *nothing* is written. A fixture on disk is always
-  an answer the source actually gave.
+  an answer the source actually gave. A 429 that outlasts the retries is a
+  refusal like any other.
 - **Write a partial run.** Every capture is made before the first file is
-  written, so a run that fails on fixture 20 leaves all 35 committed fixtures
+  written, so a run that fails on fixture 20 leaves all 33 committed fixtures
   exactly as they were.
 
 Adding `--dry-run` does the printing above without asking anything or writing
@@ -228,6 +251,17 @@ replies to questions the client does not ask.
 | `hardcover/hand-made/work-without-title.json` | hand-made: a frozen case |
 | `hardcover/hand-made/wider-than-the-question.json` | hand-made: a frozen case |
 
+**The two Google empty replies are the interesting pair, and they are *not*
+re-recorded even though a request exists.** `googlebooks/by-title-nothing.json`
+and `googlebooks/by-isbn-no-edition.json` were recorded **without a mask**, so
+they are the unmasked 53-byte `{"kind": "books#volumes", "totalItems": 0}`.
+Google's masked empty reply is **17 bytes** —
+`{"totalItems": 0}`, with no `kind` at all — so re-recording either one would
+change the file's only two keys. `googlebooks/README.md:46-53` argues they stay as
+they are: the reply *is* the empty answer, and a second recording would be the
+same answer twice. Their size is a property of the mask, which is exactly the kind
+of thing a field-set guard on an empty body cannot see.
+
 ## Unguarded
 
 **What the guards do.** There are two, and between them they close one gap:
@@ -251,14 +285,16 @@ key set in it matched, and `ReplayByQuery` matches on `q` alone
 (`tests/test_googlebooks.py`), so the mismatch was invisible from every direction:
 a 10-item reply to a request the client had stopped making.
 
-The re-record made it a 40-volume reply, because that is what the client actually
-asks for. **Nothing asserts that.** A future change to `MAX_RESULTS`, or to
-`langRestrict`, or a parameter added to `_ask` later, drifts exactly as silently —
-the count is a property of the whole request and no comparison of field sets can
-reach it. `Replay.sent` already holds the whole URL, so a guard comparing the
-whole request would catch this; the fixture guard deliberately does not, because
-that is a different claim from "the fixture matches the query that would produce
-it". **Nothing currently asserts `maxResults`.**
+The re-record made it a **20-volume** reply, not a 40-volume one: Google treats
+`maxResults` as a *ceiling* and answers with what it has, with `totalItems` still
+300. So the count is not even a function of the parameter — which is the point.
+**Nothing asserts either number.** A future change to `MAX_RESULTS`, or to
+`langRestrict`, or a parameter added to `_ask` later, drifts exactly as silently,
+because the count is a property of the whole request and no comparison of field
+sets can reach it. `Replay.sent` already holds the whole URL, so a guard comparing
+the whole request would catch this; the fixture guard deliberately does not,
+because that is a different claim from "the fixture matches the query that would
+produce it". **Nothing currently asserts `maxResults`.**
 
 ### A field that is selected, present, and always empty
 

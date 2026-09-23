@@ -153,13 +153,10 @@ RECORDINGS = (
         "lookup": "title",
         "book": THE_INFIRMARY_REAGON,
     },
-    {
-        "source": "googlebooks",
-        "fixture": "by-title-nothing.json",
-        "lookup": "title",
-        "book": NOTHING,
-    },
-    # The Google ISBN path.
+    # `by-title-nothing.json` is deliberately not here: its reply is the empty
+    # answer, and see `SKIPPED` for why that one stays as it is.
+    # The Google ISBN path. `by-isbn-no-edition.json` is deliberately not here
+    # either, for the same reason.
     {
         "source": "googlebooks",
         "fixture": "by-isbn-cragside.json",
@@ -195,12 +192,6 @@ RECORDINGS = (
         "fixture": "by-isbn-unrelated.json",
         "lookup": "isbn",
         "isbn": UNRELATED_ISBN,
-    },
-    {
-        "source": "googlebooks",
-        "fixture": "by-isbn-no-edition.json",
-        "lookup": "isbn",
-        "isbn": NO_EDITION_ISBN,
     },
     # The Hardcover ISBN path.
     {
@@ -330,6 +321,18 @@ SKIPPED = {
     "googlebooks/error-missing-query.json": (
         "a 400 from a deliberately missing q, which the shipped client cannot send"
     ),
+    # These two *do* have a request; they are skipped because their size is a
+    # property of the mask rather than of the book. They are unmasked recordings
+    # of the empty answer, 53 bytes with a `kind`. Google's masked empty answer is
+    # 17 bytes, `{"totalItems": 0}`, so re-recording either one would change the
+    # only two keys the file has. README.md:46-53 argues the reply *is* the empty
+    # answer and a second recording of it would be the same answer twice.
+    "googlebooks/by-title-nothing.json": (
+        "the empty answer, kept as the unmasked 53 bytes; the masked reply is 17"
+    ),
+    "googlebooks/by-isbn-no-edition.json": (
+        "the empty answer, kept as the unmasked 53 bytes; the masked reply is 17"
+    ),
     "googlebooks/hand-made/poe-core-cases.json": (
         "hand-made: a frozen case, never re-recorded"
     ),
@@ -397,7 +400,8 @@ def declarations():
 
     Yields `(source, fixture, row, reason)`, where exactly one of `row` and
     `reason` is set. The corpus is the directory listing, so a fixture added
-    without a declaration shows up here rather than going unnoticed.
+    without a declaration shows up here rather than going unnoticed, and a
+    `SKIPPED` entry naming a file that no longer exists is not reached at all.
     """
     for source, directory in SOURCE_DIRECTORY.items():
         for path in sorted((FIXTURE_ROOT / directory).rglob("*.json")):
@@ -411,4 +415,4 @@ def declarations():
                 ),
                 None,
             )
-            yield source, relative, row, SKIPPED.get(key) if row is None else None
+            yield source, relative, row, None if row is not None else SKIPPED.get(key)

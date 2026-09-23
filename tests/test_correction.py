@@ -3416,19 +3416,17 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
 
         The Gutenberg book carries no ISBN, so it goes down the title path, asks
         Google the question `colophon/googlebooks.py` builds, and is graded
-        against what Google actually returned - which was ten volumes of the same
-        story, five of them agreeing with the file on everything it states and
-        tying at 0.9231, so the gap is 0.0000 and §1.2 calls that saturated: the
-        reply is read and scored, and the book is marked rather than written from
-        a printing picked by nothing but list order.
+        against what Google actually returned. This is the live recording rather
+        than the frozen case: `hand-made/poe-core-cases.json` holds the five tied
+        volumes CBO-68 and CBO-69 rest on, and this test is about what the real
+        client does with whatever the source really sent.
 
-        The 0.9231 is not 1.0 because the file carries a year, `2010-06-06`, and
-        none of the five does; the tie is the finding, not the absolute value.
-        `hand-made/poe-core-cases.json` freezes those five volumes, because a
-        re-record returns up to forty and would move the tie's membership.
-        Nothing here is hand-written - which is the point, because a hand-made
-        candidate can only ever agree with whatever the client was written to
-        produce.
+        The live file holds more volumes than the five, and the number is not
+        asserted here, because it is Google's inventory on the day it was
+        recorded and not a property of the client. What the test asserts is the
+        shape of the outcome: a reply full of editions agreeing with the file is
+        read and scored, and the book is marked rather than written from a
+        printing picked by nothing but list order.
         """
         path = self.a_real_book()
         replay = ReplayByQuery(**{TITLE_ASKED: POE_RECORDING})
