@@ -268,11 +268,9 @@ def collect(rows, token, key, pace_seconds=HARDCOVER_PACE_SECONDS):
 def write(rows, replies):
     for row in rows:
         path = fixture_path(row["fixture"], row["source"])
-        payload = replies[label(row)]
-        problem = check_shape(row, payload)
-        if problem:
-            raise AssertionError(problem)
-        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(replies[label(row)], indent=2) + "\n", encoding="utf-8"
+        )
         print(f"wrote {path.relative_to(ROOT)}")
 
 

@@ -54,14 +54,18 @@ class Replay:
         return self.status, self.body
 
 
-def default_replay(replay, name="by-isbn-found.json"):
-    """A transport for a test's `source()`, from a `Replay`, a fixture name, or neither.
+def a_replay(replay=None, name="by-isbn-found.json"):
+    """A transport for a test's `source()`: the `Replay` given, or a default one.
 
-    The four `source()` helpers used to take only a name and build the `Replay`
-    themselves, which left no way to pass one that reads `hand-made/` — a test
-    wanting a frozen case got `Replay(Replay(...))` and a `TypeError` from
-    `RECORDED / name`. Taking both forms here is what lets a frozen case and a live
+    The four `source()` helpers used to take only a fixture *name* and build the
+    `Replay` themselves, which left no way to pass one that reads `hand-made/` — a
+    test asking for a frozen case got `Replay(Replay(...))` and a `TypeError` from
+    `RECORDED / name`. Taking a `Replay` here is what lets a frozen case and a live
     recording be replayed through the same helper.
+
+    A name is accepted as a convenience for the many call sites that have one, but
+    a `Replay` is never treated as one: `Replay` is not a str, so it is passed
+    through rather than wrapped a second time.
     """
     if replay is None:
         return Replay(name)
@@ -74,7 +78,7 @@ def answering(status, body):
 
 class LookupTests(unittest.TestCase):
     def source(self, replay=None):
-        return Hardcover(TOKEN, transport=default_replay(replay))
+        return Hardcover(TOKEN, transport=a_replay(replay))
 
     def test_it_finds_the_book_by_isbn_and_reads_what_the_source_says(self):
         book = self.source().by_isbn(CRAGSIDE)
@@ -179,7 +183,13 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(book.authors, ("The Author",))
 
     def test_a_standalone_book_comes_back_with_no_series(self):
-        source = self.source(Replay("by-isbn-no-series.json"))
+        """Normal People is not in a series, so there is no membership to read.
+
+        The frozen reply, not the live one: `book_series` is `[]` in both today,
+        but the live recording is re-recordable and this test asserts an absence,
+        which a re-record could fill in — the same trap CBO-74 hit four times.
+        """
+        source = self.source(Replay("no-series.json", folder=HAND_MADE))
 
         book = source.by_isbn(NORMAL_PEOPLE)
 
@@ -191,14 +201,14 @@ class LookupTests(unittest.TestCase):
     def test_it_prefers_the_series_hardcover_marks_as_featured(self):
         """Mistborn is in three series, and only one of them is the book's own.
 
-        The recording has the featured row first and the other two after it, so
-        this no longer shows the client correcting a server that puts the featured
-        one last — the old recording was made without the query's `order_by` and
-        did show that, and the 2026-09-23 re-record proved the claim false. What
-        it shows now is that `_series` picks the row carrying `featured` rather
-        than simply taking the first.
+        The frozen reply, whose featured row is **last**: the client has to pick it
+        out by the `featured` flag rather than take the first row. The live
+        recording cannot show this — the re-record proved Hardcover returns the
+        featured row first when the query asks with its `order_by`, so against the
+        live file a client that simply took `memberships[0]` would pass. See
+        `fixtures/hardcover/hand-made/README.md`.
         """
-        source = self.source(Replay("by-isbn-two-series.json"))
+        source = self.source(Replay("two-series-featured-last.json", folder=HAND_MADE))
 
         book = source.by_isbn(MISTBORN)
 
@@ -222,9 +232,7 @@ class TitleLookupTests(unittest.TestCase):
     """
 
     def source(self, replay=None):
-        return Hardcover(
-            TOKEN, transport=default_replay(replay, "by-title-cragside.json")
-        )
+        return Hardcover(TOKEN, transport=a_replay(replay, "by-title-cragside.json"))
 
     def test_it_finds_the_book_by_a_cleaned_title(self):
         candidates = self.source().by_title([CRAGSIDE_TITLE], "en")
@@ -521,7 +529,7 @@ class TheOtherFieldsTests(unittest.TestCase):
 
     def source(self, replay=None):
         return Hardcover(
-            TOKEN, transport=default_replay(replay, "by-isbn-cragside-edition.json")
+            TOKEN, transport=a_replay(replay, "by-isbn-cragside-edition.json")
         )
 
     def test_it_asks_for_the_fields_the_rules_can_write(self):
@@ -605,7 +613,7 @@ class GenreTests(unittest.TestCase):
 
     def source(self, replay=None):
         return Hardcover(
-            TOKEN, transport=default_replay(replay, "by-isbn-9781521748831-genres.json")
+            TOKEN, transport=a_replay(replay, "by-isbn-9781521748831-genres.json")
         )
 
     def test_a_candidate_carries_the_genres_the_source_holds(self):

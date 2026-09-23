@@ -226,17 +226,24 @@ class CaptureKeyTests(unittest.TestCase):
         self.assertEqual(replies["hardcover/by-title-cragside.json"], "hardcover")
         self.assertEqual(replies["googlebooks/by-title-cragside.json"], "googlebooks")
 
-    def test_a_body_of_the_wrong_shape_is_refused_rather_than_written(self):
-        """A cross-source mix-up stops the run instead of corrupting the corpus."""
+    def test_a_body_of_the_wrong_shape_is_refused_before_anything_is_written(self):
+        """A cross-source mix-up stops the run instead of corrupting the corpus.
+
+        The check lives in `collect`, which is where every reply passes through
+        before any file is opened, so a wrong-shape body never reaches `write`.
+        """
         rows = [{"source": "hardcover", "fixture": "by-title-cragside.json"}]
         google_body = {"totalItems": 2, "items": []}
 
-        with self.assertRaises(AssertionError) as caught:
-            recorder.write(rows, {recorder.label(rows[0]): google_body})
+        with (
+            mock.patch.object(recorder, "capture", return_value=(google_body, None)),
+            mock.patch("sys.stdout", new=io.StringIO()),
+        ):
+            replies, problem = recorder.collect(rows, "a-token", "a-key", 0)
 
-        message = str(caught.exception)
-        self.assertIn("googlebooks", message)
-        self.assertIn("hardcover", message)
+        self.assertIsNone(replies)
+        self.assertIn("googlebooks", problem)
+        self.assertIn("hardcover", problem)
 
     def test_each_sources_reply_lands_in_its_own_directory(self):
         """The whole run, with the two sources answering differently on purpose."""

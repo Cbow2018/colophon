@@ -25,8 +25,10 @@ ticket each one holds up.
 
 `googlebooks/by-title-poe.json` is both, and is the case that shows why the
 distinction has to be a directory. The live file **is** re-recorded, and its reply
-grew from 10 volumes to 40 when it was, because `MAX_RESULTS` is 40 and the 10 was
+grew from 10 volumes to 20 when it was, because `MAX_RESULTS` is 40 and the 10 was
 Google's default page size from a recording made before the parameter was sent.
+Twenty rather than forty because Google treats `maxResults` as a ceiling and
+answers with what it has.
 The tie CBO-68 §4 and CBO-69 rest on is not in the live file and must not be
 asserted from it: it is frozen in `hand-made/poe-core-cases.json`, and every test
 about the tie reads that instead.
@@ -152,9 +154,13 @@ python tools\record-fixtures.py --pace 3
   `error` body is reported and *nothing* is written. A fixture on disk is always
   an answer the source actually gave. A 429 that outlasts the retries is a
   refusal like any other.
-- **Write a partial run.** Every capture is made before the first file is
-  written, so a run that fails on fixture 20 leaves all 33 committed fixtures
-  exactly as they were.
+- **Write a partial run.** Every capture is made before the first file is written,
+  so a run that fails on fixture 20 while *asking* leaves all 33 committed
+  fixtures exactly as they were. The write phase is separate and is not guarded:
+  it writes one file at a time, so a failure partway through it — a full disk, a
+  file another process holds open — leaves the earlier files written and the later
+  ones not. Re-run to finish; nothing is corrupted, and `git status` shows exactly
+  which files moved.
 - **Let one source answer for the other.** The two sources reuse fixture names —
   six of them, including `by-title-cragside.json` — so a capture is kept under
   its source *and* its name, and a body is refused outright if it has the other
@@ -282,13 +288,14 @@ replies to questions the client does not ask.
 **The two Google empty replies are the interesting pair, and they were re-recorded
 with everything else.** `googlebooks/by-title-nothing.json` and
 `googlebooks/by-isbn-no-edition.json` had been recorded **without a mask**, so they
-were the unmasked 53-byte `{"kind": "books#volumes", "totalItems": 0}`. Google's
-masked empty reply is **17 bytes** — `{"totalItems": 0}`, with no `kind` at all —
-so re-recording changed the file's only two keys. No test reads `kind`, so the
-suite cannot tell the difference; the `googlebooks/README.md` note that argued the
-53 bytes were evidence the two recordings agreed has been corrected. The change is
-worth knowing about because it is the kind a field-set guard on an empty body
-cannot see: there is no field set to compare.
+were the unmasked `{"kind": "books#volumes", "totalItems": 0}`. Google's masked
+empty reply is `{"totalItems": 0}` — 25 bytes as stored here, indented, and 16
+without the whitespace, with no `kind` at all — so re-recording changed the file's
+only two keys. No test reads `kind`, so the suite cannot tell the difference; the
+`googlebooks/README.md` note that argued the old byte count was evidence the two
+recordings agreed has been corrected. The change is worth knowing about because it
+is the kind a field-set guard on an empty body cannot see: there is no field set
+to compare.
 
 ## Unguarded
 

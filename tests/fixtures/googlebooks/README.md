@@ -40,7 +40,7 @@ against a file spelling it `LJ Ross`: the stops and the spacing do not matter.
 | `by-title-belsay.json` | *Belsay*, L. J. Ross | 1 volume, *Belsay* | recorded |
 | `by-title-the-infirmary.json` | *The Infirmary*, L. J. Ross | 1 volume, L. J. Ross's book | recorded |
 | `by-title-the-infirmary-reagon.json` | *The Infirmary*, Carly Reagon | 1 volume, Carly Reagon's book of the same name | recorded |
-| `by-title-poe.json` | *The Masque of the Red Death*, Edgar Allan Poe | 10 volumes, several of them Poe's | recorded |
+| `by-title-poe.json` | *The Masque of the Red Death*, Edgar Allan Poe | 20 volumes, several of them Poe's | recorded |
 | `by-title-nothing.json` | a title nobody has | `totalItems: 0`, no `items` key | recorded |
 
 `by-title-nothing.json` is CBO-39's as well as CBO-37's: the unverified path
@@ -48,10 +48,11 @@ begins when no source has the book, so the branch that reads this was asked of
 the live API again with the widened `fields` mask and answered byte-identical
 bytes. **That was true of the unmasked mask and is no longer true of the shipped
 one.** Both empty files were re-recorded on 2026-09-23, and the shipped mask
-returns `{"totalItems": 0}` — 17 bytes, with no `kind` — where the unmasked
-request returned 53 bytes with `kind: "books#volumes"`. No test reads `kind`, so
-the change is invisible to the suite; it is recorded here because the byte count
-below used to be the evidence that the two recordings agreed.
+returns `{"totalItems": 0}` — 25 bytes as stored here, indented, and 16 without
+the whitespace — where the unmasked request returned the same object with
+`kind: "books#volumes"` beside it. No test reads `kind`, so the change is
+invisible to the suite; it is recorded here because the byte count below used to
+be the evidence that the two recordings agreed.
 
 The two `the-infirmary` recordings are the lookalike pair: two different books
 share a title, and only the author separates them.
@@ -109,10 +110,11 @@ because there is no series to write. See
 `docs/research/cbo-37-google-books.md`.
 
 **No `items` key when nothing matched.** `by-isbn-no-edition.json` and
-`by-title-nothing.json` are both 17 bytes as of the 2026-09-23 re-record:
-`{"totalItems": 0}`. Reading `items` without a default would crash on the most
-ordinary outcome there is. (Before that they were the unmasked 53 bytes,
-`{"kind": "books#volumes", "totalItems": 0}` — same absence, one more key.)
+`by-title-nothing.json` are both `{"totalItems": 0}` as of the 2026-09-23
+re-record — 25 bytes as stored, indented. Reading `items` without a default
+would crash on the most ordinary outcome there is. (Before that they carried
+`kind: "books#volumes"` beside it, from the unmasked request — same absence, one
+more key.)
 
 ## The fields CBO-38's rules write
 

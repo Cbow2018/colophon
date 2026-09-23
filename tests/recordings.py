@@ -57,24 +57,14 @@ PYRAMIDS_ISBN = "9780575064843"
 THE_TRIAL_ISBN = "9781529196382"
 GENRES_NO_EDITION_ISBN = "9781473225374"
 
-# The fixtures that share a request, and so are one capture written to more than
-# one file. Both are files a test reads by name, so neither is dropped here;
-# whether a pair should collapse to one file is a decision nobody has taken. The
-# recorder groups rows on the request itself and reports these pairs rather than
-# asking, so this is documentation rather than configuration.
-SHARED_REQUESTS = (
-    (
-        "googlebooks/by-title-cragside.json",
-        "googlebooks/by-title-cragside-other-fields.json",
-    ),
-    (
-        "googlebooks/by-isbn-cragside.json",
-        "googlebooks/by-isbn-cragside-other-fields.json",
-    ),
-)
-
 # One row per fixture a shipped query produces. The order is the order the
 # re-record runs in and the order `tools/record-fixtures.py --list` prints.
+#
+# Two pairs of rows declare the same request, so a re-record writes identical
+# bytes to four files: the Google Cragside title pair and the Google Cragside ISBN
+# pair, each differing only in that the mask widened between them. Both files of a
+# pair are read by name, so neither is dropped; whether a pair should become one
+# file is a decision nobody has taken.
 RECORDINGS = (
     # CBO-68's own files first: these are the five Hardcover title replies whose
     # missing release_date is the measurement CBO-68's decision 4 was waiting on.
@@ -304,10 +294,10 @@ RECORDINGS = (
 # The fixtures no shipped query produces, and why. Anything here that *is* a
 # reply to a shipped query belongs in `RECORDINGS` instead.
 #
-# `by-isbn-two-series.json` is deliberately absent from both: it *is* a reply to
-# Hardcover's shipped ISBN query, so it belongs in `RECORDINGS`, and it was
-# recorded without that query's `order_by` on purpose, which is a mismatch the
-# guard exempts by name rather than by omission. See `README.md:199-202`.
+# `by-isbn-two-series.json` was expected to need a third category — a reply to a
+# shipped query recorded deliberately off-spec — and does not. Asked with the
+# shipped `order_by`, Hardcover returns the featured series first anyway, so the
+# recording was never off-spec and is an ordinary row in `RECORDINGS`.
 SKIPPED = {
     "hardcover/author-lj-ross.json": (
         "recorded against the `authors` root field, which no shipped query has"
@@ -357,14 +347,18 @@ SKIPPED = {
         "hand-made: the CBO-38-era title reply, from before CBO-42 asked for "
         "cached_tags"
     ),
+    "hardcover/hand-made/no-series.json": (
+        "hand-made: the pre-CBO-38 ISBN reply for a standalone book, freezing "
+        "that a book in no series answers no series"
+    ),
+    "hardcover/hand-made/two-series-featured-last.json": (
+        "hand-made: a reply whose featured series is last, freezing that the "
+        "client picks it out by the flag rather than by taking the first row"
+    ),
 }
 
 # Where a fixture of each source lives, under `tests/fixtures/`.
 SOURCE_DIRECTORY = {"googlebooks": "googlebooks", "hardcover": "hardcover"}
-
-
-class _Captured(Exception):
-    """The transport's one job is to stop the client before it answers."""
 
 
 def fixture_path(fixture, source):

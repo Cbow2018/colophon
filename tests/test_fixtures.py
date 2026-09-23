@@ -29,15 +29,6 @@ from tests import recordings
 _TOKEN = re.compile(r"\s+|#[^\n]*|[,{}()]|[^\s,{}()]+")
 
 
-def tokenize(query):
-    """A query as words and punctuation, with whitespace and comments dropped."""
-    return [
-        match.group()
-        for match in _TOKEN.finditer(query)
-        if not match.group().isspace() and not match.group().startswith("#")
-    ]
-
-
 def parse_selection(query):
     """A GraphQL query's selection as nested dicts, keyed from the root field down.
 
@@ -52,7 +43,11 @@ def parse_selection(query):
     are nested — `cached_tags`, `book.id`, `author.id`, `series.id` — and a
     single-level reader cannot tell `book { title }` from `book { title id }`.
     """
-    tokens = tokenize(query)
+    tokens = [
+        match.group()
+        for match in _TOKEN.finditer(query)
+        if not match.group().isspace() and not match.group().startswith("#")
+    ]
     if "{" not in tokens:
         return {}
     tree, _ = parse_fields(tokens, tokens.index("{") + 1)
@@ -180,25 +175,21 @@ def volume_prefix(source):
 # The three legitimate mismatches, each exempt by name
 # ---------------------------------------------------------------------------
 
-# A key the query selects that no record carries, and the source is why. The
-# first of the three the ticket names. `by-title-belsay.json` is the specimen the
-# ticket cites: the query asks for the ISBNs, Hardcover has none for that edition,
-# and the reply simply does not carry the key. That is not drift, and a guard that
-# failed on it would be red on a correct fixture.
+# A key the query selects that no record carries, and the source is why. That is
+# absent, not drift: the query asked, the reply answered, and the answer was
+# nothing. The first of the three classes the ticket names.
+#
+# Every entry here is reached by a real fixture, and one that is not is deleted
+# rather than kept "just in case": an exemption nothing needs is a hole in the
+# guard that reads like coverage. `by-title-poe.json` had two that were inert, and
+# they went when the guard started reading every record instead of the first.
 NULL_BUT_SELECTED = {
     ("hardcover", "by-title-belsay.json", "publisher.name"): (
-        "Hardcover has no publisher for this edition, so the reply carries no "
-        "`publisher` object; the query asks for one"
-    ),
-    ("googlebooks", "by-title-poe.json", "volumeInfo.categories"): (
-        "not one of the twenty volumes is categorised, so the masked reply omits "
-        "the key entirely"
-    ),
-    ("googlebooks", "by-title-poe.json", "volumeInfo.publisher"): (
-        "Google has no publisher for the editions in this reply"
+        "the edition carries `publisher: null` — the key is present and the object "
+        "is null, so the query asked and Hardcover had nothing"
     ),
     ("googlebooks", "by-title-the-infirmary.json", "volumeInfo.publisher"): (
-        "Google has no publisher for this volume"
+        "Google has no publisher for this volume and omits the key"
     ),
     ("googlebooks", "by-isbn-cragside.json", "volumeInfo.imageLinks"): (
         "the volume has no cover, which is the case that fixture exists for"
@@ -232,17 +223,15 @@ NULL_BUT_SELECTED = {
     ("googlebooks", "by-isbn-one-digit-off.json", "volumeInfo.publisher"): (
         "and no publisher"
     ),
-    # A standalone book has no series, so Hardcover sends no `book_series` at all.
-    # Five paths rather than one because the selection reaches through the
-    # membership to the series; the absent object is the whole of it.
-    ("hardcover", "by-isbn-no-series.json", "book.book_series"): (
-        "Normal People is a standalone book, so there is no membership to carry"
-    ),
+    # A standalone book has no series. Hardcover sends `book_series: []` — the key
+    # is present and the list is empty — so the paths *through* the membership are
+    # selected and have nothing at the end of them. `book_series` itself is not
+    # listed because an empty list ends the walk there.
     ("hardcover", "by-isbn-no-series.json", "book.book_series.featured"): (
-        "no membership, so nothing to mark featured"
+        "`book_series` is `[]`, so there is no membership to mark featured"
     ),
     ("hardcover", "by-isbn-no-series.json", "book.book_series.position"): (
-        "no membership, so no position in it"
+        "no membership, so no position in one"
     ),
     ("hardcover", "by-isbn-no-series.json", "book.book_series.series"): (
         "no membership, so no series row"
@@ -256,18 +245,12 @@ NULL_BUT_SELECTED = {
 }
 
 # A key a fixture carries and the query does not select, because the query selected
-# it when the recording was made. The second of the three. This is drift and it is
-# the class the guard exists for, so nothing is exempt here: the entry is empty on
-# purpose, and a fixture landing in it is re-recorded rather than listed.
-FORMERLY_SELECTED = {}
-
-# A fixture deliberately recorded off-spec, where "the query that would produce it
-# today" is not the question the file answers. The third of the three, and it is
-# empty because the one candidate turned out not to be off-spec: the re-record
-# showed Hardcover returns the featured series first whether or not the query asks
-# it to, so `by-isbn-two-series.json` is an ordinary live recording. See
-# `fixtures/hardcover/README.md`.
-OFF_SPEC = {}
+# it when the recording was made, is drift and the class the guard exists for. There
+# is deliberately no list for it: a fixture in that state is re-recorded, not
+# exempted. The same goes for a fixture recorded off-spec — there are none, because
+# the one candidate, `by-isbn-two-series.json`, turned out not to be off-spec at all.
+# Between them those two are the ticket's second and third classes, and both are
+# empty by design rather than by omission.
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +259,14 @@ OFF_SPEC = {}
 
 
 def complaints(row, body):
-    """Every way this body fails to match the query its row declares."""
+    """Every way this body fails to match the query its row declares.
+
+    Every record is read, not the first: a reply's volumes are not required to
+    carry the same keys — Google omits `publisher` on some and not others, and
+    Hardcover's editions differ the same way — so a key that only the second
+    edition carries is still a key the fixture carries, and one the query did not
+    select is still drift wherever it sits.
+    """
     source, fixture = row["source"], row["fixture"]
     records = records_of(source, body)
     if not records:
@@ -294,7 +284,7 @@ def complaints(row, body):
     else:
         # The mask names whole paths, so its tree starts at the reply's top level
         # and `items` is a list of volumes rather than one object.
-        selection = parse_selection_mask(request["fields"])
+        selection = google_selection(request["fields"])
         volumes = selection.pop("items", {})
         carried_top = {key for key in body if key != "items"}
         expected_top = set(selection)
@@ -303,7 +293,9 @@ def complaints(row, body):
     prefix = volume_prefix(source)
     selected = {prefix + path for path in selected_paths(selection)}
     leaves = {prefix + path for path in selected_leaves(selection)}
-    carried = {prefix + path for path in payload_paths(records[0])}
+    carried = set()
+    for record in records:
+        carried |= {prefix + path for path in payload_paths(record)}
 
     found = []
     for path in sorted(carried_top - expected_top):
@@ -320,11 +312,6 @@ def complaints(row, body):
             continue
         found.append(f"{path}: selected and not carried")
     return found
-
-
-def parse_selection_mask(mask):
-    """The same tree for Google's mask, which names whole paths rather than nesting."""
-    return google_selection(mask)
 
 
 def under_a_leaf(path, leaves):
@@ -477,6 +464,36 @@ class DriftTests(unittest.TestCase):
         found = complaints(row, body)
 
         self.assertIn("isbn_13: selected and not carried", found)
+
+    def test_a_key_on_a_later_volume_is_still_a_key_the_fixture_carries(self):
+        """Reading only the first record would pass this, and the corpus is full of
+        replies whose volumes differ — Google omits `publisher` on some and not
+        others, so "the first one is clean" says nothing about the rest."""
+        row = self.row("googlebooks", "by-title-cragside.json")
+        body = self.body(row["source"], row["fixture"])
+        self.assertGreater(len(body["items"]), 1, "the fixture needs two volumes")
+        body["items"][1]["saleInfo"] = {"country": "GB"}
+
+        found = complaints(row, body)
+
+        self.assertIn("items.saleInfo: carried and not selected", found)
+
+    def test_a_key_on_a_later_edition_is_still_a_key_the_fixture_carries(self):
+        """The same, on the other source: an edition-level extra key, not the first.
+
+        `book.id` would not do as the extra key: the title query selects it, so the
+        guard is right to pass it. `book.pages` is selected by neither query.
+        """
+        row = self.row("hardcover", "by-title-berwick.json")
+        body = self.body(row["source"], row["fixture"])
+        self.assertGreater(
+            len(body["data"]["editions"]), 1, "the fixture needs two editions"
+        )
+        body["data"]["editions"][1]["book"]["pages"] = 320
+
+        found = complaints(row, body)
+
+        self.assertIn("book.pages: carried and not selected", found)
 
     def test_a_google_fixture_recorded_without_the_mask_fails(self):
         """The whole shape of the ten unmasked recordings the ticket found."""
