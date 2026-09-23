@@ -1,15 +1,10 @@
 {
-  "kind": "books#volumes",
   "totalItems": 1,
   "items": [
     {
-      "kind": "books#volume",
       "id": "RASDtAEACAAJ",
-      "etag": "UFXXtIHI97M",
-      "selfLink": "https://www.googleapis.com/books/v1/volumes/RASDtAEACAAJ",
       "volumeInfo": {
         "title": "Cragside",
-        "subtitle": "A DCI Ryan Mystery",
         "authors": [
           "L. J. Ross"
         ],
@@ -25,50 +20,10 @@
             "identifier": "9781521748831"
           }
         ],
-        "readingModes": {
-          "text": false,
-          "image": false
-        },
-        "pageCount": 298,
-        "printType": "BOOK",
         "categories": [
           "Murder"
         ],
-        "maturityRating": "NOT_MATURE",
-        "allowAnonLogging": false,
-        "contentVersion": "preview-1.0.0",
-        "panelizationSummary": {
-          "containsEpubBubbles": false,
-          "containsImageBubbles": false
-        },
-        "language": "en",
-        "previewLink": "http://books.google.co.uk/books?id=RASDtAEACAAJ&dq=isbn:9781521748831&hl=&cd=1&source=gbs_api",
-        "infoLink": "http://books.google.co.uk/books?id=RASDtAEACAAJ&dq=isbn:9781521748831&hl=&source=gbs_api",
-        "canonicalVolumeLink": "https://books.google.com/books/about/Cragside.html?hl=&id=RASDtAEACAAJ"
-      },
-      "saleInfo": {
-        "country": "GB",
-        "saleability": "NOT_FOR_SALE",
-        "isEbook": false
-      },
-      "accessInfo": {
-        "country": "GB",
-        "viewability": "NO_PAGES",
-        "embeddable": false,
-        "publicDomain": false,
-        "textToSpeechPermission": "ALLOWED",
-        "epub": {
-          "isAvailable": false
-        },
-        "pdf": {
-          "isAvailable": false
-        },
-        "webReaderLink": "http://play.google.com/books/reader?id=RASDtAEACAAJ&hl=&source=gbs_api",
-        "accessViewStatus": "NONE",
-        "quoteSharingAllowed": false
-      },
-      "searchInfo": {
-        "textSnippet": "&#39; After his climactic battle with notorious serial killer The Hacker, DCI Ryan is spending the summer with his fianc\u00e9e within the grounds of Cragside, a spectacular Bavarian-style mansion surrounded by acres of woodland."
+        "language": "en"
       }
     }
   ]

@@ -79,6 +79,7 @@ from tests.sources import (
 from tests.tempdir import TemporaryDirectory
 from tests.test_googlebooks import Replay as GoogleReplay
 from tests.test_googlebooks import ReplayByQuery
+from tests.test_hardcover import HAND_MADE as HARDCOVER_HAND_MADE
 from tests.test_hardcover import Replay
 from tests.test_llm import Replay as LlmReplay
 from tests.test_llm import today
@@ -128,6 +129,12 @@ SERIES_ALREADY_ON_IT = """    <dc:title>The Masque of the Red Death</dc:title>
 # The `q` Google is asked for the Gutenberg book, which is what its recording was
 # made with and therefore what a replay has to match before handing it back.
 TITLE_ASKED = 'intitle:"The Masque of the Red Death" inauthor:"Edgar Allan Poe"'
+
+# The live recording, not the frozen case: `hand-made/poe-core-cases.json` holds
+# the five tied volumes CBO-68 and CBO-69 rest on, and this file is re-recorded
+# whenever the query changes. The test below wants the live reply, because its
+# point is that the real client reads and scores whatever Google really returned.
+POE_RECORDING = "by-title-poe.json"
 
 # What the unverified marker is made of, as the design spec spells it. Held here
 # rather than imported, so a test cannot agree with the code by sharing its
@@ -3410,18 +3417,20 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
 
         The Gutenberg book carries no ISBN, so it goes down the title path, asks
         Google the question `colophon/googlebooks.py` builds, and is graded
-        against what Google actually returned - which is ten volumes of the same
-        story, five of them agreeing with the file on everything it states.
-        Every one of those five scores 1.0, so the gap is 0.0 and §1.2 calls
-        that saturated: the reply is read and scored, and the book is marked
-        rather than written from a printing picked by nothing but list order.
-        This is the recording in `fixtures/googlebooks/by-title-poe.json`, and
-        nothing here is hand-written - which is the point, because a hand-made
-        candidate can only ever agree with whatever the client was written to
-        produce.
+        against what Google actually returned. This is the live recording rather
+        than the frozen case: `hand-made/poe-core-cases.json` holds the five tied
+        volumes CBO-68 and CBO-69 rest on, and this test is about what the real
+        client does with whatever the source really sent.
+
+        The live file holds more volumes than the five, and the number is not
+        asserted here, because it is Google's inventory on the day it was
+        recorded and not a property of the client. What the test asserts is the
+        shape of the outcome: a reply full of editions agreeing with the file is
+        read and scored, and the book is marked rather than written from a
+        printing picked by nothing but list order.
         """
         path = self.a_real_book()
-        replay = ReplayByQuery(**{TITLE_ASKED: "by-title-poe.json"})
+        replay = ReplayByQuery(**{TITLE_ASKED: POE_RECORDING})
         source = GoogleBooks("a-key", transport=replay)
 
         outcome = self.corrector(source=source).correct(path)
@@ -3937,9 +3946,14 @@ class GenreMappingTests(CorrectionTestCase):
             )
         )
 
-    def hardcover_over(self, name):
-        """A real Hardcover client, replaying a recorded reply."""
-        return Hardcover("hardcover-token", transport=Replay(name))
+    def hardcover_over(self, name, folder=None):
+        """A real Hardcover client, replaying a recorded reply.
+
+        `folder` is for the frozen cases in `hand-made/`, which a test asserting
+        an absence has to read: a re-record answers the absence.
+        """
+        transport = Replay(name) if folder is None else Replay(name, folder=folder)
+        return Hardcover("hardcover-token", transport=transport)
 
     def deliver(self, path, corrector, record=None):
         """Correct a book the way the relay does, record write and all."""
@@ -4121,7 +4135,9 @@ class GenreMappingTests(CorrectionTestCase):
     def test_a_recording_made_before_this_ticket_has_no_genres_to_ask_about(self):
         """A reply with no `cached_tags` is absent, not a bug."""
         corrector = self.corrector(
-            source=self.hardcover_over("by-isbn-found.json"),
+            source=self.hardcover_over(
+                "sparse-isbn-reply.json", folder=HARDCOVER_HAND_MADE
+            ),
             genres=self.ALLOWED,
             llm=self.llm("genre-mapping-murder.json"),
         )

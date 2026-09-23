@@ -40,17 +40,19 @@ against a file spelling it `LJ Ross`: the stops and the spacing do not matter.
 | `by-title-belsay.json` | *Belsay*, L. J. Ross | 1 volume, *Belsay* | recorded |
 | `by-title-the-infirmary.json` | *The Infirmary*, L. J. Ross | 1 volume, L. J. Ross's book | recorded |
 | `by-title-the-infirmary-reagon.json` | *The Infirmary*, Carly Reagon | 1 volume, Carly Reagon's book of the same name | recorded |
-| `by-title-poe.json` | *The Masque of the Red Death*, Edgar Allan Poe | 10 volumes, several of them Poe's | recorded |
+| `by-title-poe.json` | *The Masque of the Red Death*, Edgar Allan Poe | 20 volumes, several of them Poe's | recorded |
 | `by-title-nothing.json` | a title nobody has | `totalItems: 0`, no `items` key | recorded |
 
 `by-title-nothing.json` is CBO-39's as well as CBO-37's: the unverified path
 begins when no source has the book, so the branch that reads this was asked of
 the live API again with the widened `fields` mask and answered byte-identical
-bytes. Since the reply *is* the empty answer, a second recording of it would be
-the same file twice, so the one CBO-37 made is the one CBO-39's relay test reads,
-through a real `GoogleBooks` client. What the probe established is that the empty
-answer is what a title Google does not have comes back as - not an error - and
-that is now pinned by a test rather than by a second copy of the same 53 bytes.
+bytes. **That was true of the unmasked mask and is no longer true of the shipped
+one.** Both empty files were re-recorded on 2026-09-23, and the shipped mask
+returns `{"totalItems": 0}` — 25 bytes as stored here, indented, and 16 without
+the whitespace — where the unmasked request returned the same object with
+`kind: "books#volumes"` beside it. No test reads `kind`, so the change is
+invisible to the suite; it is recorded here because the byte count below used to
+be the evidence that the two recordings agreed.
 
 The two `the-infirmary` recordings are the lookalike pair: two different books
 share a title, and only the author separates them.
@@ -108,9 +110,11 @@ because there is no series to write. See
 `docs/research/cbo-37-google-books.md`.
 
 **No `items` key when nothing matched.** `by-isbn-no-edition.json` and
-`by-title-nothing.json` are both 53 bytes:
-`{"kind": "books#volumes", "totalItems": 0}`. Reading `items` without a default
-would crash on the most ordinary outcome there is.
+`by-title-nothing.json` are both `{"totalItems": 0}` as of the 2026-09-23
+re-record — 25 bytes as stored, indented. Reading `items` without a default
+would crash on the most ordinary outcome there is. (Before that they carried
+`kind: "books#volumes"` beside it, from the unmasked request — same absence, one
+more key.)
 
 ## The fields CBO-38's rules write
 
@@ -136,7 +140,7 @@ nothing else, because that is what Google answered.
 the two files carry a blurb, and the 1084-character one is byte-for-byte what
 Hardcover has for the same book.
 
-## CBO-42: `categories`, which the shipped mask no longer asks for
+## CBO-42: `categories`, which the shipped mask now asks for
 
 CBO-42 (genre mapping) needs Google's genres, and they are `volumeInfo.categories`.
 The CBO-37 recording above, `by-title-cragside.json`, was made through an older
@@ -149,13 +153,25 @@ RASDtAEACAAJ  'Cragside'  ->  categories: ['Murder']
 ```
 
 One is a library subject heading — a character, not a genre — and the other is a
-genre. **The shipped `FIELDS` mask returns neither**: it enumerates the fields to
-return, and `items/volumeInfo/categories` is not among them, so the field is
-absent from every reply the current client gets. CBO-42 appends it to the mask.
+genre.
+
+**The shipped `FIELDS` mask carries `items/volumeInfo/categories`**, as its last
+entry (`colophon/googlebooks.py:52-58`). This README said the opposite until
+CBO-74: that the mask did not carry it and that CBO-42 appended it. CBO-42's
+addition *is* the shipped mask, and had been since that ticket merged — the
+sentence described the state before it. The re-record settled the question the
+sentence raised: every masked reply now carries `categories` when the volume has
+any, and omits the key entirely when it has none.
 
 | File | Query | What came back | How |
 | --- | --- | --- | --- |
-| `isbn-cragside-categories.json` | `isbn:9781521748831`, the shipped mask with `items/volumeInfo/categories` appended | 1 volume, *Cragside*, `categories: ["Murder"]` | recorded |
+| `isbn-cragside-categories.json` | `isbn:9781521748831`, the shipped mask | 1 volume, *Cragside*, `categories: ["Murder"]` | recorded |
+
+That file was recorded with `items/volumeInfo/categories` *appended* to a mask that
+lacked it, which is why it was once evidence of a difference between it and the
+shipped mask. It is not any more: re-recorded on 2026-09-23 against the shipped
+mask, it is an ordinary recording, and the mask it answers is the one the client
+sends.
 
 Two volumes disagreeing about one book's genre is not a defect to fix: the
 character heading is Google's own catalogue data, and the same probe shows the

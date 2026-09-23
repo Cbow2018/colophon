@@ -15,6 +15,10 @@ from colophon.sources import SourceError, genre_parts
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "hardcover"
+# The cases a ticket rests on rather than the API's own words: never re-recorded,
+# and each named in `fixtures/hardcover/hand-made/README.md`. See `RECORDED`'s own
+# README for the rule.
+HAND_MADE = RECORDED / "hand-made"
 TOKEN = "hardcover-token-that-must-never-be-logged"
 
 CRAGSIDE = "9781521748831"
@@ -34,10 +38,14 @@ THE_INFIRMARY_TITLE = "The Infirmary"
 
 
 class Replay:
-    """Stands in for the network: hands back a recorded reply, remembers the request."""
+    """Stands in for the network: hands back a recorded reply, remembers the request.
 
-    def __init__(self, name="by-isbn-found.json", status=200):
-        self.body = (RECORDED / name).read_bytes()
+    `folder` is for the frozen cases in `hand-made/`, which live beside the live
+    recordings rather than among them.
+    """
+
+    def __init__(self, name="by-isbn-found.json", status=200, folder=RECORDED):
+        self.body = (folder / name).read_bytes()
         self.status = status
         self.sent = None
 
@@ -46,13 +54,31 @@ class Replay:
         return self.status, self.body
 
 
+def a_replay(replay=None, name="by-isbn-found.json"):
+    """A transport for a test's `source()`: the `Replay` given, or a default one.
+
+    The four `source()` helpers used to take only a fixture *name* and build the
+    `Replay` themselves, which left no way to pass one that reads `hand-made/` — a
+    test asking for a frozen case got `Replay(Replay(...))` and a `TypeError` from
+    `RECORDED / name`. Taking a `Replay` here is what lets a frozen case and a live
+    recording be replayed through the same helper.
+
+    A name is accepted as a convenience for the many call sites that have one, but
+    a `Replay` is never treated as one: `Replay` is not a str, so it is passed
+    through rather than wrapped a second time.
+    """
+    if replay is None:
+        return Replay(name)
+    return Replay(replay) if isinstance(replay, str) else replay
+
+
 def answering(status, body):
     return lambda url, headers, request: (status, body)
 
 
 class LookupTests(unittest.TestCase):
     def source(self, replay=None):
-        return Hardcover(TOKEN, transport=replay or Replay())
+        return Hardcover(TOKEN, transport=a_replay(replay))
 
     def test_it_finds_the_book_by_isbn_and_reads_what_the_source_says(self):
         book = self.source().by_isbn(CRAGSIDE)
@@ -79,8 +105,10 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(book.series_id, 23832)
 
     def test_a_reply_that_does_not_carry_an_id_leaves_it_empty(self):
-        """The older recordings have no ids; a missing one is absent, not a bug."""
-        book = self.source(Replay("by-isbn-found.json")).by_isbn(CRAGSIDE)
+        """The pre-CBO-41 recordings have no ids; a missing one is absent, not a bug."""
+        book = self.source(Replay("sparse-isbn-reply.json", folder=HAND_MADE)).by_isbn(
+            CRAGSIDE
+        )
 
         self.assertEqual(book.authors, ("L.J. Ross",))
         self.assertEqual(book.author_ids, (None,))
@@ -139,7 +167,7 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(book.authors, ("J.R.R. Tolkien",))
 
     def test_it_falls_back_to_the_edition_title_when_the_work_has_none(self):
-        source = self.source(Replay("hand-made-work-without-title.json"))
+        source = self.source(Replay("work-without-title.json", folder=HAND_MADE))
 
         book = source.by_isbn(A_HAND_MADE_BOOK)
 
@@ -148,14 +176,20 @@ class LookupTests(unittest.TestCase):
 
     def test_it_takes_authors_and_leaves_the_translator_behind(self):
         """A reply wider than the question is filtered again, not trusted."""
-        source = self.source(Replay("hand-made-wider-than-the-question.json"))
+        source = self.source(Replay("wider-than-the-question.json", folder=HAND_MADE))
 
         book = source.by_isbn(A_WIDER_REPLY)
 
         self.assertEqual(book.authors, ("The Author",))
 
     def test_a_standalone_book_comes_back_with_no_series(self):
-        source = self.source(Replay("by-isbn-no-series.json"))
+        """Normal People is not in a series, so there is no membership to read.
+
+        The frozen reply, not the live one: `book_series` is `[]` in both today,
+        but the live recording is re-recordable and this test asserts an absence,
+        which a re-record could fill in — the same trap CBO-74 hit four times.
+        """
+        source = self.source(Replay("no-series.json", folder=HAND_MADE))
 
         book = source.by_isbn(NORMAL_PEOPLE)
 
@@ -165,8 +199,16 @@ class LookupTests(unittest.TestCase):
         self.assertIsNone(book.series_number)
 
     def test_it_prefers_the_series_hardcover_marks_as_featured(self):
-        """Mistborn is in three series, and Hardcover lists the featured one last."""
-        source = self.source(Replay("by-isbn-two-series.json"))
+        """Mistborn is in three series, and only one of them is the book's own.
+
+        The frozen reply, whose featured row is **last**: the client has to pick it
+        out by the `featured` flag rather than take the first row. The live
+        recording cannot show this — the re-record proved Hardcover returns the
+        featured row first when the query asks with its `order_by`, so against the
+        live file a client that simply took `memberships[0]` would pass. See
+        `fixtures/hardcover/hand-made/README.md`.
+        """
+        source = self.source(Replay("two-series-featured-last.json", folder=HAND_MADE))
 
         book = source.by_isbn(MISTBORN)
 
@@ -190,7 +232,7 @@ class TitleLookupTests(unittest.TestCase):
     """
 
     def source(self, replay=None):
-        return Hardcover(TOKEN, transport=replay or Replay("by-title-cragside.json"))
+        return Hardcover(TOKEN, transport=a_replay(replay, "by-title-cragside.json"))
 
     def test_it_finds_the_book_by_a_cleaned_title(self):
         candidates = self.source().by_title([CRAGSIDE_TITLE], "en")
@@ -485,8 +527,10 @@ class TheOtherFieldsTests(unittest.TestCase):
     to reach across. The reply is the real one for the Cragside edition.
     """
 
-    def source(self, name="by-isbn-cragside-edition.json"):
-        return Hardcover(TOKEN, transport=Replay(name))
+    def source(self, replay=None):
+        return Hardcover(
+            TOKEN, transport=a_replay(replay, "by-isbn-cragside-edition.json")
+        )
 
     def test_it_asks_for_the_fields_the_rules_can_write(self):
         replay = Replay()
@@ -528,16 +572,23 @@ class TheOtherFieldsTests(unittest.TestCase):
         )
 
     def test_a_book_with_no_publisher_or_cover_carries_neither(self):
-        """Hardcover has neither for Normal People, and neither is invented."""
-        book = self.source("by-isbn-no-series.json").by_isbn(NORMAL_PEOPLE)
+        """Hardcover had neither for Normal People, and neither was invented.
+
+        The reply showing that is the pre-CBO-38 one, kept in `hand-made/`: a
+        re-record gives the book a publisher and a cover, which is the answer to
+        CBO-38 and the end of this case.
+        """
+        book = self.source(Replay("sparse-isbn-reply.json", folder=HAND_MADE)).by_isbn(
+            NORMAL_PEOPLE
+        )
 
         self.assertIsNone(book.publisher)
         self.assertIsNone(book.cover)
 
     def test_the_title_path_carries_them_too(self):
-        candidates = self.source("by-title-cragside-other-fields.json").by_title(
-            [CRAGSIDE_TITLE], "en"
-        )
+        candidates = self.source(
+            Replay("cbo-38-without-tags.json", folder=HAND_MADE)
+        ).by_title([CRAGSIDE_TITLE], "en")
 
         self.assertTrue(
             candidates[0].description.startswith("FROM THE #1 INTERNATIONAL")
@@ -560,8 +611,10 @@ class GenreTests(unittest.TestCase):
     THE_TRIAL = "9781529196382"
     NO_EDITION = "9781473225374"
 
-    def source(self, name):
-        return Hardcover(TOKEN, transport=Replay(name))
+    def source(self, replay=None):
+        return Hardcover(
+            TOKEN, transport=a_replay(replay, "by-isbn-9781521748831-genres.json")
+        )
 
     def test_a_candidate_carries_the_genres_the_source_holds(self):
         book = self.source("by-isbn-9781521748831-genres.json").by_isbn(
@@ -641,7 +694,9 @@ class GenreTests(unittest.TestCase):
 
     def test_a_recording_made_before_this_ticket_carries_none_either(self):
         """A missing `cached_tags` is absent, not a bug."""
-        book = self.source("by-isbn-found.json").by_isbn(CRAGSIDE)
+        book = self.source(Replay("sparse-isbn-reply.json", folder=HAND_MADE)).by_isbn(
+            CRAGSIDE
+        )
 
         self.assertEqual(book.genres, ())
 

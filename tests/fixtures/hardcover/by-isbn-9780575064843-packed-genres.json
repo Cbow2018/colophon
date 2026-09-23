@@ -20,6 +20,10 @@
         "book": {
           "title": "Pyramids",
           "description": "It's bad enough being new on the job, but Teppic hasn't a clue as to what a pharaoh is supposed to do. After all, he's been trained at Ankh-Morpork's famed assassins' school, across the sea from the Kingdom of the Sun.First, there's the monumental task of building a suitable resting place for Dad -- a pyramid to end all pyramids. Then there are the myriad administrative duties, such as dealing with mad priests, sacred crocodiles, and marching mummies. And to top it all off, the adolescent pharaoh discovers deceit, betrayal -- not to mention aheadstrong handmaiden -- at the heart of his realm.",
+          "release_date": "1989-01-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31535942/0f6852af0991774597ac442370ec8a0fe7a879fc.jpeg"
+          },
           "cached_tags": {
             "Tag": [
               {
@@ -269,10 +273,6 @@
             ],
             "Group": [],
             "Content Warning": []
-          },
-          "release_date": "1989-01-01",
-          "image": {
-            "url": "https://assets.hardcover.app/edition/31535942/0f6852af0991774597ac442370ec8a0fe7a879fc.jpeg"
           },
           "contributions": [
             {

@@ -1,0 +1,397 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 300,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "q6T5zQEACAAJ",
+      "etag": "8PMFg20hmgk",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/q6T5zQEACAAJ",
+      "volumeInfo": {
+        "title": "The Masque of the Red Death",
+        "subtitle": "Annotated",
+        "authors": [
+          "Edgar Allan Poe"
+        ],
+        "publishedDate": "2020-10-06",
+        "description": "The Masque of the Red Death by Edgar Allan Poe A disease known as the Red Death strikes the fictional country where this story takes place and causes its victims to die quickly and horribly. Despite the fact that this disease is rampant, the prince, Prospero, is feeling happy and hopeful. He decides to lock the doors of his palace to defend himself from the plague, ignoring the disease that ravages the land. After several months, he throws an elegant masked ball. For this celebration, decorate the rooms of your house in unique colors. The easternmost room is decorated in blue, with blue stained glass. The next room is purple with the same stained glass pattern. The rooms continue to the west, in accordance with this layout, in the following color arrangement: green, orange, white and purple. The seventh room is black, with red windows. Also in this room is an ebony clock. When the clock strikes every hour, its sound is so loud and annoying that everyone stops talking and the orchestra stops playing. However, when the clock does not strike, the rooms are so beautiful and strange that they seem to be filled with dreams, swirling among the revelers. Most guests, however, avoid the final room, black and red, because it contains both the clock and a sinister atmosphere. At midnight, a new guest appears, dressed more macabre than his counterparts. His mask resembles the face of a corpse, his clothing resembles a funerary shroud, and his face reveals bloodstains suggesting that he is a victim of the Red Death. Prospero is angry that someone with such little humor and lightness joined his group. The other guests, however, are so afraid of this masked man that they cannot prevent him from passing through every room. Prospero finally catches up with the new guest in the black and red room. As soon as he confronts the figure, Prospero dies. When other partygoers enter the room to attack the man in the cape, they discover that no one is under the costume. Then they all die, because the Red Death has infiltrated the castle. \"Darkness and decay and the red death\" have finally triumphed.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9798694400480"
+          }
+        ],
+        "readingModes": {
+          "text": false,
+          "image": false
+        },
+        "pageCount": 30,
+        "printType": "BOOK",
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "preview-1.0.0",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=q6T5zQEACAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=q6T5zQEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=q6T5zQEACAAJ&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&cd=1&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=q6T5zQEACAAJ&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/The_Masque_of_the_Red_Death.html?hl=&id=q6T5zQEACAAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": false
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=q6T5zQEACAAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "The Masque of the Red Death by Edgar Allan Poe A disease known as the Red Death strikes the fictional country where this story takes place and causes its victims to die quickly and horribly."
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "XcE-EAAAQBAJ",
+      "etag": "RUncXvXLCjw",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/XcE-EAAAQBAJ",
+      "volumeInfo": {
+        "title": "The Masque of the Red Death",
+        "authors": [
+          "Edgar Allan Poe"
+        ],
+        "publisher": "Phoemixx Classics Ebooks",
+        "publishedDate": "2021-09-02",
+        "description": "The Masque of the Red Death Edgar Allan Poe - The story is said in the most enthralling manner that it makes it very interesting as well as introspective. Even though it appears to be very literal but the crux of the matter is all about the inevitability of death. The prince thought that with his power and position he could defy the plague that caused death in his kingdom. But eventually even he is not spared because on the figurative level it is not a plague but death itself, that does not spare anyone. Prince Prospero's intentions and preparations did not stand a chance when death decided to take him on.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9783986472009"
+          },
+          {
+            "type": "ISBN_10",
+            "identifier": "3986472002"
+          }
+        ],
+        "readingModes": {
+          "text": true,
+          "image": true
+        },
+        "pageCount": 13,
+        "printType": "BOOK",
+        "categories": [
+          "Fiction"
+        ],
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "0.3.3.0.preview.3",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=XcE-EAAAQBAJ&printsec=frontcover&img=1&zoom=5&edge=curl&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=XcE-EAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=XcE-EAAAQBAJ&printsec=frontcover&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&cd=2&source=gbs_api",
+        "infoLink": "https://play.google.com/store/books/details?id=XcE-EAAAQBAJ&source=gbs_api",
+        "canonicalVolumeLink": "https://play.google.com/store/books/details?id=XcE-EAAAQBAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "FOR_SALE",
+        "isEbook": true,
+        "listPrice": {
+          "amount": 5.49,
+          "currencyCode": "GBP"
+        },
+        "retailPrice": {
+          "amount": 5.49,
+          "currencyCode": "GBP"
+        },
+        "buyLink": "https://play.google.com/store/books/details?id=XcE-EAAAQBAJ&rdid=book-XcE-EAAAQBAJ&rdot=1&source=gbs_api",
+        "offers": [
+          {
+            "finskyOfferType": 1,
+            "listPrice": {
+              "amountInMicros": 5490000,
+              "currencyCode": "GBP"
+            },
+            "retailPrice": {
+              "amountInMicros": 5490000,
+              "currencyCode": "GBP"
+            },
+            "giftable": true
+          }
+        ]
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "PARTIAL",
+        "embeddable": true,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": true,
+          "acsTokenLink": "http://books.google.co.uk/books/download/The_Masque_of_the_Red_Death-sample-epub.acsm?id=XcE-EAAAQBAJ&format=epub&output=acs4_fulfillment_token&dl_type=sample&source=gbs_api"
+        },
+        "pdf": {
+          "isAvailable": true,
+          "acsTokenLink": "http://books.google.co.uk/books/download/The_Masque_of_the_Red_Death-sample-pdf.acsm?id=XcE-EAAAQBAJ&format=pdf&output=acs4_fulfillment_token&dl_type=sample&source=gbs_api"
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=XcE-EAAAQBAJ&hl=&source=gbs_api",
+        "accessViewStatus": "SAMPLE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "The Masque of the Red Death Edgar Allan Poe - The story is said in the most enthralling manner that it makes it very interesting as well as introspective."
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "_hSNzQEACAAJ",
+      "etag": "2SlXGFmAkik",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/_hSNzQEACAAJ",
+      "volumeInfo": {
+        "title": "The Masque of the Red Death",
+        "subtitle": "The Masque of the Red Death - Edgar Allan Poe - Firesigil Edition",
+        "authors": [
+          "Edgar Allan Poe"
+        ],
+        "publisher": "Independently Published",
+        "publishedDate": "2020-03-19",
+        "description": "The Masque of the Red Death\", originally published as \"The Mask of the Red Death: A Fantasy\", is a short story by American writer Edgar Allan Poe, first published in 1842. The story follows Prince Prospero's attempts to avoid a dangerous plague, known as the Red Death, by hiding in his abbey. He, along with many other wealthy nobles, hosts a masquerade ball within seven rooms of the abbey, each decorated with a different color. In the midst of their revelry, a mysterious figure disguised as a Red Death victim enters and makes his way through each of the rooms. Prospero dies after confronting this stranger, whose \"costume\" proves to contain nothing tangible inside it; the guests also die in turn.Poe's story follows many traditions of Gothic fiction and is often analyzed as an allegory about the inevitability of death, though some critics advise against an allegorical reading. Many different interpretations have been presented, as well as attempts to identify the true nature of the eponymous disease. The story was first published in May 1842 in Graham's Magazine and has since been adapted in many different forms, including a 1964 film starring Vincent Price. Poe's short story has also been alluded to by other works in many types of media.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9798628319192"
+          }
+        ],
+        "readingModes": {
+          "text": false,
+          "image": false
+        },
+        "pageCount": 24,
+        "printType": "BOOK",
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "preview-1.0.0",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=_hSNzQEACAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=_hSNzQEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=_hSNzQEACAAJ&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&cd=4&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=_hSNzQEACAAJ&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/The_Masque_of_the_Red_Death.html?hl=&id=_hSNzQEACAAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": false
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=_hSNzQEACAAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "The story follows Prince Prospero&#39;s attempts to avoid a dangerous plague, known as the Red Death, by hiding in his abbey."
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "du6sYyygMgIC",
+      "etag": "9gnd0BvWIQc",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/du6sYyygMgIC",
+      "volumeInfo": {
+        "title": "The Masque Of The Red Death",
+        "subtitle": "Short Story",
+        "authors": [
+          "Edgar Allan Poe"
+        ],
+        "publisher": "Harper Collins",
+        "publishedDate": "2013-01-29",
+        "description": "Within their refuge from a terrible plague called the Red Death, Prince Prospero and his court hold an opulent masquerade ball. But one uninvited guest means death for everyone. A pioneer of the short story genre, Poe\u2019s stories typically captured themes of the macabre and included elements of the mysterious. His better-known stories include \u201cThe Fall of the House of Usher\u201d, \u201cThe Pit and the Pendulum\u201d, \u201cThe Murders in the Rue Morgue\u201d, \u201cThe Masque of the Red Death\u201d and \u201cThe Tell-Tale Heart\u201d. HarperCollins brings great works of literature to life in digital format, upholding the highest standards in ebook production and celebrating reading in all its forms. Look for more titles in the HarperCollins short-stories collection to build your digital library.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9781443423359"
+          },
+          {
+            "type": "ISBN_10",
+            "identifier": "1443423351"
+          }
+        ],
+        "readingModes": {
+          "text": true,
+          "image": false
+        },
+        "pageCount": 15,
+        "printType": "BOOK",
+        "categories": [
+          "Fiction"
+        ],
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": true,
+        "contentVersion": "2.4.5.0.preview.2",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=du6sYyygMgIC&printsec=frontcover&img=1&zoom=5&edge=curl&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=du6sYyygMgIC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=du6sYyygMgIC&printsec=frontcover&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&cd=5&source=gbs_api",
+        "infoLink": "https://play.google.com/store/books/details?id=du6sYyygMgIC&source=gbs_api",
+        "canonicalVolumeLink": "https://play.google.com/store/books/details?id=du6sYyygMgIC"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "FOR_SALE",
+        "isEbook": true,
+        "listPrice": {
+          "amount": 0.75,
+          "currencyCode": "GBP"
+        },
+        "retailPrice": {
+          "amount": 0.75,
+          "currencyCode": "GBP"
+        },
+        "buyLink": "https://play.google.com/store/books/details?id=du6sYyygMgIC&rdid=book-du6sYyygMgIC&rdot=1&source=gbs_api",
+        "offers": [
+          {
+            "finskyOfferType": 1,
+            "listPrice": {
+              "amountInMicros": 750000,
+              "currencyCode": "GBP"
+            },
+            "retailPrice": {
+              "amountInMicros": 750000,
+              "currencyCode": "GBP"
+            },
+            "giftable": true
+          }
+        ]
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "PARTIAL",
+        "embeddable": true,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": true,
+          "acsTokenLink": "http://books.google.co.uk/books/download/The_Masque_Of_The_Red_Death-sample-epub.acsm?id=du6sYyygMgIC&format=epub&output=acs4_fulfillment_token&dl_type=sample&source=gbs_api"
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=du6sYyygMgIC&hl=&source=gbs_api",
+        "accessViewStatus": "SAMPLE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "But one uninvited guest means death for everyone. A pioneer of the short story genre, Poe\u2019s stories typically captured themes of the macabre and included elements of the mysterious."
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "nPByzgEACAAJ",
+      "etag": "hlK/OZ/fVDw",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/nPByzgEACAAJ",
+      "volumeInfo": {
+        "title": "The Masque of the Red Death",
+        "subtitle": "Original Classics and Annotated",
+        "authors": [
+          "Edgar Allan Poe"
+        ],
+        "publishedDate": "2021-03-09",
+        "description": "The Mask of the Red Death: A Fantasy is a short story by American writer Edgar Allan Poe, first published in 1842.",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_13",
+            "identifier": "9798719063713"
+          }
+        ],
+        "readingModes": {
+          "text": false,
+          "image": false
+        },
+        "pageCount": 25,
+        "printType": "BOOK",
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "preview-1.0.0",
+        "panelizationSummary": {
+          "containsEpubBubbles": false,
+          "containsImageBubbles": false
+        },
+        "language": "en",
+        "previewLink": "http://books.google.co.uk/books?id=nPByzgEACAAJ&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&cd=7&source=gbs_api",
+        "infoLink": "http://books.google.co.uk/books?id=nPByzgEACAAJ&dq=intitle:%22The+Masque+of+the+Red+Death%22+inauthor:%22Edgar+Allan+Poe%22&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/The_Masque_of_the_Red_Death.html?hl=&id=nPByzgEACAAJ"
+      },
+      "saleInfo": {
+        "country": "GB",
+        "saleability": "NOT_FOR_SALE",
+        "isEbook": false
+      },
+      "accessInfo": {
+        "country": "GB",
+        "viewability": "NO_PAGES",
+        "embeddable": false,
+        "publicDomain": false,
+        "textToSpeechPermission": "ALLOWED",
+        "epub": {
+          "isAvailable": false
+        },
+        "pdf": {
+          "isAvailable": false
+        },
+        "webReaderLink": "http://play.google.com/books/reader?id=nPByzgEACAAJ&hl=&source=gbs_api",
+        "accessViewStatus": "NONE",
+        "quoteSharingAllowed": false
+      },
+      "searchInfo": {
+        "textSnippet": "The Mask of the Red Death: A Fantasy is a short story by American writer Edgar Allan Poe, first published in 1842."
+      }
+    }
+  ]
+}

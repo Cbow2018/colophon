@@ -10,11 +10,27 @@ import unittest
 import urllib.parse
 from pathlib import Path
 
+from colophon.epub import read as read_epub
 from colophon.googlebooks import GoogleBooks
+from colophon.matching import FileBook, score_candidate
 from colophon.sources import SourceError
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "googlebooks"
+# The cases a ticket rests on rather than the API's own words: never re-recorded,
+# and each named in `fixtures/googlebooks/hand-made/README.md`. See the rule in
+# `RECORDED`'s own README.
+HAND_MADE = RECORDED / "hand-made"
+EPUBS = Path(__file__).parent / "fixtures" / "books"
+
+# The Gutenberg book the Poe recordings were made about, as the corrector reads
+# it. The tie is a fact about a real file against a real reply, so it is measured
+# against the real book rather than against a hand-written stand-in.
+_GUTENBERG = read_epub(EPUBS / "the-masque-of-the-red-death-epub3.epub")
+FILE_BOOK = FileBook(
+    _GUTENBERG.title, _GUTENBERG.authors, _GUTENBERG.language, _GUTENBERG.date
+)
+
 KEY = "google-books-key-that-must-never-be-logged"
 
 CRAGSIDE = "9781521748831"
@@ -29,11 +45,13 @@ UNRELATED = "9780000000000"
 class Replay:
     """Stands in for the network: hands back a recorded reply, remembers the URL.
 
-    Each source answers from its own fixtures; this one reads Google's.
+    Each source answers from its own fixtures; this one reads Google's. `folder`
+    is for the frozen cases, which live beside the live recordings rather than
+    among them.
     """
 
-    def __init__(self, name="by-title-cragside.json", status=200):
-        self.body = (RECORDED / name).read_bytes()
+    def __init__(self, name="by-title-cragside.json", status=200, folder=RECORDED):
+        self.body = (folder / name).read_bytes()
         self.status = status
         self.sent = None
 
@@ -474,10 +492,67 @@ class GenreTests(unittest.TestCase):
     def test_a_candidate_with_no_categories_carries_no_genres(self):
         """The older recordings were made before the mask asked for any."""
         book = GoogleBooks(
-            KEY, transport=Replay("by-isbn-cragside-other-fields.json")
+            KEY,
+            transport=Replay("no-categories.json", folder=HAND_MADE),
         ).by_isbn(CRAGSIDE)
 
         self.assertEqual(book.genres, ())
+
+
+class HandMadeCaseTests(unittest.TestCase):
+    """The frozen cases in `hand-made/`, which no re-record may take away.
+
+    `hand-made/poe-core-cases.json` holds the five volumes of the 0.0000 tie
+    that CBO-68's §4 finding and CBO-69's whole reproduction rest on. A test
+    reads it so the file is guarded rather than only described: deleting a
+    volume, or "fixing" `du6sYyygMgIC`'s casing to match the other four, fails
+    here instead of quietly removing the case both tickets were raised for.
+    """
+
+    def frozen(self):
+        return json.loads((HAND_MADE / "poe-core-cases.json").read_text("utf-8"))
+
+    def test_it_holds_the_five_volumes_that_tie_and_not_the_other_five(self):
+        payload = self.frozen()
+
+        self.assertEqual(payload["totalItems"], 300, "the reply's own count is kept")
+        self.assertEqual(
+            [item["id"] for item in payload["items"]],
+            [
+                "q6T5zQEACAAJ",
+                "XcE-EAAAQBAJ",
+                "_hSNzQEACAAJ",
+                "du6sYyygMgIC",
+                "nPByzgEACAAJ",
+            ],
+        )
+
+    def test_the_casing_cbo_69_reproduces_is_the_one_that_is_frozen(self):
+        """Google spells the preposition `Of` here and `of` in the other nine."""
+        volume = next(
+            item for item in self.frozen()["items"] if item["id"] == "du6sYyygMgIC"
+        )
+
+        self.assertEqual(volume["volumeInfo"]["title"], "The Masque Of The Red Death")
+        self.assertEqual(volume["volumeInfo"]["publishedDate"], "2013-01-29")
+
+    def test_all_five_still_tie_at_the_top_score_with_a_gap_of_zero(self):
+        """The tie is the case; it is what makes the band `medium` rather than `strong`."""
+        source = GoogleBooks(
+            KEY, transport=Replay("poe-core-cases.json", folder=HAND_MADE)
+        )
+        candidates = source.by_title(
+            ["The Masque of the Red Death"], "en", "Edgar Allan Poe"
+        )
+        scores = [
+            score_candidate(FILE_BOOK, candidate).score for candidate in candidates
+        ]
+
+        self.assertEqual(len(scores), 5, "five volumes, five candidates")
+        self.assertEqual(set(scores), {scores[0]}, f"not a tie: {scores}")
+        self.assertEqual(
+            scores[0], 0.9231, "the file carries a year none of the five matches"
+        )
 
 
 if __name__ == "__main__":

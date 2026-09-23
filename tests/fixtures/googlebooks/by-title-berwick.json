@@ -1,50 +1,34 @@
 {
-  "kind": "books#volumes",
   "totalItems": 1,
   "items": [
     {
-      "kind": "books#volume",
       "id": "-BOX0QEACAAJ",
-      "etag": "MOV5XLOn2xo",
-      "selfLink": "https://www.googleapis.com/books/v1/volumes/-BOX0QEACAAJ",
       "volumeInfo": {
         "title": "Berwick",
-        "readingModes": {
-          "text": false,
-          "image": false
+        "authors": [
+          "L. J. Ross"
+        ],
+        "publisher": "Penguin Group",
+        "publishedDate": "2026-01-22",
+        "description": "The twenty-fourth instalment in LJ Ross's globally bestselling DCI Ryan mystery series --------------------------------- Blood never lies... Detective Chief Inspector Ryan is living a nightmare. As one of the country's foremost murder detectives, Ryan knows he can face the worst of humanity and step into the darkest minds because, every night, he returns home to the loving arms of his wife, Anna. When he receives a call to say she's been arrested for the murder of a well-known author, he refuses to believe the evidence that seems to be piling up against her. Anna could never murder anyone. He's sure of it. Isn't he? With the case mounting against her, Ryan must search his soul to answer the question that seems to be on everybody's lips... Does he really trust the woman he married? Murder and mystery are peppered with romance and humour in this fast-paced crime whodunnit, set amidst the spectacular Northumbrian landscape. --------------------------------- PRAISE FOR LJ ROSS \"LJ Ross is the queen of Kindle\" - Sunday Telegraph \"She keeps company with the best mystery writers\" - The Times \"Holy Island is a blockbuster\" - Daily Express \"A literary phenomenon\" - Evening Chronicle",
+        "industryIdentifiers": [
+          {
+            "type": "ISBN_10",
+            "identifier": "1804960381"
+          },
+          {
+            "type": "ISBN_13",
+            "identifier": "9781804960387"
+          }
+        ],
+        "categories": [
+          "Fiction"
+        ],
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=-BOX0QEACAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=-BOX0QEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
         },
-        "maturityRating": "NOT_MATURE",
-        "allowAnonLogging": false,
-        "contentVersion": "full-1.0.0",
-        "language": "en",
-        "previewLink": "http://books.google.co.uk/books?id=-BOX0QEACAAJ&dq=intitle:%22Berwick%22+inauthor:%22L.+J.+Ross%22&hl=&cd=1&source=gbs_api",
-        "infoLink": "https://play.google.com/store/books/details?id=-BOX0QEACAAJ&source=gbs_api",
-        "canonicalVolumeLink": "https://play.google.com/store/books/details?id=-BOX0QEACAAJ"
-      },
-      "saleInfo": {
-        "country": "GB",
-        "saleability": "FREE",
-        "isEbook": true,
-        "buyLink": "https://play.google.com/store/books/details?id=-BOX0QEACAAJ&rdid=book--BOX0QEACAAJ&rdot=1&source=gbs_api"
-      },
-      "accessInfo": {
-        "country": "GB",
-        "viewability": "NO_PAGES",
-        "embeddable": false,
-        "publicDomain": false,
-        "textToSpeechPermission": "ALLOWED",
-        "epub": {
-          "isAvailable": false
-        },
-        "pdf": {
-          "isAvailable": false
-        },
-        "webReaderLink": "http://play.google.com/books/reader?id=-BOX0QEACAAJ&hl=&source=gbs_api",
-        "accessViewStatus": "NONE",
-        "quoteSharingAllowed": false
-      },
-      "searchInfo": {
-        "textSnippet": "The twenty-fourth instalment in LJ Ross&#39;s globally bestselling DCI Ryan mystery series --------------------------------- Blood never lies."
+        "language": "en"
       }
     }
   ]
