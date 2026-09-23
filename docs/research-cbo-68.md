@@ -540,3 +540,79 @@ stated: §4.4's tuning set does not exist, and the Google-only configuration has
 7. **Do not touch the scoring weights, `BAND_GAP` or the thresholds.** §4's estimate
    holds weights fixed, and F2's follow-up already covers why moving them is a
    re-derivation rather than a config edit.
+
+## Session 2: the Hardcover numbers, re-taken (2026-09-23, CBO-74)
+
+CBO-74 re-recorded every source fixture against the shipped queries, so the
+fixtures this note measured are gone. What follows is measured against the
+replacement. Two things this note said are now known to be wrong, and both are
+corrected here rather than in the body: it is a record of what was measured on
+2026-09-22.
+
+### §3.1 and decision 4: Hardcover's dates are populated
+
+**13 of 13 Hardcover title-path editions are dated**, and every Hardcover fixture
+in the corpus is dated 1/1. §3's table row for Hardcover ("8 editions across 4
+pre-CBO-38 title recordings — **0**") and §3.1's "Hardcover: unproven" are both
+superseded: the 0 was a recording-era gap, exactly as §1.3 suspected, and the
+field is populated.
+
+| Fixture | Editions | Dated | Dates |
+| -- | -- | -- | -- |
+| `by-title-cragside.json` | 1 | 1 | `2017-07-07` |
+| `by-title-cragside-other-fields.json` | 1 | 1 | `2017-07-07` |
+| `by-title-berwick.json` | 2 | 2 | `2026-02-26` (both) |
+| `by-title-belsay.json` | 1 | 1 | `2025-01-31` |
+| `by-title-the-infirmary.json` | 4 | 4 | `2019-02-10`, `2019-02-10`, `2019-01-01`, `2025-10-09` |
+| `by-title-the-infirmary-other-fields.json` | 4 | 4 | the same four |
+
+**CBO-68's decision 4 is answered in the affirmative**: Hardcover populates
+`release_date` on title replies, so D3's primary key is not degenerate on
+Hardcover and the Infirmary's three L.J. Ross editions can be ordered by it.
+
+One thing the re-record makes visible that the old fixtures could not: **the
+Infirmary's four editions are two works, not one.** The reply carries two distinct
+`book.id`s — work 1198266 for the three L.J. Ross editions and work 2284109 for
+the fourth — which is the collapse §1 and CBO-65 describe, now shown by the
+fixture as well as argued from it.
+
+**A caveat on the tiebreak.** §3.1's first consequence ("if Hardcover's editions
+carry no date in practice, D3's primary key degenerates to its tiebreak") no
+longer holds, but the tiebreak is not idle either: `by-title-berwick.json`'s two
+editions carry the **same** date, `2026-02-26`. Two editions of one work agreeing
+on the date is the case the tiebreak exists for, and it is now visible in a
+committed fixture.
+
+### The band distribution: §2.2's table no longer stands, and the reason is not the fixtures
+
+§2.2's numbers cannot be re-taken as they were measured, because the walk has
+changed underneath them. **§2.1's closing note says `main` has no production
+caller of `rank()`** — that was true at CBO-68's branch point and is not true
+now: CBO-59 is merged, and `correction.py`'s `_gather` does `dedupe` → `rank` →
+`band_of` with the early exit. §2.2's table is therefore a hybrid: CBO-59's pooled
+walk, but with the *old* source-racing behaviour for the question of what gets
+read.
+
+Re-run over the re-recorded fixtures with the shipped `_gather` behaviour, one
+row does not reproduce:
+
+| Book | §2.2 said | Re-measured | Why |
+| -- | -- | -- | -- |
+| Berwick | `low (1)` | **`strong (1)`** | the reply's single candidate scores 1.0 against the file book and clears `singleton` (0.95), so the walk exits strong. The old fixture's candidate did not. |
+| The Masque of the Red Death | `medium (10)` | `medium (20)` | the re-record returned 20 volumes where the old file held 10 |
+| The Infirmary (Carly Reagon) | `strong (1)` | `low (1)` | the candidate scores 0.7, capped by `NO_AGREEMENT_CEILING`; whether that reaches `strong` depends on the same `_gather` difference |
+
+The other six rows are unchanged. **The band distribution is re-takeable but the
+re-take is CBO-68's to do, not CBO-74's**: it needs the population's file books
+and the decision about which walk §2.2 means. What CBO-74 can say is that §2.2's
+table was measured against fixtures that no longer exist and a walk that has since
+been replaced, so its 11% / 0% / 33% headline should not be quoted until CBO-68
+re-runs it.
+
+### What did not change
+
+§1's structural finding is intact and is now better supported: Hardcover's exact
+title query returns works rather than printings, one work from one title is a
+singleton pool, and the walk exits early. The re-record shows that more clearly
+than before — `by-title-berwick.json` is now two editions of **one** work, and
+`by-title-the-infirmary.json` is four editions of two.
