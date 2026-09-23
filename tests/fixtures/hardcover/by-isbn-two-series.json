@@ -5,6 +5,13 @@
         "isbn_13": "9780765311788",
         "isbn_10": "076531178X",
         "title": "Mistborn: The Final Empire",
+        "publisher": {
+          "name": "Tor Books"
+        },
+        "release_date": "2006-07-17",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/5195452/8c6af4492dd7ef9eed7c1e40abefc79f23df2d2f.jpeg"
+        },
         "language": {
           "language": "English",
           "code2": "en",
@@ -12,19 +19,365 @@
         },
         "book": {
           "title": "Mistborn: The Final Empire",
+          "description": "For a thousand years the ash fell and no flowers bloomed. For a thousand years the Skaa slaved in misery and lived in fear. For a thousand years the Lord Ruler, the \"Sliver of Infinity,\" reigned with absolute power and ultimate terror, divinely invincible. Then, when hope was so long lost that not even its memory remained, a terribly scarred, heart-broken half-Skaa rediscovered it in the depths of the Lord Ruler's most hellish prison. Kelsier \"snapped\" and found in himself the powers of a Mistborn. A brilliant thief and natural leader, he turned his talents to the ultimate caper, with the Lord Ruler himself as the mark.\n\nKelsier recruited the underworld's elite, the smartest and most trustworthy allomancers, each of whom shares one of his many powers, and all of whom relish a high-stakes challenge. Then Kelsier reveals his ultimate dream, not just the greatest heist in history, but the downfall of the divine despot.\n\nBut even with the best criminal crew ever assembled, Kel's plan looks more like the ultimate long shot, until luck brings a ragged girl named Vin into his life. Like him, she's a half-Skaa orphan, but she's lived a much harsher life. Vin has learned to expect betrayal from everyone she meets. She will have to learn trust if Kel is to help her master powers of which she never dreamed.\n\nBrandon Sanderson, fantasy's newest master tale-spinner and author of the acclaimed debut Elantris, dares to turn a genre on its head by asking a simple question: What if the prophesied hero failed to defeat the Dark Lord? The answer will be found in the Misborn Trilogy, a saga of surprises that begins with the book in your hands. Fantasy will never be the same again.",
+          "release_date": "2006-07-17",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/5195452/8c6af4492dd7ef9eed7c1e40abefc79f23df2d2f.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "Loveable Characters",
+                "count": 205,
+                "tagSlug": "loveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Strong Character Development",
+                "count": 200,
+                "tagSlug": "strong-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "A mix driven",
+                "count": 152,
+                "tagSlug": "a-mix-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Diverse Characters",
+                "count": 134,
+                "tagSlug": "diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Not Diverse Characters",
+                "count": 77,
+                "tagSlug": "not-diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Plot driven",
+                "count": 44,
+                "tagSlug": "plot-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Character driven",
+                "count": 25,
+                "tagSlug": "character-driven-93bc26e1-5a51-45d4-854b-c94b6a16141a",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "favorites",
+                "count": 23,
+                "tagSlug": "favorites",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "BookTok",
+                "count": 23,
+                "tagSlug": "booktok",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Weak Character Development",
+                "count": 22,
+                "tagSlug": "weak-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "Adventurous",
+                "count": 234,
+                "tagSlug": "adventurous",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "mysterious",
+                "count": 144,
+                "tagSlug": "mysterious",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "dark",
+                "count": 130,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "tense",
+                "count": 108,
+                "tagSlug": "tense",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "emotional",
+                "count": 87,
+                "tagSlug": "emotional",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "hopeful",
+                "count": 77,
+                "tagSlug": "hopeful",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "inspiring",
+                "count": 55,
+                "tagSlug": "inspiring",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "funny",
+                "count": 39,
+                "tagSlug": "funny",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "sad",
+                "count": 34,
+                "tagSlug": "sad",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "challenging",
+                "count": 32,
+                "tagSlug": "challenging",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Fantasy",
+                "count": 59,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Adventure",
+                "count": 27,
+                "tagSlug": "adventure",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 25,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Epic Fantasy",
+                "count": 4,
+                "tagSlug": "epic-fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Magic",
+                "count": 4,
+                "tagSlug": "magic",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Science Fiction & Fantasy",
+                "count": 3,
+                "tagSlug": "science-fiction-fantasy-4c14c349-8d52-4893-aaf0-34f7e33bf275",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "High Fantasy",
+                "count": 3,
+                "tagSlug": "high-fantasy-dfcd50f5-2789-45fc-9ee3-3e4354620e62",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Dystopian",
+                "count": 2,
+                "tagSlug": "dystopian",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "science fantasy",
+                "count": 1,
+                "tagSlug": "science-fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Science Fiction",
+                "count": 1,
+                "tagSlug": "science-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": [
+              {
+                "tag": "Violence",
+                "count": 32,
+                "tagSlug": "violence",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Slavery",
+                "count": 8,
+                "tagSlug": "slavery",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Death",
+                "count": 4,
+                "tagSlug": "death",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Classism",
+                "count": 4,
+                "tagSlug": "classism",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Rape",
+                "count": 4,
+                "tagSlug": "rape",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Child abuse",
+                "count": 3,
+                "tagSlug": "child-abuse",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Blood",
+                "count": 3,
+                "tagSlug": "blood",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Physical abuse",
+                "count": 3,
+                "tagSlug": "physical-abuse",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 3,
+                "tagSlug": "murder",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Grief",
+                "count": 2,
+                "tagSlug": "grief",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              }
+            ]
+          },
           "contributions": [
             {
               "contribution": "Author",
               "author": {
+                "id": 204214,
                 "name": "Brandon Sanderson"
               }
             }
           ],
           "book_series": [
             {
+              "featured": true,
+              "position": 1,
+              "series": {
+                "id": 10001,
+                "name": "The Mistborn Saga: The Original Trilogy"
+              }
+            },
+            {
               "featured": false,
               "position": 1,
               "series": {
+                "id": 5452,
                 "name": "The Mistborn Saga"
               }
             },
@@ -32,14 +385,8 @@
               "featured": false,
               "position": 3,
               "series": {
+                "id": 5497,
                 "name": "The Cosmere"
-              }
-            },
-            {
-              "featured": true,
-              "position": 1,
-              "series": {
-                "name": "The Mistborn Saga: The Original Trilogy"
               }
             }
           ]

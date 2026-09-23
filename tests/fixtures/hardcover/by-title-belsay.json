@@ -5,6 +5,11 @@
         "title": "Belsay",
         "isbn_13": null,
         "isbn_10": null,
+        "publisher": null,
+        "release_date": "2025-01-31",
+        "image": {
+          "url": "https://assets.hardcover.app/books/1647114/8453903480875375.jpg"
+        },
         "language": {
           "language": "English",
           "code2": "en",
@@ -13,10 +18,17 @@
         "book": {
           "id": 1647114,
           "title": "Belsay",
+          "description": "Christmas can be deadly\u2026\n\nAfter a long year of crime-fighting, DCI Ryan and his team are looking forward to a peaceful Christmas filled with festive treats \u2013 including the occasional turkey stottie, or three. To celebrate a job well done, the entire team are treated to a party at beautiful Belsay Hall, a spectacular country estate on the outskirts of the city. But, when their dinner is interrupted by the untimely arrival of a dead body, they\u2019re reminded that crime never sleeps \u2013 and nor do the secrets within the walls of Belsay.\n\nIt's time to find out who\u2019s been naughty or nice\u2026\n\nMurder and mystery are peppered with romance and humour in this fast-paced crime whodunnit, set amidst the spectacular Northumbrian landscape.",
+          "release_date": "2025-02-27",
+          "image": {
+            "url": "https://assets.hardcover.app/users/16206/7486982918921183.jpg"
+          },
+          "cached_tags": {},
           "contributions": [
             {
               "contribution": "Author",
               "author": {
+                "id": 318638,
                 "name": "L.J. Ross"
               }
             }
@@ -26,6 +38,7 @@
               "featured": true,
               "position": 23,
               "series": {
+                "id": 23832,
                 "name": "DCI Ryan Mysteries"
               }
             }

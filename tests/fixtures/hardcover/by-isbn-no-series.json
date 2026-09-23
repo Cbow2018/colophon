@@ -5,6 +5,13 @@
         "isbn_13": "9780571334650",
         "isbn_10": "0571334652",
         "title": "Normal People",
+        "publisher": {
+          "name": "Faber & Faber"
+        },
+        "release_date": "2023-01-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/1135779/b0c4aa143b3c9c43def107b5c559227c4be3dd5e.jpeg"
+        },
         "language": {
           "language": "English",
           "code2": "en",
@@ -12,10 +19,331 @@
         },
         "book": {
           "title": "Normal People",
+          "description": "At school, Connell is popular and well liked, while Marianne is a loner. But when the two strike up a conversation\u2014awkward but electrifying\u2014something life changing begins.\n\nA year later, they\u2019re both studying at Trinity College in Dublin. Marianne has found her feet in a new social world while Connell hangs at the sidelines, shy and uncertain. Throughout their years at university, Marianne and Connell circle one another, straying toward other people and possibilities but always magnetically, irresistibly drawn back together. And as she veers into self-destruction and he begins to search for meaning elsewhere, each must confront how far they are willing to go to save the other.\n\nNormal People is the story of mutual fascination, friendship, and love. It takes us from that first conversation to the years beyond, in the company of two people who try to stay apart but find that they can\u2019t.",
+          "release_date": "2018-08-28",
+          "image": {
+            "url": "https://assets.hardcover.app/editions/30402559/2802629647590855.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "Character driven",
+                "count": 105,
+                "tagSlug": "character-driven-93bc26e1-5a51-45d4-854b-c94b6a16141a",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Not Diverse Characters",
+                "count": 89,
+                "tagSlug": "not-diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Strong Character Development",
+                "count": 68,
+                "tagSlug": "strong-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Unloveable Characters",
+                "count": 60,
+                "tagSlug": "unloveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Loveable Characters",
+                "count": 49,
+                "tagSlug": "loveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Weak Character Development",
+                "count": 35,
+                "tagSlug": "weak-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Diverse Characters",
+                "count": 11,
+                "tagSlug": "diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Plot driven",
+                "count": 4,
+                "tagSlug": "plot-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "A mix driven",
+                "count": 3,
+                "tagSlug": "a-mix-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "fiction",
+                "count": 2,
+                "tagSlug": "fiction-ca96607a-64dd-43a9-9ba7-beb93428043e",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "emotional",
+                "count": 98,
+                "tagSlug": "emotional",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "reflective",
+                "count": 75,
+                "tagSlug": "reflective",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "sad",
+                "count": 65,
+                "tagSlug": "sad",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.01538461538461539
+              },
+              {
+                "tag": "dark",
+                "count": 24,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "tense",
+                "count": 21,
+                "tagSlug": "tense",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "challenging",
+                "count": 18,
+                "tagSlug": "challenging",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "hopeful",
+                "count": 16,
+                "tagSlug": "hopeful",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "funny",
+                "count": 10,
+                "tagSlug": "funny",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "inspiring",
+                "count": 7,
+                "tagSlug": "inspiring",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "lighthearted",
+                "count": 7,
+                "tagSlug": "lighthearted",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Romance",
+                "count": 7,
+                "tagSlug": "romance",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literary Fiction",
+                "count": 5,
+                "tagSlug": "literary-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 2,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Contemporary",
+                "count": 2,
+                "tagSlug": "contemporary-5aa3bf50-fe7e-496f-835d-8659c4fe219b",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Realistic Fiction",
+                "count": 1,
+                "tagSlug": "realistic-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "College students",
+                "count": 1,
+                "tagSlug": "college-students",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Coming of Age",
+                "count": 1,
+                "tagSlug": "coming-of-age-7a8c5a5e-b98b-4589-bc26-4be18a640ecd",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Psychological",
+                "count": 1,
+                "tagSlug": "psychological-067ea4fe-3b93-4ea9-95cd-7078461b2102",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": [
+              {
+                "tag": "Physical abuse",
+                "count": 5,
+                "tagSlug": "physical-abuse",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Sexual violence",
+                "count": 5,
+                "tagSlug": "sexual-violence",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Emotional abuse",
+                "count": 5,
+                "tagSlug": "emotional-abuse",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "bullying",
+                "count": 4,
+                "tagSlug": "bullying",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "suicide",
+                "count": 4,
+                "tagSlug": "suicide",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Sexual content",
+                "count": 3,
+                "tagSlug": "sexual-content",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Domestic abuse",
+                "count": 3,
+                "tagSlug": "domestic-abuse",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Sexual assault",
+                "count": 3,
+                "tagSlug": "sexual-assault",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Toxic relationship",
+                "count": 3,
+                "tagSlug": "toxic-relationship",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "suicidal thoughts",
+                "count": 3,
+                "tagSlug": "suicidal-thoughts",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              }
+            ]
+          },
           "contributions": [
             {
               "contribution": "Author",
               "author": {
+                "id": 229154,
                 "name": "Sally Rooney"
               }
             }

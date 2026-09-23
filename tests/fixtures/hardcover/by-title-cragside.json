@@ -5,6 +5,13 @@
         "title": "Cragside",
         "isbn_13": "9781521748831",
         "isbn_10": "1521748837",
+        "publisher": {
+          "name": "Independently Published"
+        },
+        "release_date": "2017-07-07",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/40810017/88c4da5caf5a76472600888c8c4ada978965ebdd.jpeg"
+        },
         "language": {
           "language": "English",
           "code2": "en",
@@ -13,10 +20,88 @@
         "book": {
           "id": 1198994,
           "title": "Cragside",
+          "description": "FROM THE #1 INTERNATIONAL BESTSELLING AUTHOR OF HOLY ISLAND Are you afraid of the dark..' After his climactic battle with notorious serial killer The Hacker, DCI Ryan is spending the summer with his fianc\ufffde within the grounds of Cragside, a spectacular Bavarian-style mansion surrounded by acres of woodland. When they are invited to attend the staff summer party - a Victorian murder mystery evening - it's all a joke until the lights go out and an elderly man is found dead. It looks like an unfortunate accident but, as the dead man's life begins to unfold, Ryan and his team of detectives realise that all is not as it appears. When a second body is found, terror grips the close-knit community and Ryan must uncover the killer who walks among them, before they strike again... Murder and mystery are peppered with romance and humour in this fast-paced crime whodunit set amidst the spectacular Northumbrian landscape. \"LJ Ross is the queen of Kindle\" - Sunday Telegraph \"A literary phenomenon\" - Evening Chronicle \"LJ Ross keeps company with the best mystery writers\" - The Times",
+          "release_date": "2017-07-07",
+          "image": {
+            "url": "https://assets.hardcover.app/external_data/40810017/88c4da5caf5a76472600888c8c4ada978965ebdd.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 1,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "fast-paced",
+                "count": 1,
+                "tagSlug": "fast-paced-bb6a9c5e-f18f-45b8-b251-3382999c5668",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "mysterious",
+                "count": 1,
+                "tagSlug": "mysterious",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "tense",
+                "count": 1,
+                "tagSlug": "tense",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Crime",
+                "count": 1,
+                "tagSlug": "crime",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Thriller",
+                "count": 1,
+                "tagSlug": "thriller",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Content Warning": []
+          },
           "contributions": [
             {
               "contribution": "Author",
               "author": {
+                "id": 318638,
                 "name": "L.J. Ross"
               }
             }
@@ -26,6 +111,7 @@
               "featured": true,
               "position": 6,
               "series": {
+                "id": 23832,
                 "name": "DCI Ryan Mysteries"
               }
             }

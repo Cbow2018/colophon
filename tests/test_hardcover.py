@@ -40,7 +40,7 @@ THE_INFIRMARY_TITLE = "The Infirmary"
 class Replay:
     """Stands in for the network: hands back a recorded reply, remembers the request.
 
-    `folder` is for the two hand-made fixtures, which live beside the live
+    `folder` is for the frozen cases in `hand-made/`, which live beside the live
     recordings rather than among them.
     """
 
@@ -54,13 +54,27 @@ class Replay:
         return self.status, self.body
 
 
+def default_replay(replay, name="by-isbn-found.json"):
+    """A transport for a test's `source()`, from a `Replay`, a fixture name, or neither.
+
+    The four `source()` helpers used to take only a name and build the `Replay`
+    themselves, which left no way to pass one that reads `hand-made/` — a test
+    wanting a frozen case got `Replay(Replay(...))` and a `TypeError` from
+    `RECORDED / name`. Taking both forms here is what lets a frozen case and a live
+    recording be replayed through the same helper.
+    """
+    if replay is None:
+        return Replay(name)
+    return Replay(replay) if isinstance(replay, str) else replay
+
+
 def answering(status, body):
     return lambda url, headers, request: (status, body)
 
 
 class LookupTests(unittest.TestCase):
     def source(self, replay=None):
-        return Hardcover(TOKEN, transport=replay or Replay())
+        return Hardcover(TOKEN, transport=default_replay(replay))
 
     def test_it_finds_the_book_by_isbn_and_reads_what_the_source_says(self):
         book = self.source().by_isbn(CRAGSIDE)
@@ -208,7 +222,9 @@ class TitleLookupTests(unittest.TestCase):
     """
 
     def source(self, replay=None):
-        return Hardcover(TOKEN, transport=replay or Replay("by-title-cragside.json"))
+        return Hardcover(
+            TOKEN, transport=default_replay(replay, "by-title-cragside.json")
+        )
 
     def test_it_finds_the_book_by_a_cleaned_title(self):
         candidates = self.source().by_title([CRAGSIDE_TITLE], "en")
@@ -503,8 +519,10 @@ class TheOtherFieldsTests(unittest.TestCase):
     to reach across. The reply is the real one for the Cragside edition.
     """
 
-    def source(self, name="by-isbn-cragside-edition.json"):
-        return Hardcover(TOKEN, transport=Replay(name))
+    def source(self, replay=None):
+        return Hardcover(
+            TOKEN, transport=default_replay(replay, "by-isbn-cragside-edition.json")
+        )
 
     def test_it_asks_for_the_fields_the_rules_can_write(self):
         replay = Replay()
@@ -585,8 +603,10 @@ class GenreTests(unittest.TestCase):
     THE_TRIAL = "9781529196382"
     NO_EDITION = "9781473225374"
 
-    def source(self, name):
-        return Hardcover(TOKEN, transport=Replay(name))
+    def source(self, replay=None):
+        return Hardcover(
+            TOKEN, transport=default_replay(replay, "by-isbn-9781521748831-genres.json")
+        )
 
     def test_a_candidate_carries_the_genres_the_source_holds(self):
         book = self.source("by-isbn-9781521748831-genres.json").by_isbn(

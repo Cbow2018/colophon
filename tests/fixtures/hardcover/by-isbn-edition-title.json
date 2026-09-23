@@ -5,6 +5,13 @@
         "isbn_13": "9780007458424",
         "isbn_10": "0007458428",
         "title": "The Hobbit",
+        "publisher": {
+          "name": "HarperCollins Children's Books"
+        },
+        "release_date": "2013-02-01",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/26692465/5c00f1875a7cfd4f27cf13ee66e5c1857f114d8f.jpeg"
+        },
         "language": {
           "language": "English",
           "code2": "en",
@@ -12,10 +19,283 @@
         },
         "book": {
           "title": "The Hobbit, or There and Back Again",
+          "description": "<i>\"In a hole in the ground there lived a hobbit.\" </i>So begins one of the most beloved and delightful tales in the English language. Set in the imaginary world of Middle-earth, at once a classic myth and a modern fairy tale, The Hobbit is one of literature's most enduring and well-loved high fantasy novels.\n\nBilbo Baggins is a hobbit who enjoys a comfortable, unambitious life, rarely traveling any farther than his pantry or cellar. But his contentment is disturbed when the wizard Gandalf and a company of dwarves arrive on his doorstep one day to whisk him away on an adventure. They have launched a plot to raid the treasure hoard guarded by Smaug the Magnificent, a large and very dangerous dragon. \n\nBilbo reluctantly joins their epic quest, unaware that on his journey to the Lonely Mountain he will encounter both a magic ring and a frightening creature known as Gollum.",
+          "release_date": "1937-09-21",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/17456445/d34448a9-bf3f-441d-93f2-1cd32dd3867c.jpg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "Loveable Characters",
+                "count": 98,
+                "tagSlug": "loveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Strong Character Development",
+                "count": 75,
+                "tagSlug": "strong-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Diverse Characters",
+                "count": 48,
+                "tagSlug": "diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Not Diverse Characters",
+                "count": 47,
+                "tagSlug": "not-diverse-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "A mix driven",
+                "count": 45,
+                "tagSlug": "a-mix-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Plot driven",
+                "count": 44,
+                "tagSlug": "plot-driven",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Weak Character Development",
+                "count": 20,
+                "tagSlug": "weak-character-development",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Unloveable Characters",
+                "count": 7,
+                "tagSlug": "unloveable-characters",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "fantasy",
+                "count": 7,
+                "tagSlug": "fantasy-706cd3bf-bf58-4a87-9f4e-0e6efff6a30f",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Character driven",
+                "count": 6,
+                "tagSlug": "character-driven-93bc26e1-5a51-45d4-854b-c94b6a16141a",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "Adventurous",
+                "count": 127,
+                "tagSlug": "adventurous",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "lighthearted",
+                "count": 67,
+                "tagSlug": "lighthearted",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "funny",
+                "count": 52,
+                "tagSlug": "funny",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "hopeful",
+                "count": 34,
+                "tagSlug": "hopeful",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "inspiring",
+                "count": 30,
+                "tagSlug": "inspiring",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "relaxing",
+                "count": 21,
+                "tagSlug": "relaxing",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "mysterious",
+                "count": 20,
+                "tagSlug": "mysterious",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "emotional",
+                "count": 19,
+                "tagSlug": "emotional",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "tense",
+                "count": 15,
+                "tagSlug": "tense",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "dark",
+                "count": 9,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Fantasy",
+                "count": 46,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Classics",
+                "count": 17,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Adventure",
+                "count": 11,
+                "tagSlug": "adventure",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 6,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Juvenile Fiction",
+                "count": 2,
+                "tagSlug": "juvenile-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature & Fiction",
+                "count": 2,
+                "tagSlug": "literature-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literary Fiction",
+                "count": 2,
+                "tagSlug": "literary-fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Epic",
+                "count": 2,
+                "tagSlug": "epic-cb4665c5-e348-4bed-8498-0954580449b2",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Media Tie-In",
+                "count": 2,
+                "tagSlug": "media-tie-in-51bfd61f-1d9b-4b0e-a512-4be9521698e4",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Children's stories",
+                "count": 2,
+                "tagSlug": "childrens-stories",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": [
+              {
+                "tag": "Violence",
+                "count": 5,
+                "tagSlug": "violence",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Abandonment",
+                "count": 1,
+                "tagSlug": "abandonment",
+                "category": "Content Warning",
+                "categorySlug": "content-warning",
+                "spoilerRatio": 0.0
+              }
+            ]
+          },
           "contributions": [
             {
               "contribution": "Author",
               "author": {
+                "id": 132049,
                 "name": "J.R.R. Tolkien"
               }
             }
@@ -25,6 +305,7 @@
               "featured": true,
               "position": 1,
               "series": {
+                "id": 127396,
                 "name": "Middle Earth"
               }
             }
