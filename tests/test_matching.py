@@ -1799,15 +1799,17 @@ class StandardEditionChoiceTests(unittest.TestCase):
         ]
 
         kept = standard_editions(pool)
-        survivor = kept[0]
+        standard_edition = kept[0]
         for shuffled in (
             [pool[0], pool[1], pool[2]],
             [pool[2], pool[1], pool[0]],
             [pool[1], pool[2], pool[0]],
         ):
             with self.subTest(order=[c.date for c in shuffled]):
-                self.assertEqual(standard_editions(shuffled), (survivor,))
-        self.assertEqual(survivor.isbn, "9781792780844", "the earliest of the three")
+                self.assertEqual(standard_editions(shuffled), (standard_edition,))
+        self.assertEqual(
+            standard_edition.isbn, "9781792780844", "the earliest of the three"
+        )
 
 
 class TopCandidatesTests(unittest.TestCase):
