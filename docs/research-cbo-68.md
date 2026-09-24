@@ -452,7 +452,7 @@ is the procedure, one PowerShell command per step, from `A:\Documents\GitHub\col
 
 The row to declare, beside the Google Poe row:
 
-```python
+```text
     {
         "source": "hardcover",
         "fixture": "by-title-poe.json",
