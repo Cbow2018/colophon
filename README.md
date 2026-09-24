@@ -256,6 +256,29 @@ sentence and leaving the rest of the description as it was.
 
 The threshold is `confidence`, `0.85` by default; see the table below.
 
+## Books with several editions
+
+A title lookup answers with editions, not works: search for a popular title and
+the source returns every printing it has. Colophon groups them by work and corrects
+the book from that work's **Standard Edition** - the earliest one the source
+listed, which is not necessarily the first published - so the answer is the same
+every run rather than whichever printing the source happened to put first.
+
+**A book that dates itself can fall outside that.** A year on its own cannot
+separate two editions: it is 0.0769 of the score, under the 0.08 the bands need
+between a leader and its runner-up. Once the editions are grouped the work is the
+only candidate left, so the book is graded against the singleton bar (0.95) rather
+than the pair bar (0.89) - and a file whose `dc:date` is not its work's earliest
+edition scores 0.9231, which clears neither. It is therefore marked
+`colophon:unverified` unless an LLM is configured. A file with no `dc:date` is
+judged on its title and author alone and is not affected.
+
+The Standard Edition is the earliest *listed* edition. For a work that has been
+reprinted for years that is a modern printing, and nothing Colophon writes or logs
+calls it the first edition. Every format is an edition, so the Standard Edition can
+be an audiobook or a hardback, and its ISBN, publisher and date go into an EPUB
+that has none.
+
 ## Asking an LLM to choose
 
 Sometimes the rules cannot decide but a person could: the book is *Belsay*, the
