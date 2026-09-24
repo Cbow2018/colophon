@@ -75,11 +75,13 @@ STRONG_SCORE = 0.89
 MEDIUM_SCORE = 0.80
 BAND_GAP = 0.08
 
-# What a candidate can offer to write: `config.FIELD_DEFAULTS`' nine fields plus
-# the cover, which is bytes rather than a value and is the tenth thing a match
-# can put in a file. The Standard Edition's tiebreak counts these and then
-# compares them, so a list wider than what gets written would let two candidates
-# tie on something no file can see.
+# The ten payload fields the Standard Edition's tiebreak reads:
+# `config.FIELD_DEFAULTS`' nine fields plus the cover, which is bytes rather
+# than a value. Genres are written from the chosen candidate too, but a source's
+# genres are mapped onto the user's own list before any reach a file, so they
+# are not a payload field and can never separate two candidates. A field missing
+# from this list would let two candidates that disagree about it tie, and the one
+# that arrived first would stand.
 PAYLOAD = (
     "title",
     "authors",
@@ -544,11 +546,11 @@ def standard_editions(candidates):
     placements in the group, never off the order the candidates arrived in.
 
     Each Work keeps the Edition the rule names (D3 as amended): the earliest
-    date, then the source highest in the user's Source Priority, then the more
-    complete payload, and last the payload compared field by field. The last two
-    only ever separate candidates from one source, and two candidates that agree
-    on the whole payload would write the same thing, so which one survives
-    cannot be observed.
+    date, then the source highest in the user's Source Priority, then the one
+    carrying more of the ten payload fields, and last those ten compared field by
+    field. Those two only ever separate candidates from one source, and two
+    candidates that agree on all ten are indistinguishable to the rule, so the
+    first of them stands whichever way round they arrived.
 
     Source rank is read off the pool, not passed in: a source's rank is where
     its first candidate appears, and the caller builds the pool source by source
@@ -583,8 +585,8 @@ def standard_editions(candidates):
                 # Which of the two is the Standard Edition, asked of the pair in
                 # the order it arrived. The key answers for any two candidates,
                 # so neither can be the one that happened to come first; two that
-                # agree on the whole key write the same thing, and the first of
-                # them stands either way round.
+                # agree on all ten payload fields are indistinguishable here, and
+                # the first of them stands either way round.
                 if _standard_edition_key(
                     candidate, rank_of_source
                 ) < _standard_edition_key(chosen[key], rank_of_source):
@@ -699,7 +701,7 @@ def _standard_edition_key(candidate, rank_of_source):
 
 
 def _payload(candidate):
-    """The writable fields as one comparable tuple, with nothing written as ""."""
+    """The ten payload fields as one comparable tuple, an absent field as ""."""
     values = []
     for field in PAYLOAD:
         value = getattr(candidate, field)

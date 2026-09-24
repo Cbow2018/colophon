@@ -10,9 +10,11 @@ None of them was read off the implementation, and none was moved to match it.
 import unittest
 from itertools import pairwise
 
+from colophon.config import KNOWN_FIELDS
 from colophon.matching import (
     AUTHOR_AGREES,
     NO_AGREEMENT_CEILING,
+    PAYLOAD,
     Bands,
     Candidate,
     FileBook,
@@ -1738,6 +1740,15 @@ class StandardEditionChoiceTests(unittest.TestCase):
 
         self.assertEqual(standard_editions([one, other]), (other,))
         self.assertEqual(standard_editions([other, one]), (other,))
+
+    def test_the_payload_is_every_field_the_config_names_and_the_cover(self):
+        """`config.FIELD_DEFAULTS`' nine fields plus the cover, and nothing else.
+
+        The tiebreak counts and compares these, so a field added to the config
+        and left out of `PAYLOAD` would let two candidates that disagree about it
+        tie, and the first to arrive would decide.
+        """
+        self.assertEqual(PAYLOAD, (*KNOWN_FIELDS, "cover"))
 
     def test_the_more_complete_edition_decides_equal_dates_from_one_source(self):
         """D13's tiebreak, as `hardcover/by-title-berwick.json` needs it."""
