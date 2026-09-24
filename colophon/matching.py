@@ -75,6 +75,31 @@ STRONG_SCORE = 0.89
 MEDIUM_SCORE = 0.80
 BAND_GAP = 0.08
 
+# The ten payload fields the Standard Edition's tiebreak reads:
+# `config.FIELD_DEFAULTS`' nine fields plus the cover, which is bytes rather
+# than a value. Genres are written from the chosen candidate too, but a source's
+# genres are mapped onto the user's own list before any reach a file, so they
+# are not a payload field and can never separate two candidates. A field missing
+# from this list would let two candidates that disagree about it tie, and the one
+# that arrived first would stand.
+PAYLOAD = (
+    "title",
+    "authors",
+    "series",
+    "series_number",
+    "description",
+    "publisher",
+    "date",
+    "isbn",
+    "language",
+    "cover",
+)
+
+# What an undated Edition sorts as: after every date there is, because the rule
+# puts an undated candidate last. An empty string will not do - it is a string,
+# so it sorts before every date rather than after them.
+_UNDATED = "\uffff"
+
 # `SequenceMatcher` is quadratic in input length, so every comparison caps its
 # inputs. Descriptions are thousands of characters and are never compared.
 MAX_TITLE_CHARS = 200
@@ -479,7 +504,10 @@ def dedupe(candidates):
     A run of candidates is grouped by what identifies the record: its ISBN-13
     when it has one, and otherwise its normalised title, its first author and
     its year. The first of a group is the one kept, which is input order and
-    therefore the source order the user configured.
+    therefore the source order the user configured. Within one source's reply the
+    order that decides is `standard_editions`', which ranks the Work's Editions
+    rather than trusting the order they arrived in; this only ever chooses
+    between two sources' records of one record.
 
     This is deliberately *not* `record.py`'s `book_key`, even though both are
     "title plus author": that one is a durable key for a library and this one is
@@ -496,6 +524,191 @@ def dedupe(candidates):
             seen.add(key)
         kept.append(candidate)
     return tuple(kept)
+
+
+def standard_editions(candidates):
+    """One candidate per Work: its Standard Edition.
+
+    A title search answers with Editions, not Works, so a pool holds a dozen
+    printings of one book and the tie between them is what the medium band is
+    made of. This is the rule that resolves it, and it runs on the pool before
+    `dedupe` and `rank`, so the tie never forms.
+
+    Candidates are grouped as one Work when their title heads, as the scorer
+    normalises them, are the same text, their authors are the same letters once
+    each name has been through `_name` - so `L. J. Ross`, `LJ Ross` and `Ross, L.
+    J.` are one author and `L. K. Ross` is another - and their Series Placements
+    do not conflict. Two placements conflict when the series, as the scorer
+    normalises it, or the position differs, and conflicting placements are two
+    Works. A candidate that states no placement joins a group only when exactly
+    one placement is stated in it; when two or more are, the unplaced candidates
+    are a Work of their own. Which of those holds is read off the set of
+    placements in the group, never off the order the candidates arrived in.
+
+    Each Work keeps the Edition the rule names (D3 as amended): the earliest
+    date, then the source highest in the user's Source Priority, then the one
+    carrying more of the ten payload fields, and last those ten compared field by
+    field. Those two only ever separate candidates from one source, and two
+    candidates that agree on all ten are indistinguishable to the rule, so the
+    first of them stands whichever way round they arrived.
+
+    Source rank is read off the pool, not passed in: a source's rank is where
+    its first candidate appears, and the caller builds the pool source by source
+    in the user's order. It is deliberately never the candidate's own position -
+    that is reply order, which would put the choice back where the tie came
+    from.
+
+    The order Works are first seen in is kept, so neither `dedupe`'s first-wins
+    nor the ranked list's tie order is disturbed by the grouping.
+
+    What the key does not read is the year: two Works with one title, one author
+    and one placement are one Work here, and CBO-65 is scoped against the rest of
+    the key.
+    """
+    rank_of_source = {}
+    for candidate in candidates:
+        rank_of_source.setdefault(candidate.source, len(rank_of_source))
+
+    placements = _placements_by_group(candidates)
+    chosen = {}
+    markers = []
+    for candidate in candidates:
+        key = _work_key(candidate, placements)
+        if key is None:
+            # Nothing to group it by, so it stands on its own rather than being
+            # gathered with every other candidate that has no title.
+            marker = object()
+            chosen[marker] = candidate
+        else:
+            marker = key
+            if key in chosen:
+                # Which of the two is the Standard Edition, asked of the pair in
+                # the order it arrived. The key answers for any two candidates,
+                # so neither can be the one that happened to come first; two that
+                # agree on all ten payload fields are indistinguishable here, and
+                # the first of them stands either way round.
+                if _standard_edition_key(
+                    candidate, rank_of_source
+                ) < _standard_edition_key(chosen[key], rank_of_source):
+                    chosen[key] = candidate
+                continue
+            chosen[key] = candidate
+        markers.append(marker)
+    return tuple(chosen[marker] for marker in markers)
+
+
+def _placements_by_group(candidates):
+    """Every Series Placement stated in each title-and-author group.
+
+    Gathered before anything is grouped, because rule 2 depends on the whole set
+    and not on what has been seen so far: an unplaced candidate's Work is decided
+    by placements that may arrive after it.
+    """
+    found = {}
+    for candidate in candidates:
+        group = _title_and_author(candidate)
+        if group is None:
+            continue
+        placement = _placement(candidate)
+        if placement is not None:
+            found.setdefault(group, set()).add(placement)
+    return found
+
+
+def _work_key(candidate, placements):
+    """What makes two candidates Editions of one Work, or None when unknowable."""
+    group = _title_and_author(candidate)
+    if group is None:
+        return None
+    placement = _placement(candidate)
+    if placement is None:
+        # Unplaced, so it shares a Work only with a single stated placement.
+        stated = placements.get(group) or ()
+        if len(stated) != 1:
+            return group, None
+        placement = next(iter(stated))
+    return group, placement
+
+
+def _title_and_author(candidate):
+    """The title head and author letters, before any Series Placement."""
+    head = comparison_text(_parts_of(candidate.title)[0])
+    if not head:
+        return None
+    names = tuple(sorted(_letters(author) for author in candidate.authors))
+    if not any(names):
+        # A title with no author on it groups nothing: The Infirmary is two
+        # Works by two people, and a head-only key would make them one.
+        return None
+    return head, names
+
+
+def _placement(candidate):
+    """A candidate's Series Placement, or None when it states half of one.
+
+    A placement is the series and the position together, because that is what the
+    glossary calls one. Half of one - a series with no position, or a position
+    with no series - names no placement and is treated as unstated rather than as
+    a placement nothing can equal. Nothing in the corpus states half of one.
+    """
+    series = comparison_text(candidate.series)
+    number = str(candidate.series_number or "").strip()
+    if not series or not number:
+        return None
+    return series, number
+
+
+def _letters(author):
+    """An author as the letters of their comparison key, as a comparable tuple.
+
+    Symbols may differ, letters may not (D11): the name is reversed at the comma
+    and its initials joined by `_name` first, so `Ross, L. J.` and `L. J. Ross`
+    are the same letters, while `L. J. Ross` and `L. K. Ross` are not. Splitting
+    back into tokens and sorting them is what makes `Ross, L. J.` and `L. J.
+    Ross` one key rather than two anagrams, and it is why the similarity floor -
+    where those two people are 0.6814 apart and both a typo and a stranger live -
+    is not the rule here.
+    """
+    joined = [
+        "".join(char for char in part if char.isalpha())
+        for part in _name(author).split()
+    ]
+    return tuple(sorted(part for part in joined if part))
+
+
+def _standard_edition_key(candidate, rank_of_source):
+    """How good an Edition is at standing for its Work, smallest best.
+
+    The payload is read twice: how many fields it carries, then the fields
+    themselves. Counting first is what makes the answer depend on what a
+    candidate *has* rather than on how a string compares - an absent field is an
+    empty string, which sorts before any value, so Berwick's Edition with no ISBN
+    would otherwise beat the one that has an ISBN.
+
+    Comparing the values with the first field least significant is what makes the
+    key a real order rather than a partial one. Two candidates can agree on the
+    count and disagree about which fields they fill, and a comparison that cannot
+    answer for such a pair falls back on the order they arrived in - which is the
+    one thing this rule may never do.
+    """
+    payload = _payload(candidate)
+    return (
+        str(candidate.date or _UNDATED),
+        rank_of_source[candidate.source],
+        -sum(1 for value in payload if value),
+        tuple(reversed(payload)),
+    )
+
+
+def _payload(candidate):
+    """The ten payload fields as one comparable tuple, an absent field as ""."""
+    values = []
+    for field in PAYLOAD:
+        value = getattr(candidate, field)
+        if isinstance(value, (tuple, list)):
+            value = "; ".join(str(part) for part in value)
+        values.append("" if value is None else str(value))
+    return tuple(values)
 
 
 @dataclass(frozen=True)

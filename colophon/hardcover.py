@@ -349,27 +349,17 @@ def _genres(book):
 
 
 def _candidates(editions):
-    """Turn a title reply into one candidate per work, in the order it came back.
+    """Turn a title reply into one candidate per edition, in the order it came back.
 
-    The reply is a list of editions, and one work usually has several, so the
-    first edition of a work is kept and the rest are dropped: the title, the
-    authors and the series are all on the work, and a second edition would only
-    offer the same book twice. The ISBN comes from the edition that matched,
-    which is the only place Hardcover keeps one.
+    The reply is a list of editions and one work usually has several, so the same
+    book is offered more than once. That is the client's job to hand up and the
+    matcher's to resolve: `matching.standard_editions` groups the pool by Work and
+    keeps one Edition of each, so doing any of it here would be a second rule in a
+    second place, choosing by reply order. The ISBN, the publisher and the date
+    are the edition's, and dropping an edition here is what made the value written
+    to a file depend on which one Hardcover happened to list first.
     """
-    candidates = []
-    seen = set()
-    for position, edition in enumerate(editions):
-        # A work whose id the reply omitted cannot be recognised twice over, so
-        # it is left as its own candidate rather than mistaken for another.
-        identity = (edition.get("book") or {}).get("id")
-        if identity is None:
-            identity = f"unnamed-{position}"
-        if identity in seen:
-            continue
-        seen.add(identity)
-        candidates.append(_candidate(edition))
-    return candidates
+    return [_candidate(edition) for edition in editions]
 
 
 def _authors(book):

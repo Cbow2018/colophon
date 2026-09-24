@@ -242,6 +242,26 @@ NULL_BUT_SELECTED = {
     ("hardcover", "by-isbn-no-series.json", "book.book_series.series.name"): (
         "no series row, so no name"
     ),
+    # The same empty list, for a story rather than a standalone novel: Poe's *The
+    # Masque of the Red Death* is in no series on Hardcover, and every one of the
+    # reply's fifteen editions carries `book_series: []`. So the paths *through*
+    # the membership are selected with nothing at the end of them, and
+    # `book_series` itself is not listed because an empty list ends the walk.
+    ("hardcover", "by-title-poe.json", "book.book_series.featured"): (
+        "`book_series` is `[]`, so there is no membership to mark featured"
+    ),
+    ("hardcover", "by-title-poe.json", "book.book_series.position"): (
+        "no membership, so no position in one"
+    ),
+    ("hardcover", "by-title-poe.json", "book.book_series.series"): (
+        "no membership, so no series row"
+    ),
+    ("hardcover", "by-title-poe.json", "book.book_series.series.id"): (
+        "no series row, so no id"
+    ),
+    ("hardcover", "by-title-poe.json", "book.book_series.series.name"): (
+        "no series row, so no name"
+    ),
 }
 
 # A key a fixture carries and the query does not select, because the query selected

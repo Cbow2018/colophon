@@ -42,6 +42,7 @@ from colophon.matching import (
     primary_language,
     rank,
     search_titles,
+    standard_editions,
     top_candidates,
 )
 from colophon.record import AUTHOR, SERIES, Match, book_key
@@ -698,12 +699,14 @@ class Corrector:
                 errored.append((source.name, str(error)))
                 continue
             asked.append(source.name)
-            # The pool is built source by source in the order the user ranked
-            # them, which is what makes `dedupe`'s first-wins the trust order:
-            # the record that survives a group is the one the highest-priority
-            # source that offered it sent. Filling in a kept record's missing
-            # fields from the others is CBO-61's, not this.
-            pool = dedupe([*pool, *candidates])
+            # A title search answers with Editions, so the pool is grouped by
+            # Work and each Work keeps its Standard Edition before it is graded:
+            # the tie between a dozen printings of one book is what the medium
+            # band was made of, and it never forms. The pool is assembled source
+            # by source in the user's order, which is what makes a source's rank
+            # in `standard_editions` the user's Source Priority. Filling in a kept
+            # record's missing fields from the others is CBO-61's, not this.
+            pool = dedupe(standard_editions([*pool, *candidates]))
             ranked = rank(file_book, pool)
             if band_of(ranked, self.bands) == "strong":
                 # A source the decision never reached is not a source that

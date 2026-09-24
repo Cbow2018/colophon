@@ -6,6 +6,7 @@ needs no key and never touches the network. See
 """
 
 import json
+import random
 import unittest
 import urllib.parse
 from pathlib import Path
@@ -47,11 +48,32 @@ class Replay:
 
     Each source answers from its own fixtures; this one reads Google's. `folder`
     is for the frozen cases, which live beside the live recordings rather than
-    among them.
+    among them. `reverse` hands the reply's volumes back in the opposite order and
+    `seed` in a shuffled one, which is how a test asks whether anything depends on
+    the order a source listed them in: Google's order is its own business and can
+    change between two runs of the same query. A seed makes the shuffle a fixture
+    rather than a coin, so a failure is reproducible.
     """
 
-    def __init__(self, name="by-title-cragside.json", status=200, folder=RECORDED):
-        self.body = (folder / name).read_bytes()
+    def __init__(
+        self,
+        name="by-title-cragside.json",
+        status=200,
+        folder=RECORDED,
+        reverse=False,
+        seed=None,
+    ):
+        body = (folder / name).read_bytes()
+        if reverse or seed is not None:
+            payload = json.loads(body)
+            items = payload.get("items") or []
+            if reverse:
+                items = list(reversed(items))
+            if seed is not None:
+                random.Random(seed).shuffle(items)
+            payload["items"] = items
+            body = json.dumps(payload).encode("utf-8")
+        self.body = body
         self.status = status
         self.sent = None
 

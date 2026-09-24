@@ -106,6 +106,15 @@ RECORDINGS = (
         "lookup": "title",
         "book": POE,
     },
+    # CBO-68 D19: the shipped configuration could not be measured for Poe, because
+    # no Hardcover reply existed for this request. The request carries no author,
+    # so it is byte-identical to the Ross title request.
+    {
+        "source": "hardcover",
+        "fixture": "by-title-poe.json",
+        "lookup": "title",
+        "book": POE,
+    },
     # The rest of the Google title path.
     {
         "source": "googlebooks",

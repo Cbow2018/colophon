@@ -41,11 +41,22 @@ class Replay:
     """Stands in for the network: hands back a recorded reply, remembers the request.
 
     `folder` is for the frozen cases in `hand-made/`, which live beside the live
-    recordings rather than among them.
+    recordings rather than among them. `reverse` hands the reply's editions back
+    in the opposite order, which is how a test asks whether anything depends on
+    the order a source listed them in: Hardcover's order is its own business and
+    can change between two runs of the same query.
     """
 
-    def __init__(self, name="by-isbn-found.json", status=200, folder=RECORDED):
-        self.body = (folder / name).read_bytes()
+    def __init__(
+        self, name="by-isbn-found.json", status=200, folder=RECORDED, reverse=False
+    ):
+        body = (folder / name).read_bytes()
+        if reverse:
+            payload = json.loads(body)
+            editions = (payload.get("data") or {}).get("editions") or []
+            payload["data"]["editions"] = list(reversed(editions))
+            body = json.dumps(payload).encode("utf-8")
+        self.body = body
         self.status = status
         self.sent = None
 
@@ -260,13 +271,19 @@ class TitleLookupTests(unittest.TestCase):
         self.assertEqual(belsay[0].title, "Belsay")
         self.assertEqual(belsay[0].series_number, "23")
 
-    def test_one_work_comes_back_once_however_many_editions_it_has(self):
-        """Cragside's reply with the same work twice, as the API really sends it."""
+    def test_every_edition_of_a_work_comes_back(self):
+        """D12: the client stops choosing, because the choice is the matcher's.
+
+        Cragside's reply with the same work twice, as the API really sends it.
+        One Edition per Work is now `matching.standard_editions`'s guarantee, and
+        the client hands up both so the rule has something to choose between.
+        """
         reply = {
             "data": {
                 "editions": [
                     {
                         "title": "Cragside",
+                        "isbn_13": CRAGSIDE,
                         "language": None,
                         "book": {
                             "id": 1198994,
@@ -282,6 +299,7 @@ class TitleLookupTests(unittest.TestCase):
                     },
                     {
                         "title": "Cragside: A DCI Ryan Mystery",
+                        "isbn_13": "9781786813891",
                         "language": {"code2": "en"},
                         "book": {
                             "id": 1198994,
@@ -302,16 +320,31 @@ class TitleLookupTests(unittest.TestCase):
 
         candidates = source.by_title([CRAGSIDE_TITLE], "en")
 
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0].title, "Cragside")
+        self.assertEqual(len(candidates), 2, "one per Edition, in reply order")
+        self.assertEqual(
+            [candidate.isbn for candidate in candidates],
+            [CRAGSIDE, "9781786813891"],
+            "each carries its own Edition's ISBN",
+        )
+        self.assertEqual(
+            [candidate.title for candidate in candidates],
+            ["Cragside", "Cragside"],
+            "the title is the work's on both",
+        )
 
-    def test_a_work_with_no_id_of_its_own_is_not_mistaken_for_another(self):
-        """`books.title` is nullable and `id` may be missing from a reply."""
+    def test_two_editions_with_no_work_id_between_them_are_not_merged(self):
+        """`books.title` is nullable and `id` may be missing from a reply.
+
+        Nothing groups editions in the client any more, so a missing id costs
+        nothing: the two are two candidates, and the grouping that matters
+        happens in `matching`, on the title and the author.
+        """
         reply = {
             "data": {
                 "editions": [
                     {
                         "title": "Cragside",
+                        "isbn_13": CRAGSIDE,
                         "language": None,
                         "book": {"title": "Cragside"},
                     },
