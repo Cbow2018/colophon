@@ -3604,6 +3604,80 @@ class StandardEditionTests(CorrectionTestCase):
         self.assertEqual(answers[0], answers[1])
         self.assertTrue(answers[0][0])
 
+    def test_every_title_path_booking_is_the_same_book_however_the_reply_is_listed(self):
+        """D10's bar: stable under a shuffled reply, on both source orders.
+
+        The four replies a title path can be answered with, each in the order it
+        was recorded and in the reverse of it, with the two sources in the order
+        the user configured and in the reverse. Nothing but the reply's order
+        changes between runs, so everything the run decided - which source, which
+        band, what confidence, and every value it wrote - has to come out the
+        same. This is the criterion the ticket always asked for, and it is worth
+        more than any single case below, because it is the one that says the
+        choice is the rule's and not the list's.
+        """
+        cases = (
+            ("Cragside", "you-wrote-this.epub", "by-title-cragside.json"),
+            ("Berwick", "you-wrote-this-too.epub", "by-title-berwick.json"),
+            ("The Infirmary", "and-this.epub", "by-title-the-infirmary.json"),
+        )
+        for title, name, fixture in cases:
+            for sources in (("hardcover", "google_books"), ("google_books", "hardcover")):
+                with self.subTest(title=title, sources=sources):
+                    answers = []
+                    for round_number, reverse in enumerate((False, True)):
+                        answers.append(
+                            self.answer_for(
+                                f"{round_number}-{name}",
+                                title=title,
+                                sources=sources,
+                                reply=fixture,
+                                reverse=reverse,
+                            )
+                        )
+
+                    self.assertEqual(
+                        answers[0],
+                        answers[1],
+                        "the same book, whichever order the reply came in",
+                    )
+
+    def answer_for(self, name, title, sources, reply, reverse):
+        """One title-path run over real clients, and what it decided.
+
+        The file carries no ISBN, so the walk is the title path: an ISBN
+        identifies one Edition, and this is the path where a source answers with
+        all of a Work's. Both sources are given the reply recorded for this book,
+        because Hardcover's title request carries no author and the two are
+        written the same way on purpose. A fresh EPUB per run, so nothing a
+        previous run wrote can reach this one.
+        """
+        path = self.write(
+            name,
+            f"""    <dc:title>{title}</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        clients = {
+            "hardcover": Hardcover(
+                "a-token", transport=Replay(reply, reverse=reverse)
+            ),
+            "google_books": GoogleBooks(
+                "a-key", transport=GoogleReplay(reply, reverse=reverse)
+            ),
+        }
+
+        outcome = self.corrector(sources=[clients[name] for name in sources]).correct(path)
+
+        return (
+            outcome.matched,
+            outcome.unverified,
+            outcome.source,
+            outcome.confidence,
+            sorted((change.field, change.value) for change in outcome.changed),
+        )
+
 
 class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
     """The real source classes, driven by the real corrector.

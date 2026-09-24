@@ -41,11 +41,22 @@ class Replay:
     """Stands in for the network: hands back a recorded reply, remembers the request.
 
     `folder` is for the frozen cases in `hand-made/`, which live beside the live
-    recordings rather than among them.
+    recordings rather than among them. `reverse` hands the reply's editions back
+    in the opposite order, which is how a test asks whether anything depends on
+    the order a source listed them in: Hardcover's order is its own business and
+    can change between two runs of the same query.
     """
 
-    def __init__(self, name="by-isbn-found.json", status=200, folder=RECORDED):
-        self.body = (folder / name).read_bytes()
+    def __init__(
+        self, name="by-isbn-found.json", status=200, folder=RECORDED, reverse=False
+    ):
+        body = (folder / name).read_bytes()
+        if reverse:
+            payload = json.loads(body)
+            editions = (payload.get("data") or {}).get("editions") or []
+            payload["data"]["editions"] = list(reversed(editions))
+            body = json.dumps(payload).encode("utf-8")
+        self.body = body
         self.status = status
         self.sent = None
 

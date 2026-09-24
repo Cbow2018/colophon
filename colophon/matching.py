@@ -576,6 +576,11 @@ def standard_editions(candidates):
         else:
             marker = key
             if key in chosen:
+                # Which of the two is the Standard Edition, asked of a pair that
+                # is handed over in the order it arrived, so neither can be the
+                # one that happened to come first. Two candidates that agree on
+                # the whole key write the same thing, and it is the first of them
+                # that stands - the same one whichever way round they arrive.
                 if _standard_edition_key(
                     candidate, rank_of_source
                 ) < _standard_edition_key(chosen[key], rank_of_source):
@@ -666,18 +671,26 @@ def _letters(author):
 
 
 def _standard_edition_key(candidate, rank_of_source):
-    """How good an Edition is at standing for its Work, smallest best."""
+    """How good an Edition is at standing for its Work, smallest best.
+
+    The payload is read four ways: bigger first, then the shape of what is
+    missing, then the values compared with the first field as the least
+    significant. The two rules pull in opposite directions on their own, and each
+    needs the other to be a real order. A field's absence is an empty string,
+    which sorts *before* a value, so Berwick's Edition with no ISBN would beat the
+    one that has an ISBN on a plain comparison; and a plain count of fields says
+    nothing about two candidates carrying the same number of them. Together they
+    answer, for any two candidates, which one to keep - which is what the last
+    resort has to be able to do, because the one thing it may never do is fall
+    back on the order they arrived in.
+    """
     return (
         str(candidate.date or _UNDATED),
         rank_of_source[candidate.source],
-        -_completeness(candidate),
-        _payload(candidate),
+        -sum(1 for value in _payload(candidate) if value),
+        tuple(1 if value else 0 for value in _payload(candidate)),
+        tuple(reversed(_payload(candidate))),
     )
-
-
-def _completeness(candidate):
-    """How many of the ten writable fields this candidate carries something for."""
-    return sum(1 for value in _payload(candidate) if value)
 
 
 def _payload(candidate):

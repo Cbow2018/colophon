@@ -689,6 +689,7 @@ class Corrector:
         pool = ()
         ranked = Ranked()
         exited = False
+        sources_seen = []
         for index, source in enumerate(self.sources):
             try:
                 # Every form in one request: a source filters its own way, and
@@ -702,13 +703,18 @@ class Corrector:
             # A title search answers with Editions, so the pool is grouped by
             # Work and each Work keeps its Standard Edition before it is graded:
             # the tie between a dozen printings of one book is what the medium
-            # band was made of, and it never forms. The grouping is also what
-            # makes the pool source by source in the user's order mean something
-            # - `dedupe`'s first-wins still keeps the record the highest-priority
-            # source sent, and the Standard Edition's equal dates break the same
-            # way. Filling in a kept record's missing fields from the others is
-            # CBO-61's, not this.
-            pool = dedupe(standard_editions([*pool, *candidates]))
+            # band was made of, and it never forms.
+            if source.name not in sources_seen:
+                sources_seen.append(source.name)
+            # `standard_editions` reads a source's rank off where that source's
+            # first candidate stands in the pool, and a reply's own order is not
+            # stable - so the rank is settled here, by the order the user put the
+            # sources in, and the pool is carried in that same order. Filling in
+            # a kept record's missing fields from the others is CBO-61's, not
+            # this.
+            pool = dedupe(
+                standard_editions([*_in_source_order(pool, sources_seen), *candidates])
+            )
             ranked = rank(file_book, pool)
             if band_of(ranked, self.bands) == "strong":
                 # A source the decision never reached is not a source that
@@ -1274,6 +1280,22 @@ class Corrector:
         return bool(
             found is not None and self.add_cover and found.cover and not book.has_cover
         )
+
+
+def _in_source_order(pool, sources_seen):
+    """The pool with each source's candidates together, sources in the user's order.
+
+    `standard_editions` reads a source's rank off the position its first
+    candidate stands at, which only means the user's Source Priority if the pool
+    is carried that way. Rearranging is by source and nothing else, so the
+    candidates of one source keep the order they are already in - and the whole
+    thing is stable, since a source's candidates are together whatever order its
+    reply listed them in.
+    """
+    rank_of_source = {
+        name: index for index, name in enumerate(sources_seen)
+    }
+    return sorted(pool, key=lambda c: rank_of_source.get(c.source, len(sources_seen)))
 
 
 def forget_yesterdays_waits(waiting, today):
