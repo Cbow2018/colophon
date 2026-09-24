@@ -13,18 +13,21 @@ normalisation, and their Series Placements do not conflict. The Standard Edition
 is the one with the earliest date, then the source highest in the user's source
 list, then the most complete payload, and last the payload compared field by
 field. We chose this because it gives the same answer whatever order a source
-lists its reply in, and it only needs fields every source already sends (CBO-68,
-decisions D1–D3 and D11–D23).
+lists its reply in, and it only needs fields the sources already send: a Google
+candidate states no Series Placement, which the key takes as unstated rather than
+as a placement to match (CBO-68, decisions D1–D3, D11–D24, and D22 as amended in
+review).
 
 The grouping key reads Series Placement because the glossary says a differing
 placement is what tells two Works apart, and a key that ignored it merged two
-Works that share a title and an author. Two placements conflict when the series
-or the position differs. A candidate that states no placement joins a group only
-when exactly one placement is stated in it; when two or more are, the unplaced
-candidates are a Work of their own. Both halves are decided from the set of
-placements in the group rather than from the order the candidates arrived in.
-What the key still does not read is the year, and everything else a pairing of
-two Editions might need to be told apart is CBO-65's, scoped against this key.
+Works that share a title and an author. Two placements conflict when the series,
+as the scorer normalises it, or the position differs. A candidate that states no
+placement joins a group only when exactly one placement is stated in it; when two
+or more are, the unplaced candidates are a Work of their own. Both halves are
+decided from the set of placements in the group rather than from the order the
+candidates arrived in. What the key still does not read is the year, and
+everything else a pairing of two Editions might need to be told apart is CBO-65's,
+scoped against this key.
 
 ## Considered Options
 
@@ -48,10 +51,11 @@ two Editions might need to be told apart is CBO-65's, scoped against this key.
 - **Group by Hardcover's `book.id`.** Not used, because Google has no equivalent.
   The synthesized key matched `book.id` on every Hardcover fixture.
 - **Leave Series Placement out of the key** (the first build of this rule).
-  Rejected on review: it made one Work of a source's record of an Edition and
-  another source's record of a different one, and the Edition it kept was chosen
-  before anything was scored, so the pool lost the record that agreed with the
-  file. `test_the_pool_is_what_picks_the_record_that_gets_written` is the case.
+  Rejected on review: a source's record of one Edition and another source's record
+  of a different one were grouped as one Work, when the glossary says two
+  placements that conflict are two Works. The Edition it kept was chosen before
+  anything was scored, so the pool lost the record that agreed with the file.
+  `test_the_pool_is_what_picks_the_record_that_gets_written` is the case.
 
 ## Consequences
 
