@@ -2863,43 +2863,52 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         )
         self.assertEqual(read(path).title, "Cragside")
 
-    def test_two_genuinely_different_editions_are_not_merged(self):
-        """Two records of one work are two candidates, and the gap says so.
+    def test_two_records_of_one_work_are_one_work_and_one_standard_edition(self):
+        """CBO-68: the tie this test used to leave open is the rule's to resolve.
 
-        The same title, the same author, nothing else for the file to tell them
-        apart with, and two different ISBNs: every field the comparison reads
-        agrees, so both score 1.0 and the gap between them is 0.0. §1.2's answer
-        to a saturated metric is the medium band, not a coin flip, so the book is
-        not written from whichever of the two the source happened to list first.
-        Being merged would have made it a singleton at 1.0 - strong, and written.
+        Two Hardcover records of one Work with the same title, the same author,
+        the same series number and two different ISBNs. Both agree with the file
+        on everything the comparison reads, so both score 1.0 and the gap between
+        them is 0.0 - which used to be the medium band, on the principle that a
+        saturated metric is not a coin flip. The principle is intact and the rule
+        is what settles it now: they are two Editions of one Work, one of them is
+        the Standard Edition, and the Work is a pool of one, so the book is
+        written from it. Which of the two it is, is the payload's business and
+        never reply order, so the same one answers both ways round.
         """
-        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
-        source = FakeSource(
-            found=None,
-            candidates=[
-                Candidate(
-                    source="hardcover",
-                    title="Cragside",
-                    authors=("L. J. Ross",),
-                    isbn=ISBN,
-                    language="en",
-                ),
-                Candidate(
-                    source="hardcover",
-                    title="Cragside",
-                    authors=("L. J. Ross",),
-                    isbn="9781999761009",
-                    language="en",
-                ),
-            ],
+        records = [
+            Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L. J. Ross",),
+                isbn=ISBN,
+                language="en",
+            ),
+            Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L. J. Ross",),
+                isbn="9781999761009",
+                language="en",
+            ),
+        ]
+
+        answered = []
+        for name, candidates in (("first.epub", records), ("second.epub", records[::-1])):
+            path = write_epub(self.folder / name, CRAGSIDE, version="2.0")
+            source = FakeSource(found=None, candidates=candidates)
+
+            outcome = self.corrector(source=source).correct(path)
+
+            self.assertTrue(outcome.matched, "one Work, so one Edition to write from")
+            answered.append(
+                [(change.field, change.value) for change in outcome.changed]
+            )
+            self.assertEqual(len(source.asked_titles), 1, "one request, one pool")
+
+        self.assertEqual(
+            answered[0], answered[1], "and the answer does not depend on reply order"
         )
-
-        outcome = self.corrector(source=source).correct(path)
-
-        self.assertFalse(outcome.matched, "neither edition is written from")
-        self.assertTrue(outcome.unverified)
-        self.assertEqual(outcome.confidence, 1.0, "and the tie is what stopped it")
-        self.assertEqual(len(source.asked_titles), 1, "one request, one pool")
 
     def test_the_pool_is_what_picks_the_record_that_gets_written(self):
         """Gathered, the pool prefers the better of two records of one edition.
@@ -3477,6 +3486,125 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
         self.assertNotEqual(path.read_bytes(), original)
 
 
+class StandardEditionTests(CorrectionTestCase):
+    """CBO-68: a title reply full of Editions resolves to one answer per Work.
+
+    The replies are the real recordings, replayed to the real clients through the
+    real corrector with no LLM, which is the case the ticket's cost lands on.
+    Every value asserted below is the rule's own answer, not a run's output.
+    """
+
+    def write(self, name, meta):
+        return write_epub(self.folder / name, meta, version="2.0")
+
+    def test_a_reply_full_of_editions_is_written_from_the_standard_one(self):
+        """The Infirmary: three Ross Editions on Hardcover, earliest 2019-01-01.
+
+        Before CBO-68 the client kept whichever Edition the reply listed first,
+        so the ISBN written to the file was `9781799729945` - the `Audible
+        Studios on Brilliance` one - and the reply's order decided it.
+        """
+        path = self.write(
+            "The Infirmary.epub",
+            """    <dc:title>The Infirmary</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = Hardcover("a-token", transport=Replay("by-title-the-infirmary.json"))
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(read(path).title, "The Infirmary")
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "isbn"],
+            ["9781792780844"],
+        )
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "publisher"],
+            ["Independently Published"],
+        )
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "date"],
+            ["2019-01-01"],
+        )
+
+    def test_the_other_work_in_the_same_reply_is_not_offered(self):
+        """The reply holds two Works: three Ross Editions and one by Reagon.
+
+        A head-only key would merge them and the file would be offered Reagon's
+        book, which is the false accept D11 refuses.
+        """
+        path = self.write(
+            "The Infirmary.epub",
+            """    <dc:title>The Infirmary</dc:title>
+    <dc:creator>Carly Reagon</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = Hardcover("a-token", transport=Replay("by-title-the-infirmary.json"))
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.confidence, 1.0)
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "isbn"],
+            ["9781408733363"],
+            "the Reagon Work's own Edition",
+        )
+
+    def test_a_tie_between_editions_is_broken_by_the_earliest_date(self):
+        """Cragside's Google reply: the large print and the original, both 1.0000.
+
+        Two Editions agreeing with a file that states only a title and an author
+        is §1.2's saturated metric. `RASDtAEACAAJ` is the 2017 original and
+        `7kMMzgEACAAJ` the 2021 large print, and the date decides between them.
+        """
+        path = self.write(
+            "Cragside.epub",
+            """    <dc:title>Cragside</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = GoogleBooks("a-key", transport=GoogleReplay("by-title-cragside.json"))
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "isbn"],
+            ["9781521748831"],
+            "the 2017 original, not the 2021 large print",
+        )
+
+    def test_the_same_answer_whatever_order_the_reply_lists(self):
+        """The ticket's acceptance criterion, on one reply, read backwards."""
+        book = """    <dc:title>Cragside</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+"""
+        answers = []
+        for name, reverse in (("first.epub", False), ("second.epub", True)):
+            path = self.write(name, book)
+            source = GoogleBooks(
+                "a-key", transport=GoogleReplay("by-title-cragside.json", reverse=reverse)
+            )
+            outcome = self.corrector(source=source).correct(path)
+            answers.append(
+                (
+                    outcome.matched,
+                    outcome.confidence,
+                    [(c.field, c.value) for c in outcome.changed],
+                )
+            )
+
+        self.assertEqual(answers[0], answers[1])
+        self.assertTrue(answers[0][0])
+
+
 class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
     """The real source classes, driven by the real corrector.
 
@@ -3498,25 +3626,28 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
         self.assertEqual(read(path).title, "Cragside")
 
     def test_the_real_google_books_answers_the_title_path(self):
-        """Google's own recording, replayed to the real client - and it is medium.
+        """Google's own recording, replayed to the real client.
 
         The reply holds two editions of *Cragside* - the Ulverscroft large print
         and the original - which agree with the file on everything it states, so
-        both score 1.0 and the gap between them is 0.0. That is §1.2's saturated
-        metric: the reply was read and scored, which is what this test is about,
-        and a file that cannot tell two editions apart is not written from
-        whichever one Google happened to list first. The ISBN path, below, is
-        where an edition is recognised exactly.
+        both score 1.0 and the gap between them is 0.0. CBO-68 is what resolves
+        that: they are two Editions of one Work, the 2017 original is the
+        Standard Edition, and with the Work a pool of one the book is written
+        rather than marked. Before it, this reply was `colophon:unverified` and
+        which edition was written from was whichever Google listed first. The
+        ISBN path, below, is where an edition is recognised exactly.
         """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
         source = GoogleBooks("a-key", transport=GoogleReplay("by-title-cragside.json"))
 
         outcome = self.corrector(source=source).correct(path)
 
-        self.assertFalse(outcome.matched, "two editions at a gap of 0.0 is not a match")
-        self.assertTrue(outcome.unverified)
+        self.assertTrue(outcome.matched, outcome.fragment())
         self.assertEqual(outcome.confidence, 1.0, "the reply was read and scored")
         self.assertIn("google_books", outcome.fragment())
+        self.assertEqual(
+            read(path).isbn, ISBN, "the file keeps its own ISBN either way"
+        )
 
     def test_the_real_google_books_answers_the_isbn_path(self):
         """The recording carries the ISBN that was asked about, so it is a match."""

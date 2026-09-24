@@ -47,11 +47,21 @@ class Replay:
 
     Each source answers from its own fixtures; this one reads Google's. `folder`
     is for the frozen cases, which live beside the live recordings rather than
-    among them.
+    among them. `reverse` hands the reply's volumes back in the opposite order,
+    which is how a test asks whether anything depends on the order a source
+    listed them in: Google's order is its own business and can change between
+    two runs of the same query.
     """
 
-    def __init__(self, name="by-title-cragside.json", status=200, folder=RECORDED):
-        self.body = (folder / name).read_bytes()
+    def __init__(
+        self, name="by-title-cragside.json", status=200, folder=RECORDED, reverse=False
+    ):
+        body = (folder / name).read_bytes()
+        if reverse:
+            payload = json.loads(body)
+            payload["items"] = list(reversed(payload.get("items") or []))
+            body = json.dumps(payload).encode("utf-8")
+        self.body = body
         self.status = status
         self.sent = None
 

@@ -24,6 +24,7 @@ from colophon.matching import (
     rank,
     score_candidate,
     search_title,
+    standard_editions,
     top_candidates,
 )
 
@@ -84,7 +85,6 @@ def candidate(title=None, authors=LJ, series_number=None, date=None, **rest):
     return Candidate(
         title=title, authors=authors, series_number=series_number, date=date, **rest
     )
-
 
 CRAGSIDE_RECORD = candidate(title="Cragside", series_number="6", date="2017-07-07")
 
@@ -1454,6 +1454,340 @@ class DedupeTests(unittest.TestCase):
 
     def test_an_empty_pool_is_an_empty_pool(self):
         self.assertEqual(dedupe([]), ())
+
+
+class StandardEditionsTests(unittest.TestCase):
+    """CBO-68: a title search returns Editions, so a pool is grouped by Work.
+
+    The grouping key is the title head the scorer normalises to, plus every
+    author's letters (D11, D17). It deliberately does not read Series Placement,
+    which is what the glossary says tells two Works apart; CBO-65 is scoped
+    against that gap (D22).
+    """
+
+    def test_editions_of_one_work_are_grouped(self):
+        """D11: symbols may differ, letters may not."""
+        spaced = candidate(title=BARE, authors=LJ, date="2017-07-07")
+        tight = candidate(title=BARE, authors=("L.J. Ross",), date="2019-01-01")
+
+        self.assertEqual(standard_editions([spaced, tight]), (spaced,))
+
+    def test_a_different_title_head_is_a_different_work(self):
+        cragside = candidate(title=BARE)
+        belsay = candidate(title="Belsay")
+
+        self.assertEqual(standard_editions([cragside, belsay]), (cragside, belsay))
+
+    def test_a_different_author_is_a_different_work(self):
+        """The Infirmary is two Hardcover Works with one title between them."""
+        ross = candidate(title="The Infirmary", authors=LJ)
+        reagon = candidate(title="The Infirmary", authors=("Carly Reagon",))
+
+        self.assertEqual(standard_editions([ross, reagon]), (ross, reagon))
+
+    def test_a_name_written_the_other_way_round_is_the_same_author(self):
+        filed = candidate(title=BARE, authors=("Ross, L. J.",))
+        written = candidate(title=BARE, authors=("L. J. Ross",))
+
+        kept = standard_editions([filed, written])
+
+        self.assertEqual(len(kept), 1, "one author, so one Work")
+        self.assertIn(kept[0], (filed, written))
+
+    def test_another_initial_is_another_author(self):
+        """D11's false accept: `L. K. Ross` is a different person."""
+        ross = candidate(title=BARE, authors=LJ)
+        other = candidate(title=BARE, authors=("L. K. Ross",))
+
+        self.assertEqual(standard_editions([ross, other]), (ross, other))
+
+    def test_a_head_with_no_author_on_one_side_is_a_different_work(self):
+        """A head-only key merges The Infirmary's two authors into one Work."""
+        named = Candidate(title="The Infirmary", authors=LJ)
+        unnamed = Candidate(title="The Infirmary")
+
+        self.assertEqual(standard_editions([named, unnamed]), (named, unnamed))
+
+    def test_two_records_the_source_put_no_author_on_are_two_works(self):
+        """Both sides naming nobody is not an author agreeing with itself."""
+        first = Candidate(title="The Infirmary")
+        second = Candidate(title="The Infirmary", isbn="9781912310111")
+
+        self.assertEqual(standard_editions([first, second]), (first, second))
+
+    def test_the_edition_wording_is_not_part_of_the_work(self):
+        """`The Infirmary` and `The Infirmary: A DCI Ryan Mystery` are one Work."""
+        bare = candidate(title="The Infirmary", authors=LJ)
+        subtitled = candidate(title=THE_INFIRMARY_FILE, authors=LJ)
+
+        self.assertEqual(standard_editions([bare, subtitled]), (bare,))
+
+    def test_conflicting_series_placements_are_two_works(self):
+        """D22, amended: the glossary says a placement conflict tells Works apart.
+
+        Both candidates carry *Cragside* and L. J. Ross, and position 6 and 11 are
+        two different Works - one of them is this file's book and the other is not.
+        """
+        sixth = candidate(
+            title=BARE, authors=LJ, series="DCI Ryan Mysteries", series_number="6"
+        )
+        eleventh = candidate(
+            title=BARE, authors=LJ, series="DCI Ryan Mysteries", series_number="11"
+        )
+
+        self.assertEqual(standard_editions([sixth, eleventh]), (sixth, eleventh))
+        self.assertEqual(standard_editions([eleventh, sixth]), (eleventh, sixth))
+
+    def test_a_different_series_is_a_different_work(self):
+        first = candidate(
+            title=BARE, authors=LJ, series="DCI Ryan Mysteries", series_number="6"
+        )
+        other = candidate(
+            title=BARE, authors=LJ, series="The Cragside Files", series_number="6"
+        )
+
+        self.assertEqual(standard_editions([first, other]), (first, other))
+
+    def test_editions_sharing_a_placement_are_one_work(self):
+        early = candidate(
+            title=BARE,
+            authors=LJ,
+            series="DCI Ryan Mysteries",
+            series_number="6",
+            date="2017-07-07",
+        )
+        late = candidate(
+            title=BARE,
+            authors=LJ,
+            series="DCI Ryan Mysteries",
+            series_number="6",
+            date="2021-03",
+        )
+
+        self.assertEqual(standard_editions([early, late]), (early,))
+        self.assertEqual(standard_editions([late, early]), (early,))
+
+    def test_a_placement_the_other_editions_agree_on_joins_them(self):
+        """Rule 2, one placement stated: the unplaced edition is that Work's."""
+        placed = candidate(
+            title=BARE,
+            authors=LJ,
+            series="DCI Ryan Mysteries",
+            series_number="6",
+            date="2017-07-07",
+        )
+        unplaced = candidate(title=BARE, authors=LJ, date="2021-03")
+
+        for pool in ([placed, unplaced], [unplaced, placed]):
+            with self.subTest(order=[c.date for c in pool]):
+                self.assertEqual(standard_editions(pool), (placed,))
+
+    def test_an_unplaced_edition_is_its_own_work_when_two_placements_are_stated(self):
+        """Rule 2, two or more stated: it cannot join either, so it stands alone.
+
+        And the answer must not depend on where it arrived: the set of placements
+        in the group decides, never the order the candidates came in.
+        """
+        sixth = candidate(
+            title=BARE, authors=LJ, series="DCI Ryan Mysteries", series_number="6"
+        )
+        eleventh = candidate(
+            title=BARE, authors=LJ, series="DCI Ryan Mysteries", series_number="11"
+        )
+        unplaced = candidate(title=BARE, authors=LJ, isbn="9781521748831")
+
+        for pool in (
+            [sixth, unplaced, eleventh],
+            [unplaced, sixth, eleventh],
+            [eleventh, unplaced, sixth],
+            [eleventh, sixth, unplaced],
+        ):
+            with self.subTest(order=[c.isbn or c.series_number for c in pool]):
+                kept = standard_editions(pool)
+                self.assertEqual(
+                    len(kept), 3, "three Works, so nothing was merged into anything"
+                )
+                self.assertEqual(
+                    {id(candidate) for candidate in kept},
+                    {id(candidate) for candidate in pool},
+                    "and each Works keeps its own Edition",
+                )
+                self.assertEqual(
+                    kept[0], pool[0], "in the order the Works are first seen"
+                )
+
+    def test_a_named_series_with_no_position_is_not_a_placement(self):
+        """A placement is a series and a position; half of one names nothing.
+
+        No reply in the corpus has one, so this only says which side of rule 2 a
+        half-stated placement falls on: it is unplaced, and joins the one
+        placement stated beside it.
+        """
+        placed = candidate(
+            title=BARE,
+            authors=LJ,
+            series="DCI Ryan Mysteries",
+            series_number="6",
+            date="2017-07-07",
+        )
+        half = candidate(
+            title=BARE, authors=LJ, series="DCI Ryan Mysteries", date="2021-03"
+        )
+
+        self.assertEqual(standard_editions([placed, half]), (placed,))
+        self.assertEqual(standard_editions([half, placed]), (placed,))
+
+    def test_a_work_with_no_title_is_left_as_its_own(self):
+        first = candidate(title=None)
+        second = candidate(title=None)
+
+        self.assertEqual(standard_editions([first, second]), (first, second))
+
+    def test_the_order_works_are_first_seen_in_is_kept(self):
+        cragside = candidate(title=BARE, date="2017-07-07")
+        belsay = candidate(title="Belsay")
+        later = candidate(title=BARE, date="2019-01-01")
+
+        self.assertEqual(standard_editions([cragside, belsay, later]), (cragside, belsay))
+
+    def test_an_empty_pool_is_an_empty_pool(self):
+        self.assertEqual(standard_editions([]), ())
+
+
+class StandardEditionChoiceTests(unittest.TestCase):
+    """D15/D16/D13: which Edition of a Work stands for it, smallest key first.
+
+    Every case here is synthetic, because the recorded replies that exercise the
+    rule are in `tests/test_correction.py` where the walk can be seen whole.
+    """
+
+    def test_the_earliest_edition_is_the_standard_one(self):
+        early = candidate(title=BARE, authors=LJ, date="2017-07-07")
+        late = candidate(title=BARE, authors=LJ, date="2021-03-01")
+
+        for pool in ([late, early], [early, late]):
+            with self.subTest(order=[c.date for c in pool]):
+                self.assertEqual(standard_editions(pool), (early,))
+
+    def test_a_year_alone_is_earlier_than_a_day_in_that_year(self):
+        """`1980` and `1980-12-31`: the ISO prefix compares as strings."""
+        year = candidate(title=BARE, authors=LJ, date="1980")
+        day = candidate(title=BARE, authors=LJ, date="1980-06-01")
+
+        self.assertEqual(standard_editions([day, year]), (year,))
+
+    def test_an_undated_edition_comes_last(self):
+        dated = candidate(title=BARE, authors=LJ, date="2021-03-01")
+        undated = candidate(title=BARE, authors=LJ)
+
+        for pool in ([undated, dated], [dated, undated]):
+            with self.subTest(order=[c.date for c in pool]):
+                self.assertEqual(standard_editions(pool), (dated,))
+
+    def test_the_sources_own_order_decides_equal_dates(self):
+        """D15: the source highest in the user's Source Priority wins."""
+        first = candidate(title=BARE, authors=LJ, date="2026-02-26", source="hardcover")
+        second = candidate(
+            title=BARE, authors=LJ, date="2026-02-26", source="google_books"
+        )
+
+        self.assertEqual(standard_editions([first, second]), (first,))
+        self.assertEqual(standard_editions([second, first]), (second,))
+
+    def test_source_order_is_not_the_candidates_position_in_the_pool(self):
+        """Every source's rank is where its *first* candidate appears.
+
+        Hardcover is the higher-priority source and stands at position 0. A
+        shuffled Google reply puts a different Edition of the Work at position 1
+        from one run to the next, and the choice must not move with it.
+        """
+        hardcover = candidate(
+            title=BARE, authors=LJ, date="2026-02-26", source="hardcover"
+        )
+        google_one = candidate(
+            title=BARE,
+            authors=LJ,
+            date="2026-02-26",
+            source="google_books",
+            isbn="9781529978940",
+        )
+        google_two = candidate(
+            title=BARE,
+            authors=LJ,
+            date="2026-02-26",
+            source="google_books",
+            isbn="9781792780844",
+        )
+
+        self.assertEqual(
+            standard_editions([hardcover, google_one, google_two]), (hardcover,)
+        )
+        self.assertEqual(
+            standard_editions([hardcover, google_two, google_one]), (hardcover,)
+        )
+
+    def test_a_field_the_payload_does_not_cover_nothing_else_decides(self):
+        """Two Editions equal on all ten writable fields write the same thing."""
+        one = candidate(title=BARE, authors=LJ, date="2026-02-26", source="hardcover")
+        other = candidate(
+            title=BARE, authors=LJ, date="2026-02-26", source="hardcover", series="X"
+        )
+
+        self.assertEqual(standard_editions([one, other]), (other,))
+        self.assertEqual(standard_editions([other, one]), (other,))
+
+    def test_the_more_complete_edition_decides_equal_dates_from_one_source(self):
+        """D13's tiebreak, as `hardcover/by-title-berwick.json` needs it."""
+        bare = candidate(title=BARE, authors=LJ, date="2026-02-26", source="hardcover")
+        full = candidate(
+            title=BARE,
+            authors=LJ,
+            date="2026-02-26",
+            source="hardcover",
+            isbn="9781529978940",
+        )
+
+        for pool in ([bare, full], [full, bare]):
+            with self.subTest(order=[c.isbn for c in pool]):
+                self.assertEqual(standard_editions(pool), (full,))
+
+    def test_two_editions_that_differ_only_in_the_cover_still_resolve(self):
+        """D16's third criterion: nothing left but the payload, compared."""
+        one = candidate(
+            title=BARE, authors=LJ, date="2026-02-26", source="hardcover", cover="a"
+        )
+        other = candidate(
+            title=BARE, authors=LJ, date="2026-02-26", source="hardcover", cover="b"
+        )
+
+        self.assertEqual(standard_editions([one, other]), standard_editions([other, one]))
+
+    def test_the_same_two_editions_come_out_the_same_way_every_time(self):
+        """The ticket's own criterion: one answer, whatever order they arrive in."""
+        pool = [
+            candidate(title=BARE, authors=LJ, date="2019-02-10", source="hardcover"),
+            candidate(
+                title=BARE,
+                authors=LJ,
+                date="2019-02-10",
+                source="hardcover",
+                isbn="9781912310111",
+            ),
+            candidate(
+                title=BARE,
+                authors=LJ,
+                date="2019-01-01",
+                source="hardcover",
+                isbn="9781792780844",
+            ),
+        ]
+
+        kept = standard_editions(pool)
+        survivor = kept[0]
+        for shuffled in ([pool[0], pool[1], pool[2]], [pool[2], pool[1], pool[0]], [pool[1], pool[2], pool[0]]):
+            with self.subTest(order=[c.date for c in shuffled]):
+                self.assertEqual(standard_editions(shuffled), (survivor,))
+        self.assertEqual(survivor.isbn, "9781792780844", "the earliest of the three")
 
 
 class TopCandidatesTests(unittest.TestCase):
