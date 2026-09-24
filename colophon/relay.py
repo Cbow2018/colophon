@@ -148,8 +148,9 @@ class Relay:
 
         outcome = self.correction.correct(path)
         if outcome.waiting:
-            # The LLM could not be asked, so the book is not finished with. It
-            # stays exactly where it is for the next UTC day: rewriting it would
+            # The pass did not finish with the book - the LLM could not be
+            # asked, or a source the user configured could not be - so it stays
+            # exactly where it is for the next UTC day: rewriting it would
             # change its hash, and delivering it would hand the library a book
             # Colophon knows it has not finished. The correction already said
             # why, once, so nothing is logged here.

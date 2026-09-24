@@ -24,10 +24,83 @@
           "image": {
             "url": "https://assets.hardcover.app/external_data/40810017/88c4da5caf5a76472600888c8c4ada978965ebdd.jpeg"
           },
+          "cached_tags": {
+            "Tag": [],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 1,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "fast-paced",
+                "count": 1,
+                "tagSlug": "fast-paced-bb6a9c5e-f18f-45b8-b251-3382999c5668",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "mysterious",
+                "count": 1,
+                "tagSlug": "mysterious",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "tense",
+                "count": 1,
+                "tagSlug": "tense",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Crime",
+                "count": 1,
+                "tagSlug": "crime",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Thriller",
+                "count": 1,
+                "tagSlug": "thriller",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Content Warning": []
+          },
           "contributions": [
             {
               "contribution": "Author",
               "author": {
+                "id": 318638,
                 "name": "L.J. Ross"
               }
             }
@@ -37,6 +110,7 @@
               "featured": true,
               "position": 6,
               "series": {
+                "id": 23832,
                 "name": "DCI Ryan Mysteries"
               }
             }

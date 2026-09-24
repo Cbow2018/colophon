@@ -1,0 +1,50 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9780765311788",
+        "isbn_10": "076531178X",
+        "title": "Mistborn: The Final Empire",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "title": "Mistborn: The Final Empire",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "name": "Brandon Sanderson"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": false,
+              "position": 1,
+              "series": {
+                "name": "The Mistborn Saga"
+              }
+            },
+            {
+              "featured": false,
+              "position": 3,
+              "series": {
+                "name": "The Cosmere"
+              }
+            },
+            {
+              "featured": true,
+              "position": 1,
+              "series": {
+                "name": "The Mistborn Saga: The Original Trilogy"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

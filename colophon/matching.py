@@ -186,7 +186,7 @@ class Candidate:
 
 
 @dataclass(frozen=True)
-class Match:
+class Scored:
     """One candidate measured against the file, and what came of the measuring.
 
     `score` is `1 - Σ(weight × penalty) / Σweights`, over the fields both sides
@@ -232,15 +232,17 @@ class Match:
 
 @dataclass(frozen=True)
 class Ranked:
-    """One file's pool, ordered, with the band it grades and what led to it.
+    """One file's pool, ordered, with what led to it.
 
     `matches` is every candidate that survived the language filter, best first
     with ties left in the order the source offered them. Everything else is
     derived from that ordering, so nothing can disagree with it: `leader` is the
-    best match, `runner_up` the second, `gap` how far apart they are, and `band`
-    is `band_of`'s answer. `runner_up` and `gap` are None for a pool of one,
-    which is the common case and the reason a singleton is graded against a
-    higher bar.
+    best match, `runner_up` the second and `gap` how far apart they are.
+    `runner_up` and `gap` are None for a pool of one, which is the common case
+    and the reason a singleton is graded against a higher bar. The band is not
+    one of these: it is `band_of(ranked, bands)`, because the thresholds are the
+    caller's and a pool that answered with the module's defaults would be
+    answering a question the caller did not ask.
     """
 
     matches: tuple = ()
@@ -261,10 +263,6 @@ class Ranked:
         if self.runner_up is None:
             return None
         return round(self.leader.score - self.runner_up.score, 4)
-
-    @property
-    def band(self):
-        return band_of(self)
 
 
 def clean_title(title):
@@ -439,7 +437,7 @@ def score_candidate(file_book, candidate):
     if not author_agrees:
         score = min(score, NO_AGREEMENT_CEILING)
 
-    return Match(
+    return Scored(
         candidate=candidate,
         score=round(min(score, 1.0), 4),
         denominator=round(denominator, 2),
@@ -500,58 +498,100 @@ def dedupe(candidates):
     return tuple(kept)
 
 
-def band_of(ranked):
+@dataclass(frozen=True)
+class Bands:
+    """The thresholds the bands are drawn from, as one value.
+
+    A caller's policy, passed in rather than read from here: `band_of` reads
+    only its arguments, and the four module constants are only what a caller
+    with nothing to say gets. `gap` is internal calibration (§4.5) and never
+    comes from config, so it is a field with a default rather than a fourth
+    setting.
+
+    A `singleton` below `strong` is refused rather than accepted, because it
+    would make a one-witness pool easier to write from than a corroborated one
+    and so invert §1.2.
+    """
+
+    strong: float = STRONG_SCORE
+    singleton: float = SINGLETON_STRONG
+    medium: float = MEDIUM_SCORE
+    gap: float = BAND_GAP
+
+    def __post_init__(self):
+        if self.singleton < self.strong:
+            raise ValueError(
+                f"singleton_score {self.singleton} is below strong_score "
+                f"{self.strong}, which would make a pool of one easier to write "
+                "than a pool of two"
+            )
+
+
+# What a caller that has no config means.
+BANDS = Bands()
+
+
+def band_of(ranked, bands=BANDS):
     """Which band a ranked pool falls in, and nothing else.
 
     One candidate has no runner-up to corroborate its leader, so it has to
-    clear `SINGLETON_STRONG` rather than `STRONG_SCORE`. Two or more need the
-    lower score *and* `BAND_GAP` of separation: a high score with a small gap
+    clear `bands.singleton` rather than `bands.strong`. Two or more need the
+    lower score *and* `bands.gap` of separation: a high score with a small gap
     says the metric is saturated rather than that the leader is right.
 
     `strong` needs the author to agree, so a candidate the gate refused - which
     is capped at `NO_AGREEMENT_CEILING` - can reach neither strong threshold.
+
+    The thresholds arrive as an argument rather than being read from the module,
+    which is what lets a user's own `singleton_score` and `medium_score` reach
+    the decision (§4.5) without this function - or anything else here - reading
+    config. `BANDS` is what a caller that has no config means.
     """
     leader = ranked.leader
     if leader is None:
         return "none"
     strong = (
-        leader.score >= SINGLETON_STRONG
+        leader.score >= bands.singleton
         if ranked.runner_up is None
-        else leader.score >= STRONG_SCORE and (ranked.gap or 0.0) >= BAND_GAP
+        else leader.score >= bands.strong and (ranked.gap or 0.0) >= bands.gap
     )
     if strong and leader.author_agrees:
         return "strong"
-    if leader.author_agrees and leader.score >= MEDIUM_SCORE:
+    if leader.author_agrees and leader.score >= bands.medium:
         return "medium"
     return "low" if leader.score > 0.0 else "none"
 
 
-def top_candidates(file_book, candidates):
-    """The candidates worth putting to the LLM, best first.
+def top_candidates(ranked):
+    """The ranked pool, at most `CANDIDATES_PER_SOURCE` per source, best first.
 
-    One source's reply at a time, and at most `CANDIDATES_PER_SOURCE` of them,
-    because a source can return a long tail of lookalikes and every one of them
-    costs tokens and buries the right record a little deeper. The cap is on the
-    *best* few rather than the first few: the ones the source listed first are
-    in whatever order its own search ranked them, while the score is what this
-    project's rules make of them against this file. The best candidate is
-    therefore candidate 1 in the prompt, which is the number a reply is read
-    against.
+    The pool arrives already ranked and deduped, so nothing here scores or sorts
+    it: this is the ranked list with each source's contribution capped. A source
+    can return a long tail of lookalikes and every one of them costs tokens and
+    buries the right record a little deeper, so the cap keeps the best few by
+    this project's own score rather than the first few the source listed.
 
-    The cap is per source, so this is called once per source's own reply and not
-    over everything the sources offered between them: otherwise the first source
-    to answer would spend the whole prompt and a second source's best record
-    would never be shown.
+    The cap is per source rather than over the list, which is the whole reason
+    there is a cap: otherwise the first source to answer would spend the whole
+    prompt and a second source's best record would never be shown.
 
-    Being ranked here does not mean being accepted: a candidate that agrees on
+    Order is the pool's own, which is global rank order. The prompt numbers the
+    candidates by position, so the number a reply is read against is this
+    project's ranking rather than the order the sources happened to answer in.
+
+    Being offered does not mean being accepted: a candidate that agrees on
     neither title nor author is not an explanation of the book to the rules, and
     is still offered to the model - they read the title and the author, and the
     reason a book needs an LLM is usually that those two are not enough.
     """
-    return [
-        match.candidate
-        for match in rank(file_book, candidates).matches[:CANDIDATES_PER_SOURCE]
-    ]
+    kept, seen = [], {}
+    for match in ranked.matches:
+        source = match.candidate.source
+        if seen.get(source, 0) >= CANDIDATES_PER_SOURCE:
+            continue
+        seen[source] = seen.get(source, 0) + 1
+        kept.append(match.candidate)
+    return kept
 
 
 def _title_penalty(file_head, file_subtitle, record_head, record_subtitle):

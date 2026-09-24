@@ -127,11 +127,19 @@ log_level = "INFO"
 #
 # A book in the strong band is corrected. A book in the medium band is put to
 # the LLM if one is configured, and otherwise marked; a book in the low or none
-# band is marked without a call. Marking means it keeps the metadata it came
+# band is marked without a call, unless `llm_full_scan` below puts those to the
+# model as well. Marking means it keeps the metadata it came
 # with - tagged `colophon:unverified`, with "Metadata could not be verified by
 # Colophon." at the end of its description - so you can find it in your library
 # without reading logs. Drop a marked book in again once a source has it and the
 # mark comes off.
+#
+# Two of the fields in that number are the ones Colophon writes back from a
+# record. A file whose own series position or date is wrong therefore scores
+# below a file whose every claim agrees, which is the safe direction: a book
+# with a perfect title and author and a contradicting date lands in the medium
+# band for the model to look at rather than being written from a record that
+# disagrees with it.
 #
 # A record has to clear more than the number. The file must name an author, the
 # record must name one, and the two must be close enough to be the same person;
@@ -157,13 +165,15 @@ log_level = "INFO"
 # medium_score = 0.80
 
 # Whether to put a book to the LLM whenever the rules could not decide it,
-# rather than only when it landed in the medium band. On, a book whose right
-# record scored badly - because the query was bad, not because the record is
-# wrong - still gets asked about. It does not disable the early exit: a book the
-# rules already graded strong never spends a call either way.
+# rather than only when it landed in the medium band. On, a book whose pool
+# grades low or none - every source was asked and nothing agreed - is asked
+# about too. That is what Colophon did before the bands existed, and it is what
+# this ships as: turning the flag off narrows the model's population to the
+# medium band. It does not disable the early exit, and a book the rules already
+# graded strong never spends a call either way.
 #
-# The line below is commented out because `false` is already what Colophon does.
-# llm_full_scan = false
+# The line below is commented out because `true` is already what Colophon does.
+# llm_full_scan = true
 
 # Add a cover to a book that has none, from the source that matched it. A book
 # that arrived with a cover keeps it: this setting only ever adds one. Only the

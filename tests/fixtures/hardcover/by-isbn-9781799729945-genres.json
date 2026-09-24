@@ -19,7 +19,11 @@
         },
         "book": {
           "title": "The Infirmary",
-          "description": "** THE PREQUEL TO THE #1 INTERNATIONAL BESTSELLER HOLY ISLAND AND NOW A MAJOR NEW AUDIBLE ORIGINALS DRAMA STARRING TOM BATEMAN, KEVIN WHATELY, HERMIONE NORRIS AND ALUN ARMSTRONG **No man is an island...In the stifling summer heat of 2014, a killer has been stalking the streets of Newcastle causing city-wide panic. When the officer in charge of the case turns up dead, it falls upon Detective Chief Inspector Ryan to take up the baton and find the person responsible.To the close-knit team of police in Northumbria CID, Ryan is still an outsider; aloof and uncompromising. He's lived a charmed life and has an unbroken track record to match. But, as The Hacker's death toll rises, Ryan realises this is one adversary he'll never bring to justice on his own... Murder and mystery are peppered with dark humour in this fast-paced crime thriller, set amidst the iconic North-Eastern landscape. \"LJ Ross keeps company with the best mystery writers\" - The Times\"A literary phenomenon\" - Evening Chronicle\"LJ Ross is the Queen of Kindle\" - Sunday TelegraphThe Audible Original Drama stars Tom Bateman (Murder on the Orient Express, Jekyll & Hyde, Snatched), Bertie Carvel (Doctor Foster, Les Misérables), Hermione Norris (Spooks, Cold Feet), Kevin Whately (Lewis, Auf Wiedersehen, Pet) and Alun Armstrong (Get Carter, Patriot Games, New Tricks).",
+          "description": "** THE PREQUEL TO THE #1 INTERNATIONAL BESTSELLER HOLY ISLAND AND NOW A MAJOR NEW AUDIBLE ORIGINALS DRAMA STARRING TOM BATEMAN, KEVIN WHATELY, HERMIONE NORRIS AND ALUN ARMSTRONG **No man is an island...In the stifling summer heat of 2014, a killer has been stalking the streets of Newcastle causing city-wide panic. When the officer in charge of the case turns up dead, it falls upon Detective Chief Inspector Ryan to take up the baton and find the person responsible.To the close-knit team of police in Northumbria CID, Ryan is still an outsider; aloof and uncompromising. He's lived a charmed life and has an unbroken track record to match. But, as The Hacker's death toll rises, Ryan realises this is one adversary he'll never bring to justice on his own... Murder and mystery are peppered with dark humour in this fast-paced crime thriller, set amidst the iconic North-Eastern landscape. \"LJ Ross keeps company with the best mystery writers\" - The Times\"A literary phenomenon\" - Evening Chronicle\"LJ Ross is the Queen of Kindle\" - Sunday TelegraphThe Audible Original Drama stars Tom Bateman (Murder on the Orient Express, Jekyll & Hyde, Snatched), Bertie Carvel (Doctor Foster, Les Mis\u00e9rables), Hermione Norris (Spooks, Cold Feet), Kevin Whately (Lewis, Auf Wiedersehen, Pet) and Alun Armstrong (Get Carter, Patriot Games, New Tricks).",
+          "release_date": "2019-01-01",
+          "image": {
+            "url": "https://assets.hardcover.app/editions/31223073/3246324269708276.jpg"
+          },
           "cached_tags": {
             "Tag": [],
             "Mood": [
@@ -91,10 +95,6 @@
               }
             ],
             "Content Warning": []
-          },
-          "release_date": "2019-01-01",
-          "image": {
-            "url": "https://assets.hardcover.app/editions/31223073/3246324269708276.jpg"
           },
           "contributions": [
             {

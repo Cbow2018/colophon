@@ -135,10 +135,10 @@ absent rather than as a bug — the same stated difference as the ids above.
 | `by-isbn-found.json` | 9781521748831 | *Cragside*, L.J. Ross, DCI Ryan Mysteries #6, the series marked featured | recorded |
 | `by-isbn-no-series.json` | 9780571334650 | *Normal People*, Sally Rooney: a standalone book | recorded |
 | `nothing-found.json` | 9781786813891 | `{"data": {"editions": []}}` — no editions at all | recorded |
-| `by-isbn-two-series.json` | 9780765311788 | *Mistborn: The Final Empire*, in three series at once | recorded, without the query's ordering |
+| `by-isbn-two-series.json` | 9780765311788 | *Mistborn: The Final Empire*, in three series at once, the featured one first | recorded |
 | `by-isbn-edition-title.json` | 9780007458424 | the edition is called *The Hobbit*; the work is not | recorded |
-| `hand-made-work-without-title.json` | 9780000000003 | a work with no title of its own | hand-made |
-| `hand-made-wider-than-the-question.json` | 9780000000004 | a reply with a translator and a narrator in it | hand-made |
+| `hand-made/work-without-title.json` | 9780000000003 | a work with no title of its own | hand-made |
+| `hand-made/wider-than-the-question.json` | 9780000000004 | a reply with a translator and a narrator in it | hand-made |
 
 ## By title — the query for a book whose file carries no ISBN
 
@@ -190,16 +190,32 @@ the two sets are not consistent with each other; this is the stated difference.
 The recorded bodies are the API's own, re-indented so they can be read in a
 diff; nothing inside them is changed.
 
-Two of the ISBN recordings are hand-made, and named so, because no real book has
-shown the shape: `books.title` is nullable in Hardcover's schema, and a reply
-*wider* than the question - a translator where only authors were asked for - is
-the case `colophon/hardcover.py` filters again in case the source ever returns
-one.
+`hand-made/` is the exception to how this directory works: a fixture in here is a
+live recording that may be re-recorded whenever the query changes, and one in
+`hand-made/` is a case a ticket rests on that no re-record may overwrite. The
+rule is stated in full at `hand-made/README.md`.
 
-`by-isbn-two-series.json` is the only recording made without the shipped
-query's `order_by`, because the point of it is the order Hardcover returns
-naturally: the featured series **last**. The client has to prefer the featured
-row itself rather than trust the server to put it first.
+Two of the ISBN recordings are hand-made, and now sit in `hand-made/` rather than
+among the live recordings, because no real book has shown the shape:
+`books.title` is nullable in Hardcover's schema, and a reply *wider* than the
+question - a translator where only authors were asked for - is the case
+`colophon/hardcover.py` filters again in case the source ever returns one.
+`hand-made/README.md` states the rule and names the test that reads each one.
+
+`by-isbn-two-series.json` was the only recording made without the shipped query's
+`order_by`, because the point of it was the order Hardcover returns naturally: the
+featured series **last**, which the client had to correct for by preferring the
+featured row itself rather than trusting the server to put it first.
+
+**The 2026-09-23 re-record retired that case.** Asked with the shipped `order_by`,
+Hardcover returns the featured row **first** — `The Mistborn Saga: The Original
+Trilogy` (featured), then `The Mistborn Saga`, then `The Cosmere`. So the server
+was already ordering it, the fixture was never evidence that it does not, and the
+"order_by destroys the natural order" claim above was wrong. The recording is now
+an ordinary live one and needs no exemption, which is one fewer judgement call in
+the fixture↔query guard. What the test still proves is narrower than its docstring
+says: `_series` picks the row carrying `featured`, and a server that stopped
+setting the flag would now be the thing nothing covers.
 
 Two things worth knowing, both recorded above rather than described:
 

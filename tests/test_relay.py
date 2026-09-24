@@ -19,6 +19,7 @@ from colophon.llm import Llm
 from colophon.matching import Candidate
 from colophon.record import AUTHOR, BY_NAME, Record
 from colophon.relay import Relay, RelayError
+from colophon.sources import SourceError
 from tests.opf import calibre_series, epub3_series, subjects
 from tests.samplebooks import AS_DOWNLOADED, CRAGSIDE, ISBN, write_epub
 from tests.sources import CRAGSIDE_CANDIDATE, NO_COVER_MATCH, FakeSource, no_network
@@ -754,6 +755,58 @@ class ABookWaitingForTheLLMTests(RelayTestCase):
         self.assertIn(
             "left in the ingest folder until tomorrow", "\n".join(captured.output)
         )
+
+    def test_it_is_not_asked_about_again_on_a_later_scan_today(self):
+        self.settle()
+
+        self.settle(times=3)
+
+        self.assertEqual(
+            len(self.source.asked_titles), 1, "asked once, then left for tomorrow"
+        )
+        self.assertTrue(self.path.exists())
+
+
+class ABookASourceCouldNotBeAskedForTests(RelayTestCase):
+    """A book whose source is down stays in the ingest folder.
+
+    The other half of §4.2, and the one the correction alone cannot show: the
+    walk records the error and returns the hold, and it is the relay that has to
+    read it and leave the file where it is. Not delivered, not marked, not
+    backed up, because tomorrow's pass starts from the file that arrived.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.source = FakeSource(
+            found=None, title_error=SourceError("Hardcover answered HTTP 503")
+        )
+        self.relay = Relay(
+            self.config,
+            corrector=Corrector(
+                sources=[self.source],
+                backups=Backups(self.backups),
+                dry_run=False,
+                fetch=no_network,
+            ),
+        )
+        # A book with no ISBN, so it is the title path that meets the error.
+        self.path = write_epub(self.ingest / "Cragside.epub", CRAGSIDE, version="2.0")
+
+    def test_the_book_stays_in_the_ingest_folder_untouched(self):
+        original = self.path.read_bytes()
+
+        self.settle()
+
+        self.assertTrue(self.path.exists(), "left where the library cannot see it yet")
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(list(self.output.iterdir()), [])
+
+    def test_the_book_is_not_marked_as_unverified(self):
+        """Nothing was refused, so there is nothing to mark it with."""
+        self.settle()
+
+        self.assertNotIn(UNVERIFIED_TAG, subjects(self.path))
 
     def test_it_is_not_asked_about_again_on_a_later_scan_today(self):
         self.settle()

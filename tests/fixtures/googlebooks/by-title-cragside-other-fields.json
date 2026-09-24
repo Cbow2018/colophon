@@ -21,6 +21,9 @@
             "identifier": "9781444846577"
           }
         ],
+        "categories": [
+          "Finlay-Ryan, Maxwell (Fictitious character)"
+        ],
         "imageLinks": {
           "smallThumbnail": "http://books.google.com/books/content?id=7kMMzgEACAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
           "thumbnail": "http://books.google.com/books/content?id=7kMMzgEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
@@ -46,6 +49,9 @@
             "type": "ISBN_13",
             "identifier": "9781521748831"
           }
+        ],
+        "categories": [
+          "Murder"
         ],
         "language": "en"
       }

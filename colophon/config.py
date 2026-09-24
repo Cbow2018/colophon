@@ -154,10 +154,13 @@ class Config:
     singleton_score: float = DEFAULT_SINGLETON_SCORE
     medium_score: float = DEFAULT_MEDIUM_SCORE
     # Whether to put a book to the LLM whenever the rules could not decide it,
-    # rather than only when it landed in the medium band. It widens which
-    # uncertain books reach the model; it does not disable early exit, and it
-    # does not make a book the rules already graded strong spend a call.
-    llm_full_scan: bool = False
+    # rather than only when it landed in the medium band. On, a low or none band
+    # book is asked about too, which is the reach the walk had before the bands
+    # existed - so this is the default, and turning it off is the deliberate
+    # narrowing rather than the other way round. It widens which uncertain books
+    # reach the model; it does not disable early exit, and it does not make a
+    # book the rules already graded strong spend a call.
+    llm_full_scan: bool = True
 
 
 def load_config(env=None):
@@ -210,6 +213,16 @@ def load_config(env=None):
     )
     for name in ("strong_score", "singleton_score", "medium_score"):
         values[name] = _to_threshold(_setting(env, values, name, (int, float)), name)
+    if values["singleton_score"] < values["strong_score"]:
+        # Each of the two is a setting on its own, so only the pair can catch an
+        # inverted configuration - and an inverted one is not a preference: it
+        # makes a pool of one, which nothing corroborates, easier to write from
+        # than a pool of two.
+        raise ConfigError(
+            f"singleton_score ({values['singleton_score']}) is below strong_score "
+            f"({values['strong_score']}); a pool of one would then be easier to "
+            "write than a corroborated one"
+        )
     values["llm_full_scan"] = _to_bool(
         _setting(env, values, "llm_full_scan", bool), "llm_full_scan"
     )

@@ -11,11 +11,14 @@ answers 200 with the book carrying the *correct* number, and asked about
 the ones that really carry the ISBN asked about. Without that, Colophon would
 write another edition's ISBN into the file and report certainty while doing it.
 
-Second, Google returns no series data for novels at all. `seriesInfo` is a
-comics-and-collected-editions structure and is absent from every novel measured;
-where the word "series" appears it is prose inside `description`. Nothing here
-invents a series, and a book matched from Google Books has its title and authors
-corrected and no series written.
+Second, Google returns no series data for novels at all. `seriesInfo` is a real
+`volumeInfo` field and is present in the schema and the generated client
+libraries, but it is a comics-and-collected-editions structure: it appeared in
+a collected edition of about a hundred volumes measured and in no novel, and
+its `seriesBookType` is `COLLECTED_EDITION` rather than a series of works.
+Where the word "series" appears for a novel it is prose inside `description`.
+Nothing here invents a series, and a book matched from Google Books has its
+title and authors corrected and no series written.
 
 The key travels as the `key` query parameter, because Google has no bearer
 header. That makes the whole URL a secret, so no URL is ever logged or included

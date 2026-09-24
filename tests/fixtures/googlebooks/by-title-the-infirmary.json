@@ -1,12 +1,8 @@
 {
-  "kind": "books#volumes",
   "totalItems": 1,
   "items": [
     {
-      "kind": "books#volume",
       "id": "KyUNxQEACAAJ",
-      "etag": "8Hvdb8+qU9g",
-      "selfLink": "https://www.googleapis.com/books/v1/volumes/KyUNxQEACAAJ",
       "volumeInfo": {
         "title": "The Infirmary",
         "authors": [
@@ -24,54 +20,14 @@
             "identifier": "9781792780844"
           }
         ],
-        "readingModes": {
-          "text": false,
-          "image": false
-        },
-        "pageCount": 289,
-        "printType": "BOOK",
         "categories": [
           "Murder"
         ],
-        "maturityRating": "NOT_MATURE",
-        "allowAnonLogging": false,
-        "contentVersion": "preview-1.0.0",
-        "panelizationSummary": {
-          "containsEpubBubbles": false,
-          "containsImageBubbles": false
-        },
         "imageLinks": {
           "smallThumbnail": "http://books.google.com/books/content?id=KyUNxQEACAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
           "thumbnail": "http://books.google.com/books/content?id=KyUNxQEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
         },
-        "language": "en",
-        "previewLink": "http://books.google.co.uk/books?id=KyUNxQEACAAJ&dq=intitle:%22The+Infirmary%22+inauthor:%22L.+J.+Ross%22&hl=&cd=1&source=gbs_api",
-        "infoLink": "http://books.google.co.uk/books?id=KyUNxQEACAAJ&dq=intitle:%22The+Infirmary%22+inauthor:%22L.+J.+Ross%22&hl=&source=gbs_api",
-        "canonicalVolumeLink": "https://books.google.com/books/about/The_Infirmary.html?hl=&id=KyUNxQEACAAJ"
-      },
-      "saleInfo": {
-        "country": "GB",
-        "saleability": "NOT_FOR_SALE",
-        "isEbook": false
-      },
-      "accessInfo": {
-        "country": "GB",
-        "viewability": "NO_PAGES",
-        "embeddable": false,
-        "publicDomain": false,
-        "textToSpeechPermission": "ALLOWED",
-        "epub": {
-          "isAvailable": false
-        },
-        "pdf": {
-          "isAvailable": false
-        },
-        "webReaderLink": "http://play.google.com/books/reader?id=KyUNxQEACAAJ&hl=&source=gbs_api",
-        "accessViewStatus": "NONE",
-        "quoteSharingAllowed": false
-      },
-      "searchInfo": {
-        "textSnippet": "He&#39;s lived a charmed life and has an unbroken track record to match. But, as The Hacker&#39;s death toll rises, Ryan realises this is one adversary he&#39;ll never bring to justice on his own."
+        "language": "en"
       }
     }
   ]
