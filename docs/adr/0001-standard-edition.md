@@ -7,11 +7,14 @@ status: accepted
 A title search returns Editions, not Works, so a popular title produced several
 Editions that scored the same and gave a medium band, which leaves the book
 `colophon:unverified` on an install with no LLM. We chose to keep one Standard
-Edition per Work before ranking. Two candidates are grouped as one Work when
-their title heads match, their authors are the same letters after name
-normalisation, and their Series Placements do not conflict. The Standard Edition
-is the one with the earliest date, then the source highest in the user's source
-list, then the most complete payload, and last the payload compared field by
+Edition per Work before ranking: the rule is `matching.standard_editions`. Two
+candidates are grouped as one Work when their title heads are the same head, as
+the scorer normalises it, their authors are the same letters after the scorer's
+name normalisation, and their Series Placements do not conflict. The Standard
+Edition is the one with the earliest date - dates compare as ISO prefixes, so
+`2019` is earlier than `2019-02`, and a candidate with no date comes after every
+dated one - then the source highest in the user's source list, then the one
+carrying more of the ten payload fields, and last the payload compared field by
 field. We chose this because it gives the same answer whatever order a source
 lists its reply in, and it only needs fields the sources already send: a Google
 candidate states no Series Placement, which the key takes as unstated rather than
@@ -73,3 +76,9 @@ scoped against this key.
 - Two Works whose titles, authors and placements all agree are one Work here, as
   they already were to the scorer. CBO-65 is scoped against what is left of the
   key.
+- `dedupe` runs after this rule and identifies a record by ISBN-13, then by
+  title, first author and year, never by Series Placement. Two Works this key has
+  just separated are therefore re-merged whenever those agree and neither carries
+  an ISBN-13, and the one that arrived first stands, so for that pair the answer
+  follows arrival order after all. Nothing in the corpus reaches it: every
+  recorded pair carries an ISBN-13. That limit is CBO-65's.
