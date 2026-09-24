@@ -94,7 +94,8 @@ PAYLOAD = (
 )
 
 # What an undated Edition sorts as: after every date there is, because the rule
-# puts an undated candidate last.
+# puts an undated candidate last. An empty string will not do - it is a string,
+# so it sorts before every date rather than after them.
 _UNDATED = "\uffff"
 
 # `SequenceMatcher` is quadratic in input length, so every comparison caps its
@@ -501,7 +502,10 @@ def dedupe(candidates):
     A run of candidates is grouped by what identifies the record: its ISBN-13
     when it has one, and otherwise its normalised title, its first author and
     its year. The first of a group is the one kept, which is input order and
-    therefore the source order the user configured.
+    therefore the source order the user configured. Within one source's reply the
+    order that decides is `standard_editions`', which ranks the Work's Editions
+    rather than trusting the order they arrived in; this only ever chooses
+    between two sources' records of one record.
 
     This is deliberately *not* `record.py`'s `book_key`, even though both are
     "title plus author": that one is a durable key for a library and this one is
@@ -576,11 +580,11 @@ def standard_editions(candidates):
         else:
             marker = key
             if key in chosen:
-                # Which of the two is the Standard Edition, asked of a pair that
-                # is handed over in the order it arrived, so neither can be the
-                # one that happened to come first. Two candidates that agree on
-                # the whole key write the same thing, and it is the first of them
-                # that stands - the same one whichever way round they arrive.
+                # Which of the two is the Standard Edition, asked of the pair in
+                # the order it arrived. The key answers for any two candidates,
+                # so neither can be the one that happened to come first; two that
+                # agree on the whole key write the same thing, and the first of
+                # them stands either way round.
                 if _standard_edition_key(
                     candidate, rank_of_source
                 ) < _standard_edition_key(chosen[key], rank_of_source):
@@ -673,23 +677,24 @@ def _letters(author):
 def _standard_edition_key(candidate, rank_of_source):
     """How good an Edition is at standing for its Work, smallest best.
 
-    The payload is read four ways: bigger first, then the shape of what is
-    missing, then the values compared with the first field as the least
-    significant. The two rules pull in opposite directions on their own, and each
-    needs the other to be a real order. A field's absence is an empty string,
-    which sorts *before* a value, so Berwick's Edition with no ISBN would beat the
-    one that has an ISBN on a plain comparison; and a plain count of fields says
-    nothing about two candidates carrying the same number of them. Together they
-    answer, for any two candidates, which one to keep - which is what the last
-    resort has to be able to do, because the one thing it may never do is fall
-    back on the order they arrived in.
+    The payload is read twice: how many fields it carries, then the fields
+    themselves. Counting first is what makes the answer depend on what a
+    candidate *has* rather than on how a string compares - an absent field is an
+    empty string, which sorts before any value, so Berwick's Edition with no ISBN
+    would otherwise beat the one that has an ISBN.
+
+    Comparing the values with the first field least significant is what makes the
+    key a real order rather than a partial one. Two candidates can agree on the
+    count and disagree about which fields they fill, and a comparison that cannot
+    answer for such a pair falls back on the order they arrived in - which is the
+    one thing this rule may never do.
     """
+    payload = _payload(candidate)
     return (
         str(candidate.date or _UNDATED),
         rank_of_source[candidate.source],
-        -sum(1 for value in _payload(candidate) if value),
-        tuple(1 if value else 0 for value in _payload(candidate)),
-        tuple(reversed(_payload(candidate))),
+        -sum(1 for value in payload if value),
+        tuple(reversed(payload)),
     )
 
 

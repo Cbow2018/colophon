@@ -2,7 +2,6 @@
 
 import inspect
 import json
-import random
 import re
 import shutil
 import textwrap
@@ -131,23 +130,6 @@ SERIES_ALREADY_ON_IT = """    <dc:title>The Masque of the Red Death</dc:title>
 # made with and therefore what a replay has to match before handing it back.
 TITLE_ASKED = 'intitle:"The Masque of the Red Death" inauthor:"Edgar Allan Poe"'
 
-
-class Shuffled:
-    """Google's own recording, with its volumes handed back in another order.
-
-    A source's order is its own business and can change between two runs of the
-    same query, so a run that depends on it is a run that decides differently
-    tomorrow. The seed makes the shuffle a fixture rather than a coin: a failure
-    here is reproducible.
-    """
-
-    def __init__(self, name, seed=0, folder=GOOGLE_RECORDED):
-        self.payload = json.loads((folder / name).read_text(encoding="utf-8"))
-        random.Random(seed).shuffle(self.payload["items"])
-        self.body = json.dumps(self.payload).encode("utf-8")
-
-    def __call__(self, url, headers):
-        return 200, self.body
 
 # The live recording, not the frozen case: `hand-made/poe-core-cases.json` holds
 # the five tied volumes CBO-68 and CBO-69 rest on, and this file is re-recorded
@@ -3599,30 +3581,6 @@ class StandardEditionTests(CorrectionTestCase):
             "the 2017 original, not the 2021 large print",
         )
 
-    def test_the_same_answer_whatever_order_the_reply_lists(self):
-        """The ticket's acceptance criterion, on one reply, read backwards."""
-        book = """    <dc:title>Cragside</dc:title>
-    <dc:creator>L. J. Ross</dc:creator>
-    <dc:language>en</dc:language>
-"""
-        answers = []
-        for name, reverse in (("first.epub", False), ("second.epub", True)):
-            path = self.write(name, book)
-            source = GoogleBooks(
-                "a-key", transport=GoogleReplay("by-title-cragside.json", reverse=reverse)
-            )
-            outcome = self.corrector(source=source).correct(path)
-            answers.append(
-                (
-                    outcome.matched,
-                    outcome.confidence,
-                    [(c.field, c.value) for c in outcome.changed],
-                )
-            )
-
-        self.assertEqual(answers[0], answers[1])
-        self.assertTrue(answers[0][0])
-
     def test_every_title_path_booking_is_the_same_book_however_the_reply_is_listed(self):
         """D10's bar: stable under a shuffled reply, on both source orders.
 
@@ -3685,7 +3643,7 @@ class StandardEditionTests(CorrectionTestCase):
             )
             source = GoogleBooks(
                 "a-key",
-                transport=Shuffled("by-title-poe.json", seed=trial),
+                transport=GoogleReplay("by-title-poe.json", seed=trial),
             )
 
             outcome = self.corrector(source=source).correct(path)

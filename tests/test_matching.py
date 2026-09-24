@@ -1460,9 +1460,8 @@ class StandardEditionsTests(unittest.TestCase):
     """CBO-68: a title search returns Editions, so a pool is grouped by Work.
 
     The grouping key is the title head the scorer normalises to, plus every
-    author's letters (D11, D17). It deliberately does not read Series Placement,
-    which is what the glossary says tells two Works apart; CBO-65 is scoped
-    against that gap (D22).
+    author's letters (D11, D17), plus the Series Placement rule the session 2
+    review added to D22. What it deliberately does not read is the year.
     """
 
     def test_editions_of_one_work_are_grouped(self):
@@ -1479,11 +1478,17 @@ class StandardEditionsTests(unittest.TestCase):
         self.assertEqual(standard_editions([cragside, belsay]), (cragside, belsay))
 
     def test_a_different_author_is_a_different_work(self):
-        """The Infirmary is two Hardcover Works with one title between them."""
+        """The Infirmary is two Hardcover Works with one title between them.
+
+        `L. K. Ross` is D11's false accept: initials and a surname in common are
+        not enough, and the two people's books must not be gathered.
+        """
         ross = candidate(title="The Infirmary", authors=LJ)
         reagon = candidate(title="The Infirmary", authors=("Carly Reagon",))
+        same_initials = candidate(title="The Infirmary", authors=("L. K. Ross",))
 
         self.assertEqual(standard_editions([ross, reagon]), (ross, reagon))
+        self.assertEqual(standard_editions([ross, same_initials]), (ross, same_initials))
 
     def test_a_name_written_the_other_way_round_is_the_same_author(self):
         filed = candidate(title=BARE, authors=("Ross, L. J.",))
@@ -1493,13 +1498,6 @@ class StandardEditionsTests(unittest.TestCase):
 
         self.assertEqual(len(kept), 1, "one author, so one Work")
         self.assertIn(kept[0], (filed, written))
-
-    def test_another_initial_is_another_author(self):
-        """D11's false accept: `L. K. Ross` is a different person."""
-        ross = candidate(title=BARE, authors=LJ)
-        other = candidate(title=BARE, authors=("L. K. Ross",))
-
-        self.assertEqual(standard_editions([ross, other]), (ross, other))
 
     def test_a_head_with_no_author_on_one_side_is_a_different_work(self):
         """A head-only key merges The Infirmary's two authors into one Work."""
