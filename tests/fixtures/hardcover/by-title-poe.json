@@ -1,0 +1,1652 @@
+{
+  "data": {
+    "editions": [
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9780141930756",
+        "isbn_10": "0141930756",
+        "publisher": {
+          "name": "Penguin UK"
+        },
+        "release_date": "2008-10-02",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/59688790/a744a0879b8369a82251afe753ea65b87339679b.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death - an Edgar Allan Poe Short Story",
+        "isbn_13": null,
+        "isbn_10": null,
+        "publisher": {
+          "name": "Strelbytskyy Multimedia Publishing"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/12778549/11860130-L.jpg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque Of The Red Death",
+        "isbn_13": null,
+        "isbn_10": null,
+        "publisher": {
+          "name": "Panther"
+        },
+        "release_date": "1964-10-01",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/47668464/be1f28b564d1412ae6b6e75122fc2fd8277ecc90.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9780890612712",
+        "isbn_10": "0890612714",
+        "publisher": {
+          "name": "NTC/Contemporary Publishing Company"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/23303335/8ffef2a60f1703ae6c1e047c4fd2051c1276ff18.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque Of The Red Death",
+        "isbn_13": "9780886824778",
+        "isbn_10": "088682477X",
+        "publisher": {
+          "name": "Creative Education"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/27838439/da5925cdf7b748610e90aefd04f164049e288ebb.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of The Red Death",
+        "isbn_13": "9788865742716",
+        "isbn_10": "8865742712",
+        "publisher": {
+          "name": "Area51 Publishing"
+        },
+        "release_date": "2013-08-09",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/59688787/434c09fd04e0a8c09bc93e355fcfe0782c60846d.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque Of The Red Death",
+        "isbn_13": "9781443423359",
+        "isbn_10": "1443423351",
+        "publisher": {
+          "name": "HarperCollins Publishers"
+        },
+        "release_date": "2013-01-01",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/4176255/833909a51c9fc3d9193e63d7d1e95e551401d402.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9783986472009",
+        "isbn_10": "3986472002",
+        "publisher": {
+          "name": "Phoemixx Classics Ebooks"
+        },
+        "release_date": "2021-09-02",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/4176257/2b7c03c49025e5ae7364aad26edf48175e7b5ee9.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death - an Edgar Allan Poe Short Story",
+        "isbn_13": "9781594567391",
+        "isbn_10": "1594567395",
+        "publisher": {
+          "name": "BookSurge Classics"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/47668459/98975d31912fc5b45c235423b29f3f28e4d91769.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The masque of the red death",
+        "isbn_13": null,
+        "isbn_10": null,
+        "publisher": {
+          "name": "The Byway studio press"
+        },
+        "release_date": "1923-01-01",
+        "image": null,
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9780141038827",
+        "isbn_10": "0141038829",
+        "publisher": {
+          "name": "Penguin UK"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/31593580/522a1dcf16f4acdbe802826cd2808eb221bcb32a.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9780141193953",
+        "isbn_10": "0141193956",
+        "publisher": {
+          "name": "Penguin Books"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/32514792/3f19f90bbcf655351f22e6a520da71a59899a890.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The masque of the red death",
+        "isbn_13": null,
+        "isbn_10": null,
+        "publisher": {
+          "name": "Halcyon Press"
+        },
+        "release_date": "1932-01-01",
+        "image": null,
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9781497387959",
+        "isbn_10": "1497387957",
+        "publisher": {
+          "name": "CreateSpace"
+        },
+        "release_date": "1842-05-01",
+        "image": {
+          "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Masque of the Red Death",
+        "isbn_13": "9780241573754",
+        "isbn_10": "0241573750",
+        "publisher": {
+          "name": "Penguin Classics"
+        },
+        "release_date": "2023-10-10",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/4066198/6f9f70eb0e366016709bd6742a8d9adad58fba17.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1073462,
+          "title": "The Masque of the Red Death",
+          "description": "One of Edgar Allan Poe's most well-known classic stories, The Masque of the Red Death is well worth reading.",
+          "release_date": "1842-05-01",
+          "image": {
+            "url": "https://assets.hardcover.app/edition/31097531/803afc95779f81491eaa24b09c08913ce0ed67ba.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [
+              {
+                "tag": "mediabox-old-format",
+                "count": 1,
+                "tagSlug": "mediabox-old-format",
+                "category": "Tag",
+                "categorySlug": "tag",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Mood": [
+              {
+                "tag": "dark",
+                "count": 4,
+                "tagSlug": "dark",
+                "category": "Mood",
+                "categorySlug": "mood",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Genre": [
+              {
+                "tag": "Classics",
+                "count": 1,
+                "tagSlug": "classics",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Fantasy",
+                "count": 1,
+                "tagSlug": "fantasy",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Young Adult",
+                "count": 1,
+                "tagSlug": "young-adult",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Literature",
+                "count": 1,
+                "tagSlug": "literature",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Mystery",
+                "count": 1,
+                "tagSlug": "mystery",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              },
+              {
+                "tag": "Murder",
+                "count": 1,
+                "tagSlug": "murder",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Group": [],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 234494,
+                "name": "Edgar Allan Poe"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      }
+    ]
+  }
+}
