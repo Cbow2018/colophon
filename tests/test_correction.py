@@ -2,6 +2,7 @@
 
 import inspect
 import json
+import random
 import re
 import shutil
 import textwrap
@@ -129,6 +130,24 @@ SERIES_ALREADY_ON_IT = """    <dc:title>The Masque of the Red Death</dc:title>
 # The `q` Google is asked for the Gutenberg book, which is what its recording was
 # made with and therefore what a replay has to match before handing it back.
 TITLE_ASKED = 'intitle:"The Masque of the Red Death" inauthor:"Edgar Allan Poe"'
+
+
+class Shuffled:
+    """Google's own recording, with its volumes handed back in another order.
+
+    A source's order is its own business and can change between two runs of the
+    same query, so a run that depends on it is a run that decides differently
+    tomorrow. The seed makes the shuffle a fixture rather than a coin: a failure
+    here is reproducible.
+    """
+
+    def __init__(self, name, seed=0, folder=GOOGLE_RECORDED):
+        self.payload = json.loads((folder / name).read_text(encoding="utf-8"))
+        random.Random(seed).shuffle(self.payload["items"])
+        self.body = json.dumps(self.payload).encode("utf-8")
+
+    def __call__(self, url, headers):
+        return 200, self.body
 
 # The live recording, not the frozen case: `hand-made/poe-core-cases.json` holds
 # the five tied volumes CBO-68 and CBO-69 rest on, and this file is re-recorded
@@ -3641,6 +3660,51 @@ class StandardEditionTests(CorrectionTestCase):
                         answers[1],
                         "the same book, whichever order the reply came in",
                     )
+
+    def test_a_long_tie_of_editions_is_answered_the_same_way_every_run(self):
+        """Poe, the longest tie there is: ten Editions at one score and no gap.
+
+        The Gutenberg book is the only file in the corpus with a `dc:date`, and
+        the reply is the real recording - twenty volumes, of which ten are one
+        Work at 0.9231 and one is a different author's spelling at 0.8629. The
+        book still grades medium, because `Edgar Allen Poe` is a different
+        author to the letter-strict key and D11 accepted that; what this asserts
+        is the thing the ticket asked for, that it grades medium the *same way*
+        every run. Replies are shuffled with a seeded generator, so a run that
+        depends on the order Google listed its volumes in comes out different.
+        """
+        answers = []
+        for trial in range(6):
+            path = self.write(
+                f"poe-{trial}.epub",
+                """    <dc:title>The Masque of the Red Death</dc:title>
+    <dc:creator>Edgar Allan Poe</dc:creator>
+    <dc:language>en</dc:language>
+    <dc:date>2010-06-06</dc:date>
+""",
+            )
+            source = GoogleBooks(
+                "a-key",
+                transport=Shuffled("by-title-poe.json", seed=trial),
+            )
+
+            outcome = self.corrector(source=source).correct(path)
+
+            answers.append(
+                (
+                    outcome.matched,
+                    outcome.unverified,
+                    outcome.confidence,
+                    [(change.field, change.value) for change in outcome.changed],
+                    sorted(subjects(path)),
+                )
+            )
+
+        self.assertTrue(answers[0][1], "medium is the mark, not a write")
+        self.assertFalse(answers[0][0])
+        self.assertEqual(answers[0][2], 0.9231, "the ten-Edition tie's own score")
+        for answer in answers[1:]:
+            self.assertEqual(answer, answers[0])
 
     def answer_for(self, name, title, sources, reply, reverse):
         """One title-path run over real clients, and what it decided.
