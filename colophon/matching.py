@@ -186,7 +186,7 @@ class Candidate:
 
 
 @dataclass(frozen=True)
-class Match:
+class Scored:
     """One candidate measured against the file, and what came of the measuring.
 
     `score` is `1 - Σ(weight × penalty) / Σweights`, over the fields both sides
@@ -437,7 +437,7 @@ def score_candidate(file_book, candidate):
     if not author_agrees:
         score = min(score, NO_AGREEMENT_CEILING)
 
-    return Match(
+    return Scored(
         candidate=candidate,
         score=round(min(score, 1.0), 4),
         denominator=round(denominator, 2),
