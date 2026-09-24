@@ -2895,7 +2895,10 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         ]
 
         answered = []
-        for name, candidates in (("first.epub", records), ("second.epub", records[::-1])):
+        for name, candidates in (
+            ("first.epub", records),
+            ("second.epub", records[::-1]),
+        ):
             path = write_epub(self.folder / name, CRAGSIDE, version="2.0")
             source = FakeSource(found=None, candidates=candidates)
 
@@ -3581,7 +3584,9 @@ class StandardEditionTests(CorrectionTestCase):
             "the 2017 original, not the 2021 large print",
         )
 
-    def test_every_title_path_booking_is_the_same_book_however_the_reply_is_listed(self):
+    def test_every_title_path_booking_is_the_same_book_however_the_reply_is_listed(
+        self,
+    ):
         """D10's bar: stable under a shuffled reply, on both source orders.
 
         The four replies a title path can be answered with, each in the order it
@@ -3599,7 +3604,10 @@ class StandardEditionTests(CorrectionTestCase):
             ("The Infirmary", "and-this.epub", "by-title-the-infirmary.json"),
         )
         for title, name, fixture in cases:
-            for sources in (("hardcover", "google_books"), ("google_books", "hardcover")):
+            for sources in (
+                ("hardcover", "google_books"),
+                ("google_books", "hardcover"),
+            ):
                 with self.subTest(title=title, sources=sources):
                     answers = []
                     for round_number, reverse in enumerate((False, True)):
@@ -3682,15 +3690,15 @@ class StandardEditionTests(CorrectionTestCase):
 """,
         )
         clients = {
-            "hardcover": Hardcover(
-                "a-token", transport=Replay(reply, reverse=reverse)
-            ),
+            "hardcover": Hardcover("a-token", transport=Replay(reply, reverse=reverse)),
             "google_books": GoogleBooks(
                 "a-key", transport=GoogleReplay(reply, reverse=reverse)
             ),
         }
 
-        outcome = self.corrector(sources=[clients[name] for name in sources]).correct(path)
+        outcome = self.corrector(sources=[clients[name] for name in sources]).correct(
+            path
+        )
 
         return (
             outcome.matched,

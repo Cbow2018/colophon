@@ -205,6 +205,7 @@ class CaptureKeyTests(unittest.TestCase):
                 "by-title-berwick.json",
                 "by-title-cragside-other-fields.json",
                 "by-title-cragside.json",
+                "by-title-poe.json",
                 "by-title-the-infirmary.json",
             },
         )

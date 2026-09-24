@@ -86,6 +86,7 @@ def candidate(title=None, authors=LJ, series_number=None, date=None, **rest):
         title=title, authors=authors, series_number=series_number, date=date, **rest
     )
 
+
 CRAGSIDE_RECORD = candidate(title="Cragside", series_number="6", date="2017-07-07")
 
 
@@ -1488,7 +1489,9 @@ class StandardEditionsTests(unittest.TestCase):
         same_initials = candidate(title="The Infirmary", authors=("L. K. Ross",))
 
         self.assertEqual(standard_editions([ross, reagon]), (ross, reagon))
-        self.assertEqual(standard_editions([ross, same_initials]), (ross, same_initials))
+        self.assertEqual(
+            standard_editions([ross, same_initials]), (ross, same_initials)
+        )
 
     def test_a_name_written_the_other_way_round_is_the_same_author(self):
         filed = candidate(title=BARE, authors=("Ross, L. J.",))
@@ -1646,7 +1649,9 @@ class StandardEditionsTests(unittest.TestCase):
         belsay = candidate(title="Belsay")
         later = candidate(title=BARE, date="2019-01-01")
 
-        self.assertEqual(standard_editions([cragside, belsay, later]), (cragside, belsay))
+        self.assertEqual(
+            standard_editions([cragside, belsay, later]), (cragside, belsay)
+        )
 
     def test_an_empty_pool_is_an_empty_pool(self):
         self.assertEqual(standard_editions([]), ())
@@ -1758,7 +1763,9 @@ class StandardEditionChoiceTests(unittest.TestCase):
             title=BARE, authors=LJ, date="2026-02-26", source="hardcover", cover="b"
         )
 
-        self.assertEqual(standard_editions([one, other]), standard_editions([other, one]))
+        self.assertEqual(
+            standard_editions([one, other]), standard_editions([other, one])
+        )
 
     def test_the_same_two_editions_come_out_the_same_way_every_time(self):
         """The ticket's own criterion: one answer, whatever order they arrive in."""
@@ -1782,7 +1789,11 @@ class StandardEditionChoiceTests(unittest.TestCase):
 
         kept = standard_editions(pool)
         survivor = kept[0]
-        for shuffled in ([pool[0], pool[1], pool[2]], [pool[2], pool[1], pool[0]], [pool[1], pool[2], pool[0]]):
+        for shuffled in (
+            [pool[0], pool[1], pool[2]],
+            [pool[2], pool[1], pool[0]],
+            [pool[1], pool[2], pool[0]],
+        ):
             with self.subTest(order=[c.date for c in shuffled]):
                 self.assertEqual(standard_editions(shuffled), (survivor,))
         self.assertEqual(survivor.isbn, "9781792780844", "the earliest of the three")

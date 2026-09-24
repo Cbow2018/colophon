@@ -51,12 +51,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from colophon import hardcover as hardcover_module  # noqa: E402
-from colophon.backups import Backups  # noqa: E402
-from colophon.correction import Corrector, Walk  # noqa: E402
-from colophon.googlebooks import GoogleBooks  # noqa: E402
-from colophon.hardcover import Hardcover  # noqa: E402
-from colophon.matching import (  # noqa: E402
+from colophon import hardcover as hardcover_module
+from colophon.backups import Backups
+from colophon.correction import Corrector, Walk
+from colophon.googlebooks import GoogleBooks
+from colophon.hardcover import Hardcover
+from colophon.matching import (
     Ranked,
     _name,
     _parts_of,
@@ -65,18 +65,30 @@ from colophon.matching import (  # noqa: E402
     dedupe,
     rank,
 )
-from colophon.sources import SourceError  # noqa: E402
-from tests.recordings import RECORDINGS, fixture_path, sent_request  # noqa: E402
-from tests.samplebooks import write_epub  # noqa: E402
+from colophon.sources import SourceError
+from tests.recordings import RECORDINGS, fixture_path, sent_request
+from tests.samplebooks import write_epub
 
-GUTENBERG = ROOT / "tests" / "fixtures" / "books" / "the-masque-of-the-red-death-epub3.epub"
-POE_HAND_MADE = ROOT / "tests" / "fixtures" / "googlebooks" / "hand-made" / "poe-core-cases.json"
+GUTENBERG = (
+    ROOT / "tests" / "fixtures" / "books" / "the-masque-of-the-red-death-epub3.epub"
+)
+POE_HAND_MADE = (
+    ROOT / "tests" / "fixtures" / "googlebooks" / "hand-made" / "poe-core-cases.json"
+)
 
 # The payload fields D3's tiebreak counts (session 1 §3.2): FIELD_DEFAULTS' nine
 # plus the cover.
 PAYLOAD = (
-    "title", "authors", "series", "series_number", "description",
-    "publisher", "date", "isbn", "language", "cover",
+    "title",
+    "authors",
+    "series",
+    "series_number",
+    "description",
+    "publisher",
+    "date",
+    "isbn",
+    "language",
+    "cover",
 )
 
 # ---------------------------------------------------------------- the transports
@@ -119,7 +131,11 @@ class ByRequest:
                     if listed:
                         self.shuffle.shuffle(listed)
                 return json.dumps(payload).encode("utf-8")
-        shown = request.get("variables", request) if self.source == "hardcover" else request.get("q")
+        shown = (
+            request.get("variables", request)
+            if self.source == "hardcover"
+            else request.get("q")
+        )
         raise SourceError(f"NO RECORDING for {self.source} request {shown}")
 
     def hardcover(self, url, headers, body):
@@ -299,12 +315,15 @@ class SimulatedCorrector(Corrector):
             if band_of(ranked, self.bands) == "strong":
                 exited = index < len(self.sources) - 1
                 break
-        walk = Walk(asked=tuple(asked), errored=tuple(errored), exited=exited, ranked=ranked)
+        walk = Walk(
+            asked=tuple(asked), errored=tuple(errored), exited=exited, ranked=ranked
+        )
         self.last_walk = walk
         return walk
 
 
 # ---------------------------------------------------------------- the population
+
 
 # One file per distinct declared title book. Ross files carry the declared title
 # bare, so the request the client builds is exactly the declared one (checked).
@@ -322,7 +341,7 @@ def population(folder):
     for row in RECORDINGS:
         if row["lookup"] != "title":
             continue
-        title, author, language = row["book"]
+        title, author, _ = row["book"]
         if (title, author) in seen:
             continue
         seen.add((title, author))
@@ -331,7 +350,9 @@ def population(folder):
             continue
         if author is None:
             label = f"{title} (no author)"
-            meta = f"    <dc:title>{title}</dc:title>\n    <dc:language>en</dc:language>\n"
+            meta = (
+                f"    <dc:title>{title}</dc:title>\n    <dc:language>en</dc:language>\n"
+            )
         else:
             label = f"{title} ({author})"
             meta = ross_file(title, author)
@@ -342,7 +363,10 @@ def population(folder):
     # exactly; only the file differs. 2017 is the original, 2021 the
     # Ulverscroft large print, 2019 neither.
     for year in ("2017", "2021", "2019"):
-        meta = ross_file("Cragside", "L. J. Ross") + f"    <dc:date>{year}-01-01</dc:date>\n"
+        meta = (
+            ross_file("Cragside", "L. J. Ross")
+            + f"    <dc:date>{year}-01-01</dc:date>\n"
+        )
         path = write_epub(folder / f"{len(books):02d}.epub", meta, version="2.0")
         books.append((f"Cragside (L. J. Ross) dc:date={year} [year sensitivity]", path))
     return books
@@ -393,7 +417,9 @@ def _labels():
             for ident in item["volumeInfo"].get("industryIdentifiers") or []:
                 labels[("google_books", ident["identifier"])] = item["id"]
             info = item["volumeInfo"]
-            labels[("google_books", info.get("title"), info.get("publishedDate"))] = item["id"]
+            labels[("google_books", info.get("title"), info.get("publishedDate"))] = (
+                item["id"]
+            )
     for item in json.loads(POE_HAND_MADE.read_text(encoding="utf-8"))["items"]:
         for ident in item["volumeInfo"].get("industryIdentifiers") or []:
             labels[("google_books", ident["identifier"])] = item["id"]
@@ -405,7 +431,9 @@ LABELS = _labels()
 
 def name(candidate):
     tag = LABELS.get((candidate.source, candidate.isbn)) or (
-        LABELS.get((candidate.source, candidate.title, candidate.date)) if candidate.isbn is None else None
+        LABELS.get((candidate.source, candidate.title, candidate.date))
+        if candidate.isbn is None
+        else None
     )
     who = f"{candidate.source}:{tag or candidate.isbn or '-'}"
     return f"{who} {candidate.date or 'undated'} {candidate.title!r}/{'; '.join(candidate.authors)}"
@@ -423,9 +451,15 @@ def describe(walk):
 
 OPTIONS = {
     "baseline (= option 3, keep unverified)": (None, None),
-    "option 1 (standard edition: earliest, then completeness)": (option1, "every_edition"),
+    "option 1 (standard edition: earliest, then completeness)": (
+        option1,
+        "every_edition",
+    ),
     "option 2 (work-level candidate)": (option2, "every_edition_with_work"),
-    "option 1b (sensitivity: the file's year first, then option 1)": (option1b, "every_edition"),
+    "option 1b (sensitivity: the file's year first, then option 1)": (
+        option1b,
+        "every_edition",
+    ),
 }
 
 
@@ -433,14 +467,24 @@ def main():
     # The walk logs every held book; the probe prints its own account instead.
     logging.disable(logging.CRITICAL)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--shuffle", type=int, default=100, help="shuffled runs per book")
+    parser.add_argument(
+        "--shuffle", type=int, default=100, help="shuffled runs per book"
+    )
     args = parser.parse_args()
 
     # The byte-identical pairs the transport lets one row stand for.
     for src, a, b in (
         ("hardcover", "by-title-cragside.json", "by-title-cragside-other-fields.json"),
-        ("hardcover", "by-title-the-infirmary.json", "by-title-the-infirmary-other-fields.json"),
-        ("googlebooks", "by-title-cragside.json", "by-title-cragside-other-fields.json"),
+        (
+            "hardcover",
+            "by-title-the-infirmary.json",
+            "by-title-the-infirmary-other-fields.json",
+        ),
+        (
+            "googlebooks",
+            "by-title-cragside.json",
+            "by-title-cragside-other-fields.json",
+        ),
     ):
         same = fixture_path(a, src).read_bytes() == fixture_path(b, src).read_bytes()
         print(f"pair {src}/{a} == {b}: {same}")
@@ -456,9 +500,13 @@ def main():
             c = hardcover_module._candidate(edition)
             by_id.setdefault((edition.get("book") or {}).get("id"), set()).add(i)
             by_key.setdefault(work_key(c), set()).add(i)
-        same = sorted(map(sorted, by_id.values())) == sorted(map(sorted, by_key.values()))
-        print(f"  {row['fixture']}: {len(editions)} editions; book.id groups "
-              f"{ {k: sorted(v) for k, v in by_id.items()} }; key groups agree: {same}")
+        same = sorted(map(sorted, by_id.values())) == sorted(
+            map(sorted, by_key.values())
+        )
+        print(
+            f"  {row['fixture']}: {len(editions)} editions; book.id groups "
+            f"{ {k: sorted(v) for k, v in by_id.items()} }; key groups agree: {same}"
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
@@ -470,7 +518,9 @@ def main():
                 counts = {}
                 for label, path in books:
                     ctx = (
-                        hardcover_hands_up_every_edition(record_work=(patch == "every_edition_with_work"))
+                        hardcover_hands_up_every_edition(
+                            record_work=(patch == "every_edition_with_work")
+                        )
                         if patch
                         else _null()
                     )
@@ -483,20 +533,27 @@ def main():
                         seen = {base}
                         rng = random.Random(68)
                         for _ in range(args.shuffle):
-                            _, w2, _ = run_one(path, names, transform, folder, shuffle=rng)
+                            _, w2, _ = run_one(
+                                path, names, transform, folder, shuffle=rng
+                            )
                             b2, _, r2 = describe(w2)
                             seen.add((b2, _payload(r2)))
                     counts[band] = counts.get(band, 0) + 1
                     verdict = (
-                        "matched" if outcome.matched
-                        else "UNVERIFIED" if outcome.unverified
-                        else ("problem: " + str(outcome.problem)) if outcome.problem
+                        "matched"
+                        if outcome.matched
+                        else "UNVERIFIED"
+                        if outcome.unverified
+                        else ("problem: " + str(outcome.problem))
+                        if outcome.problem
                         else "held/other"
                     )
                     errored = [e for e in (walk.errored if walk else ())]
-                    print(f"  {label}: band={band} -> {verdict}; pool={len(ranked.matches) if ranked else 0}; "
-                          f"asked={list(walk.asked) if walk else []}; exited={walk.exited if walk else None}; "
-                          f"distinct outcomes over {args.shuffle} shuffles={len(seen)}")
+                    print(
+                        f"  {label}: band={band} -> {verdict}; pool={len(ranked.matches) if ranked else 0}; "
+                        f"asked={list(walk.asked) if walk else []}; exited={walk.exited if walk else None}; "
+                        f"distinct outcomes over {args.shuffle} shuffles={len(seen)}"
+                    )
                     for e in errored:
                         print(f"      errored: {e[0]}: {e[1][:120]}")
                     print(f"      replayed: {used}")
@@ -504,35 +561,59 @@ def main():
                         m = ranked.matches
                         print(f"      leader {m[0].score:.4f} {name(m[0].candidate)}")
                         if len(m) > 1:
-                            print(f"      runner-up {m[1].score:.4f} {name(m[1].candidate)}; gap {ranked.gap:.4f}")
+                            print(
+                                f"      runner-up {m[1].score:.4f} {name(m[1].candidate)}; gap {ranked.gap:.4f}"
+                            )
                         if len(tied) > 1:
-                            print(f"      tied at {m[0].score:.4f}: " + " | ".join(name(t.candidate) for t in tied))
+                            print(
+                                f"      tied at {m[0].score:.4f}: "
+                                + " | ".join(name(t.candidate) for t in tied)
+                            )
                         for extra in m[2:]:
-                            print(f"        also {extra.score:.4f} {name(extra.candidate)}")
+                            print(
+                                f"        also {extra.score:.4f} {name(extra.candidate)}"
+                            )
                 print(f"  -> {dict(sorted(counts.items()))}")
 
         # The hand-made Poe tie, replayed for the request the live file answers.
         print("\n######## hand-made/poe-core-cases.json, google only")
         override = {"by-title-poe.json": POE_HAND_MADE}
         for option, (transform, patch) in OPTIONS.items():
-            ctx = hardcover_hands_up_every_edition(patch == "every_edition_with_work") if patch else _null()
+            ctx = (
+                hardcover_hands_up_every_edition(patch == "every_edition_with_work")
+                if patch
+                else _null()
+            )
             with ctx:
-                outcome, walk, used = run_one(GUTENBERG, ("googlebooks",), transform, folder, override=override)
+                outcome, walk, used = run_one(
+                    GUTENBERG, ("googlebooks",), transform, folder, override=override
+                )
                 band, tied, ranked = describe(walk)
                 seen = {(band, _payload(ranked))}
                 rng = random.Random(69)
                 for _ in range(args.shuffle):
-                    _, w2, _ = run_one(GUTENBERG, ("googlebooks",), transform, folder, shuffle=rng, override=override)
+                    _, w2, _ = run_one(
+                        GUTENBERG,
+                        ("googlebooks",),
+                        transform,
+                        folder,
+                        shuffle=rng,
+                        override=override,
+                    )
                     b2, _, r2 = describe(w2)
                     seen.add((b2, _payload(r2)))
-            print(f"  {option}: band={band}; pool={len(ranked.matches)}; distinct over shuffles={len(seen)}; replayed {used}")
+            print(
+                f"  {option}: band={band}; pool={len(ranked.matches)}; distinct over shuffles={len(seen)}; replayed {used}"
+            )
             for m in ranked.matches:
                 print(f"      {m.score:.4f} {name(m.candidate)}")
 
         # CBO-75: the hand-made volumes still carry `subtitle` (they predate the
         # mask). If `_candidate` joined it onto the title, does option 1 group
         # or grade differently?
-        print("\n######## CBO-75: hand-made Poe with the subtitle joined onto the title")
+        print(
+            "\n######## CBO-75: hand-made Poe with the subtitle joined onto the title"
+        )
         from colophon import googlebooks as google_module
 
         shipped = google_module._candidate
@@ -545,7 +626,9 @@ def main():
         google_module._candidate = joined
         try:
             for option, (transform, patch) in OPTIONS.items():
-                outcome, walk, used = run_one(GUTENBERG, ("googlebooks",), transform, folder, override=override)
+                outcome, walk, used = run_one(
+                    GUTENBERG, ("googlebooks",), transform, folder, override=override
+                )
                 band, tied, ranked = describe(walk)
                 print(f"  {option}: band={band}; pool={len(ranked.matches)}")
                 for m in ranked.matches:
