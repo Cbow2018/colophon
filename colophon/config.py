@@ -68,17 +68,9 @@ DEFAULT_MEDIUM_SCORE = 0.80
 # A rule is judged against the file's own value as well as the source's, and
 # `overwrite` writes a value the file does not already carry in another form:
 # a title whose comparison key is the file's own is the same title, and is not
-# written over. Form is what the matcher compares with, so a difference the
-# comparison ignores is a difference no write acts on - which is what keeps a
-# source's capital letter off a title the comparison scored 1.0000. The test is
-# the comparison key rather than the scorer's dead band: the band calls a typo
-# the same title, and a write gated on it would keep the typo.
-#
-# An author is the exception, because an author's identity is the Record's
-# business rather than the comparison's. A spelling the Record settled on is the
-# library's own and always reaches the file, and a name the Record has not
-# decided keeps the source's spelling - so a file that spells `LJ Ross` still
-# takes the source's `L.J. Ross`.
+# written over. An author is the exception - an author's identity is the
+# Record's business rather than the comparison's, so a spelling the Record
+# settled on always reaches the file. `correction._edits` states both in full.
 FIELD_DEFAULTS = (
     ("title", "overwrite"),
     ("authors", "overwrite"),
