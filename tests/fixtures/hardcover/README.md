@@ -46,8 +46,10 @@ these recordings are the ISBN query widened to ask for `authors.id` and
 
 `by-isbn-the-infirmary-authors.json` was the third of these, recorded against the
 Audible Studios on Brilliance ISBN `9781799729945`. **CBO-90 retired it**, along
-with its `RECORDINGS` row: the client no longer offers that Audio Edition as a
-candidate, and its ISBN answers nothing on the ISBN path.
+with its `RECORDINGS` row, because no test read it any more once the genres
+recording moved to the print Edition `9781792780844`. The client itself still
+answers for `9781799729945`: Hardcover labels that Edition `reading_format_id: 4`
+(Ebook), not Audio, so the Audio backstop does not drop it.
 
 Two DCI Ryan books carry the same author id and the same series id, which is what
 makes an id worth recording: it is a stable identity for a person across books,
@@ -95,9 +97,11 @@ record has the same ids the live API gave.
 ## CBO-42: the genres
 
 *The Infirmary*'s row names `9781792780844`, its print Edition. It named the
-Audible Studios on Brilliance ISBN `9781799729945` until **CBO-90**: that Edition
-is an Audio Edition, so `by_isbn` no longer answers with it, and the genres test
-moved to the Edition the client does offer.
+Audible Studios on Brilliance ISBN `9781799729945` until **CBO-90**: that
+recording was retired with the genres row that read it, and the test moved to the
+print Edition the live title reply keeps as the Standard Edition. The Audible
+Edition is not refused - Hardcover labels it `reading_format_id: 4`, not Audio -
+so the move is the test's, not the client's.
 
 CBO-42 (genre mapping) maps a source's genres onto the user's own tag list, so a
 library does not collect `Murder`, `Crime`, `Thriller` and `Mystery` as four tags

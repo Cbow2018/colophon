@@ -52,9 +52,11 @@ NORMAL_PEOPLE_ISBN = "9780571334650"
 MISTBORN_ISBN = "9780765311788"
 THE_HOBBIT_ISBN = "9780007458424"
 # *The Infirmary*'s print Edition. It stops naming the Audible Studios on
-# Brilliance ISBN, `9781799729945`, which the ticket was raised about: that
-# Edition is an Audio Edition and is no longer offered as a candidate at all
-# (CBO-90), so an ISBN-path recording made against it answers nothing.
+# Brilliance ISBN, `9781799729945`: the genres recording made against it moved to
+# this Edition, and the authors one was retired with its row (CBO-90, settled in
+# review). Hardcover does not label that Edition Audio - it says
+# `reading_format_id: 4` - so the client still offers it, and the recordings went
+# because their readers did.
 THE_INFIRMARY_ISBN = "9781792780844"
 BERWICK_ISBN = "9781529978940"
 PYRAMIDS_ISBN = "9780575064843"

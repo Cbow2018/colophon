@@ -639,8 +639,10 @@ class GenreTests(unittest.TestCase):
     """
 
     CRAGSIDE_GENRES = "9781521748831"
-    # The print Edition, not the Audio one: CBO-90 stopped the Audio Edition
-    # `9781799729945` being offered at all, so its ISBN answers no genres.
+    # The print Edition, not the Audible Studios on Brilliance one: CBO-90 moved
+    # this test to the recording made against the print Edition the live title
+    # reply keeps as the Standard Edition. `9781799729945` is not refused - the
+    # source labels it `reading_format_id: 4`, not Audio.
     THE_INFIRMARY_GENRES = "9781792780844"
     PYRAMIDS = "9780575064843"
     THE_TRIAL = "9781529196382"
