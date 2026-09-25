@@ -3740,7 +3740,7 @@ class StandardEditionTests(CorrectionTestCase):
         path = self.book()
         source = Hardcover(
             "a-token",
-            transport=Replay("audio-edition-by-isbn.json", folder=HARDCOVER_HAND_MADE),
+            transport=Replay("audio-edition-only.json", folder=HARDCOVER_HAND_MADE),
         )
 
         outcome = self.corrector(
@@ -3882,6 +3882,43 @@ class StandardEditionTests(CorrectionTestCase):
                     "Audible Studios on Brilliance",
                     [change.value for change in outcome.changed],
                 )
+
+    def test_a_work_hardcover_lists_only_as_audio_offers_nothing(self):
+        """CBO-90 §8 test 4: the Work has only an Audio Edition, so no candidate.
+
+        The reply is the hand-made `audio-edition-only.json`, whose Work has one
+        Edition and the source states it is Audio - so the client offers nothing
+        for the Work at all, and the walk has nothing to write from. The book is
+        marked `colophon:unverified`, the mark is the only thing written, and not
+        one of that Edition's values reaches the file. A missed match, never a
+        wrong write.
+        """
+        path = self.write(
+            "The Infirmary.epub",
+            """    <dc:title>The Infirmary</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = Hardcover(
+            "a-token",
+            transport=Replay("audio-edition-only.json", folder=HARDCOVER_HAND_MADE),
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched, outcome.fragment())
+        self.assertTrue(outcome.unverified)
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        book = read(path)
+        self.assertIsNone(book.publisher, "nothing came from the Audio Edition")
+        self.assertIsNone(book.date)
+        self.assertEqual(book.title, "The Infirmary")
+        self.assertEqual(
+            {change.source for change in outcome.changed},
+            {"colophon"},
+            "the mark is the only thing written, and no source wrote any of it",
+        )
 
     def test_a_tie_between_editions_is_broken_by_the_earliest_date(self):
         """Cragside's Google reply: the large print and the original, both 1.0000.

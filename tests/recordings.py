@@ -368,9 +368,10 @@ SKIPPED = {
         "hand-made: the CBO-90 case, an Edition the source states is Audio dated "
         "earliest; no live reply labels anything Audio"
     ),
-    "hardcover/hand-made/audio-edition-by-isbn.json": (
-        "hand-made: the same CBO-90 case as an ISBN reply; no live reply labels "
-        "anything Audio"
+    "hardcover/hand-made/audio-edition-only.json": (
+        "hand-made: the CBO-90 case where the only Edition is an Audio one, read "
+        "as both an ISBN reply and a title reply, since the two shipped queries "
+        "select the same Edition fields; no live reply labels anything Audio"
     ),
 }
 

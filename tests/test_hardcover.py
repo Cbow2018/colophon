@@ -896,7 +896,7 @@ class AudioEditionTests(unittest.TestCase):
 
     def test_an_audio_edition_is_an_isbn_hardcover_does_not_have(self):
         """So the caller asks the next source, and then falls back to the title."""
-        replay = Replay("audio-edition-by-isbn.json", folder=HAND_MADE)
+        replay = Replay("audio-edition-only.json", folder=HAND_MADE)
 
         self.assertIsNone(self.source(replay).by_isbn(self.THE_AUDIO_EDITION))
 
