@@ -61,8 +61,8 @@ scoped against this key.
   `test_the_pool_is_what_picks_the_record_that_gets_written` is the case.
 - **Prefer ebook Editions in the Standard Edition order** (CBO-90). Rejected. It
   would put format ahead of date in the order above and make "standard" mean "the
-  ebook", which no source states reliably: asked live, Hardcover labelled 41
-  Editions in the re-recorded fixtures and only 9 of them ebook, one of which was
+  ebook", which no source states reliably: asked live, Hardcover labelled 40
+  Editions in the re-recorded fixtures and only 8 of them ebook, one of which was
   a recording of an audiobook. Leaving the order alone and never writing an ISBN
   from a title match closes the risk without a rule that reads a field the source
   gets wrong.
