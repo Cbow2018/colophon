@@ -575,14 +575,7 @@ class Corrector:
                     path, [(source.name, str(error))], f"ISBN {book.isbn}"
                 )
             if found is not None:
-                return self._write(
-                    path,
-                    found,
-                    CONFIDENCE,
-                    isbn=book.isbn,
-                    book=book,
-                    isbn_identifies=True,
-                )
+                return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
 
         if not search_titles(book.title):
             return self._unverified(path, book, None, tried)
@@ -873,18 +866,17 @@ class Corrector:
         isbn=None,
         book=None,
         llm=None,
-        isbn_identifies=False,
     ):
         """Back the original up, then write what the source is sure of.
 
         `found` carries the source it came from, so nothing here has to be told
-        where the values are from. `isbn` is set only when an ISBN is what
-        recognised the book, because that is what the log line then reports.
-
-        `isbn_identifies` says whether that ISBN is what recognised the book, and
-        it is what makes the ISBN a field the title path may write: a source
-        whose record was reached by title has not been shown to be an Edition of
-        this book, so its ISBN is not written over - or into - a file that was
+        where the values are from. `isbn` is set when an ISBN is what recognised
+        the book, and on the unverified path to the ISBN the sources were asked
+        for, because that is what the log line then reports. On the path that
+        writes a record, an `isbn` here is therefore the same fact as "an ISBN is
+        what recognised this book" - which is what makes the ISBN a field the rule
+        may write at all: a record reached by title has not been shown to be an
+        Edition of this book, so its ISBN is not written over - or into - a file
         found some other way (§3 of CBO-90's note, and CBO-92).
 
         `found` is None when no source matched: there is nothing to write from,
@@ -914,7 +906,7 @@ class Corrector:
         if standards is not None:
             found = standards.applied_to(found)
         edits = self._edits(
-            found, book, unverified=unverified, isbn_identifies=isbn_identifies
+            found, book, unverified=unverified, isbn_identifies=bool(isbn)
         )
         # The genres are mapped before anything is decided, because the answer is
         # part of what the book is written with.
