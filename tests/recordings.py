@@ -52,6 +52,9 @@ NORMAL_PEOPLE_ISBN = "9780571334650"
 MISTBORN_ISBN = "9780765311788"
 THE_HOBBIT_ISBN = "9780007458424"
 THE_INFIRMARY_ISBN = "9781799729945"
+# The print Edition of the same Work, and what the genres recording is made
+# against: the Audio Edition is not offered as a candidate at all (CBO-90).
+THE_INFIRMARY_PRINT_ISBN = "9781792780844"
 BERWICK_ISBN = "9781529978940"
 PYRAMIDS_ISBN = "9780575064843"
 THE_TRIAL_ISBN = "9781529196382"
@@ -270,9 +273,9 @@ RECORDINGS = (
     },
     {
         "source": "hardcover",
-        "fixture": "by-isbn-9781799729945-genres.json",
+        "fixture": "by-isbn-9781792780844-genres.json",
         "lookup": "isbn",
-        "isbn": THE_INFIRMARY_ISBN,
+        "isbn": THE_INFIRMARY_PRINT_ISBN,
     },
     {
         "source": "hardcover",

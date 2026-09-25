@@ -45,6 +45,7 @@ query BookByIsbn($isbn: String!) {
   ) {
     isbn_13
     isbn_10
+    reading_format_id
     title
     publisher { name }
     release_date
@@ -99,6 +100,7 @@ query BooksByTitle($titles: [String!]!%s) {
     title
     isbn_13
     isbn_10
+    reading_format_id
     publisher { name }
     release_date
     image { url }
