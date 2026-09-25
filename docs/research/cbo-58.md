@@ -711,6 +711,46 @@ is correct: a durable key should be conservative and stable, a comparison key sh
 be aggressive. `record.py` needs no change, and no migration is needed. A golden test
 pins the frozen output (§5.1).
 
+### 3.8 Identity is not similarity, and the write follows identity
+
+§3.1–§3.7 give three different reductions of the same string: the durable key
+(`normalise`), the comparison key (`comparison_text`) and the graded similarity
+built on it. They are not redundant and must not be unified — §3.7 says why the
+first is conservative — but a fourth thing has been missing: a predicate that
+answers *are these the same value*, as opposed to *how close are they*.
+
+Without it the write side has no test at all. `epub.py` compares exact strings,
+so a source that spells a title with a different capital writes it, and a score
+of 1.0000 is produced by a comparison that considered the two identical. The
+rule:
+
+> **A source value is written only when it is a different form from the file's
+> own, where form is what that field's identity reader produces:**
+> `comparison_text` **for a title,** `normalise` **for a name.**
+
+The dead band is not an identity test and must not be used as one: at 0.97 it
+calls `The Masque of the Red Deaths` the same title as `The Masque of the Red
+Death` (raw 0.9787, above the band), so gating writes on it would leave a file's
+typo in place. Identity is equality of keys; similarity is a score.
+
+**The rule governs a title. It does not govern an author, and that is not an
+omission.** The rule needs one thing to work: a function that already answers
+"are these the same value" rather than "how close are they". `comparison_text`
+is that answer for a title. An author has no such function and does not want
+one — an author's identity is the Record's business, and §3.7's key is the
+library's own spelling rather than a comparison. So a name the Record decided
+always reaches the file, and a name the Record has not decided keeps the
+source's spelling, which is what CBO-41 requires: a file that spells `LJ Ross`
+still takes a source's `L.J. Ross`.
+
+Extending the identity test to authors was measured, and it is not the same rule
+at a wider scope — it is a different rule with a different answer. On the
+committed suite it changes eight tests, whose expectation is CBO-41's criterion
+rather than a bug: one spelling of one author, a file spelt `L. J. Ross` losing
+the write of the standard `L.J. Ross`, in eight places. Recounted on `main` at
+`b4d90b5`, before CBO-69 merged, and on the merged suite at `a66bdbd`: eight
+both times.
+
 ---
 
 ## 4. Band boundaries
