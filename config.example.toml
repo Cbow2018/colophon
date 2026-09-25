@@ -90,6 +90,29 @@ google_books_key_file = "/run/secrets/google_books_key"
 # until the next UTC day, and is asked again then.
 # llm_daily_limit = 200
 
+# How long a book waits for a source that is down, before it is delivered
+# without that source. Written as a number and a unit - "90m", "24h", "2d" -
+# with the unit in lower case, and the space around it is ignored. `0` means do
+# not wait at all: a book is delivered as soon as the failure is known.
+#
+# A bare number other than 0 is refused rather than guessed at, at startup:
+# "24" could be a day or twenty-four seconds, and either guess would be a window
+# you did not ask for. So is "24H", "1h30m", "-1h" and "1.5h". Nothing is
+# retried when the source keeps failing and the window runs out: the book goes
+# out with the metadata it has, tagged `colophon:source-unavailable`.
+#
+# The lines below are the defaults; uncomment and change one to overrule it.
+# source_retry = "24h"
+
+# The same for the LLM chooser, which is its own window rather than a second
+# reading of the one above: a provider being topped up or a local model
+# rebooting is a different wait from a source outage. While the LLM cannot be
+# asked, the book waits as it does for a source; after this long it is written
+# the way the rules decided it, which may mean `colophon:unverified`.
+#
+# The line below is the default; uncomment it to change it.
+# llm_retry = "24h"
+
 # On by default, so a fresh install cannot surprise you: Colophon logs what it
 # would do and moves nothing. Set this to false once the log looks right.
 dry_run = true

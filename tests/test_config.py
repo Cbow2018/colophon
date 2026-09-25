@@ -4,8 +4,11 @@ import unittest
 from pathlib import Path
 
 from colophon.config import (
+    DEFAULT_RETRY,
+    DEFAULT_RETRY_SECONDS,
     FIELD_DEFAULTS,
     KNOWN_SOURCES,
+    Config,
     ConfigError,
     load_config,
 )
@@ -447,6 +450,21 @@ class LoadConfigTests(unittest.TestCase):
         ):
             with self.subTest(setting=name):
                 self.assertIn(f"# {name} = ", written, "shown, and commented out")
+        # The retry windows are the one pair `FIELD_DEFAULTS` cannot hold, so
+        # `test_the_rules_the_example_shows_are_the_ones_the_code_defaults_to`
+        # cannot guard them and this is the only thing standing between the value
+        # a user copies and the window the code ships. `DEFAULT_RETRY` is parsed
+        # rather than compared to `DEFAULT_RETRY_SECONDS`, which is a second
+        # literal of the same fact and can drift from the first.
+        for name, window in (
+            ("source_retry", config.source_retry),
+            ("llm_retry", config.llm_retry),
+        ):
+            with self.subTest(setting=name):
+                self.assertIn(
+                    f'# {name} = "{DEFAULT_RETRY}"', written, "shown, and commented out"
+                )
+                self.assertEqual(window, int(getattr(Config, name)))
 
     def test_the_rules_the_example_shows_are_the_ones_the_code_defaults_to(self):
         """Uncommenting the example has to be a no-op, not a change.
@@ -641,6 +659,137 @@ class AllowedGenreTests(unittest.TestCase):
     def test_an_empty_entry_is_refused(self):
         """No genre trims to nothing, so one that does could never be written."""
         path = self.write_config('allowed_genres = ["Crime", "  "]\n')
+
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+
+class RetryWindowTests(unittest.TestCase):
+    """The two retry windows, as a number of seconds each.
+
+    `source_retry` is how long a book waits for a source that is down, and
+    `llm_retry` is the same for the LLM: a provider being topped up or a local
+    model rebooting is a different wait from a source outage, so it is its own
+    setting rather than a second reading of the first.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def write_config(self, text):
+        path = self.tmp / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def load(self, text, name="source_retry"):
+        path = self.write_config(f"{name} = {text}\n")
+        return load_config(env={"COLOPHON_CONFIG": str(path)})
+
+    def test_a_day_is_the_default_for_both(self):
+        config = load_config(env={"COLOPHON_CONFIG": str(self.tmp / "missing.toml")})
+
+        self.assertEqual(config.source_retry, 86400)
+        self.assertEqual(config.llm_retry, 86400)
+        # `DEFAULT_RETRY_SECONDS` is a second literal of the same fact as
+        # `DEFAULT_RETRY`, and only this says the two agree.
+        self.assertEqual(DEFAULT_RETRY_SECONDS, 86400)
+
+    def test_a_number_and_a_suffix_are_read_as_seconds(self):
+        self.assertEqual(self.load('"24h"').source_retry, 86400)
+        self.assertEqual(self.load('"90m"').source_retry, 5400)
+        self.assertEqual(self.load('"2d"').source_retry, 172800)
+
+    def test_zero_is_how_a_user_says_do_not_hold(self):
+        """Three ways of writing it, and one of them is a TOML integer.
+
+        `_setting(…, str)` refuses an int, so `0` in the file would be "the wrong
+        kind of value" if this setting were read as a string like the rest.
+        """
+        self.assertEqual(self.load('"0"').source_retry, 0)
+        self.assertEqual(self.load("0").source_retry, 0, "a TOML integer")
+        self.assertEqual(self.load('"0h"').source_retry, 0)
+        self.assertEqual(self.load('" 0 "').source_retry, 0)
+
+    def test_the_space_around_a_value_is_not_significant(self):
+        self.assertEqual(self.load('" 24h "').source_retry, 86400)
+        self.assertEqual(self.load('" 90m"').source_retry, 5400)
+
+    def test_anything_else_is_refused_at_startup(self):
+        """A guess at the unit is worse than a refusal: the window would be wrong.
+
+        `1h30m`, `24H`, `-1h`, `1.5h` and a bare number that is not 0 are all
+        things a user could reasonably type and none of them is a duration this
+        setting reads.
+        """
+        for given in (
+            '"1h30m"',
+            '"24H"',
+            '"-1h"',
+            '"1.5h"',
+            '"1"',
+            '"00"',
+            '"h"',
+            '"24"',
+            '"1w"',
+            '"1 h"',
+            '""',
+        ):
+            with self.subTest(given=given), self.assertRaises(ConfigError):
+                self.load(given)
+
+    def test_digits_that_are_not_ascii_are_refused_too(self):
+        """`[0-9]` is the ten digits a user types; `\\d` is not, and `int` reads more.
+
+        Arabic-Indic, Extended Arabic-Indic and fullwidth digits each match
+        `\\d` and each convert, so `٢٤h` would set a 24-hour window without
+        saying so. The format is a number and a unit, and a number here is
+        ASCII: `str.isdigit` does not decide it, `[0-9]` does.
+        """
+        for given in ("٢٤h", "۲۴h", "２４h"):
+            with self.subTest(given=given), self.assertRaises(ConfigError):
+                self.load(f'"{given}"')
+
+    def test_a_refusal_names_the_setting_it_came_from(self):
+        """The two windows are read by the same parser, so it has to say which."""
+        path = self.write_config('llm_retry = "soon"\n')
+
+        with self.assertRaises(ConfigError) as caught:
+            load_config(env={"COLOPHON_CONFIG": str(path)})
+
+        self.assertIn("llm_retry", str(caught.exception))
+
+    def test_each_window_is_its_own_setting(self):
+        config = self.load('"30m"', name="llm_retry")
+
+        self.assertEqual(config.llm_retry, 1800)
+        self.assertEqual(config.source_retry, 86400, "the other one is untouched")
+
+    def test_the_environment_can_set_either_one(self):
+        config = load_config(
+            env={"COLOPHON_SOURCE_RETRY": "2h", "COLOPHON_LLM_RETRY": "0"}
+        )
+
+        self.assertEqual(config.source_retry, 7200)
+        self.assertEqual(config.llm_retry, 0)
+
+    def test_the_environment_beats_the_file(self):
+        path = self.write_config('source_retry = "6h"\n')
+
+        config = load_config(
+            env={"COLOPHON_CONFIG": str(path), "COLOPHON_SOURCE_RETRY": "5m"}
+        )
+
+        self.assertEqual(config.source_retry, 300)
+
+    def test_a_bad_value_from_the_environment_is_refused_too(self):
+        with self.assertRaises(ConfigError):
+            load_config(env={"COLOPHON_LLM_RETRY": "24H"})
+
+    def test_a_whole_number_that_is_not_zero_is_refused(self):
+        """`source_retry = 24` in the file is a number, and it is still not a duration."""
+        path = self.write_config("source_retry = 5\n")
 
         with self.assertRaises(ConfigError):
             load_config(env={"COLOPHON_CONFIG": str(path)})
