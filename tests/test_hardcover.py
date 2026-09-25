@@ -5,13 +5,16 @@ suite needs no key and never touches the network. See
 `fixtures/hardcover/README.md` for what each one is.
 """
 
+import http.client
 import json
+import ssl
 import unittest
+import urllib.error
 from pathlib import Path
 
 from colophon import hardcover
 from colophon.hardcover import Hardcover
-from colophon.sources import SourceError, genre_parts
+from colophon.sources import HELD, TEMPORARY, SourceError, genre_parts
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "hardcover"
@@ -502,6 +505,143 @@ class ErrorTests(unittest.TestCase):
 
         self.assertNotIn(TOKEN, str(caught.exception))
         self.assertIn("[token]", str(caught.exception))
+
+
+class FailureKindTests(unittest.TestCase):
+    """CBO-78: which failures are worth waiting out, and what each one is called.
+
+    The status bodies are hand-made from the shapes `docs/research/hardcover-api.md`
+    §5 documents, because no recording of a status other than 200 exists; each one
+    is named in `hand-made/README.md`. The token is the one credential Hardcover
+    refuses, so 401 and 403 are the two that carry `rejected`. The reason is the
+    short phrase the health file and the notice print, and it never quotes the
+    reply.
+    """
+
+    def source(self, name, status):
+        return Hardcover(TOKEN, transport=Replay(name, status, folder=HAND_MADE))
+
+    def test_a_missing_or_expired_token_is_held_and_named_as_the_key(self):
+        with self.assertRaises(SourceError) as caught:
+            self.source("error-invalid-token.json", 401).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "rejected the key")
+        self.assertTrue(caught.exception.rejected)
+
+    def test_a_token_without_the_scope_the_query_needs_is_held_too(self):
+        with self.assertRaises(SourceError) as caught:
+            self.source("error-insufficient-scope.json", 403).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "rejected the key")
+        self.assertTrue(caught.exception.rejected)
+
+    def test_a_malformed_request_is_held_because_nothing_about_it_changes(self):
+        with self.assertRaises(SourceError) as caught:
+            self.source("error-malformed-request.json", 400).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "configuration problem, HTTP 400")
+        self.assertFalse(caught.exception.rejected)
+
+    def test_rate_limiting_is_temporary(self):
+        with self.assertRaises(SourceError) as caught:
+            self.source("error-too-many-requests.json", 429).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "rate limiting, HTTP 429")
+        self.assertFalse(caught.exception.rejected)
+
+    def test_a_query_that_ran_too_long_is_temporary(self):
+        with self.assertRaises(SourceError) as caught:
+            self.source("error-request-timeout.json", 408).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "HTTP 408")
+
+    def test_a_server_that_is_temporarily_unavailable_is_temporary(self):
+        with self.assertRaises(SourceError) as caught:
+            self.source("error-service-unavailable.json", 503).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "HTTP 503")
+
+    def test_a_query_hardcover_refused_is_held(self):
+        """A GraphQL `errors` array on a 200 is the query's fault, not an outage."""
+        source = Hardcover(
+            TOKEN, transport=answering(200, b'{"errors":[{"message":"no such field"}]}')
+        )
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "the query was refused")
+        self.assertNotIn("no such field", caught.exception.reason)
+
+    def test_a_reply_that_is_not_json_is_held(self):
+        source = Hardcover(TOKEN, transport=answering(200, b"not json at all"))
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "unreadable reply")
+
+    def test_a_reply_that_does_not_answer_the_question_is_held(self):
+        source = Hardcover(TOKEN, transport=answering(200, b'{"data":{}}'))
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "unreadable reply")
+
+    def test_a_timeout_is_temporary(self):
+        def time_out(url, headers, body):
+            raise TimeoutError("timed out")
+
+        with self.assertRaises(SourceError) as caught:
+            Hardcover(TOKEN, transport=time_out).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "timeout")
+
+    def test_a_reply_that_cannot_be_read_at_all_is_held(self):
+        """`urlopen` raises `BadStatusLine`, which is not an `OSError`."""
+
+        def nonsense(url, headers, body):
+            raise http.client.BadStatusLine("garbage not http")
+
+        with self.assertRaises(SourceError) as caught:
+            Hardcover(TOKEN, transport=nonsense).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "unreadable reply")
+
+    def test_a_tls_certificate_failure_is_held(self):
+        def refuse_the_certificate(url, headers, body):
+            raise urllib.error.URLError(
+                ssl.SSLCertVerificationError(1, "certificate verify failed")
+            )
+
+        with self.assertRaises(SourceError) as caught:
+            Hardcover(TOKEN, transport=refuse_the_certificate).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "TLS certificate failure")
+
+    def test_a_bug_is_not_turned_into_a_source_problem(self):
+        """Only the network is caught here; anything else is Colophon's own to fix."""
+
+        def a_bug(url, headers, body):
+            raise TypeError("'NoneType' object is not subscriptable")
+
+        source = Hardcover(TOKEN, transport=a_bug)
+
+        with self.assertRaises(TypeError):
+            source.by_isbn(CRAGSIDE)
 
 
 class SecretFileTests(unittest.TestCase):

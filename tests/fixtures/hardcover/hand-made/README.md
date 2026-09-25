@@ -109,6 +109,26 @@ the question. Freezing the sparse reply makes the client's behaviour on a sparse
 reply a permanent claim instead of a side effect of what one recording happened to
 contain.
 
+## The CBO-78 cases: the statuses Hardcover only answers when something is wrong
+
+| File | Status | Reads it | The case, and why a live recording cannot carry it |
+| --- | --- | --- | --- |
+| `error-invalid-token.json` | 401 | `FailureKindTests.test_a_missing_or_expired_token_is_held_and_named_as_the_key` | A missing, invalid or expired token. Held, and the one held failure named as the key's fault. |
+| `error-insufficient-scope.json` | 403 | `FailureKindTests.test_a_token_without_the_scope_the_query_needs_is_held_too` | The token is real and does not carry the scope the query needs. Held, and blamed on the key. |
+| `error-malformed-request.json` | 400 | `FailureKindTests.test_a_malformed_request_is_held_because_nothing_about_it_changes` | A body or query Hardcover will not parse: Colophon's own bug. Held, and not blamed on the key. |
+| `error-request-timeout.json` | 408 | `FailureKindTests.test_a_query_that_ran_too_long_is_temporary` | A query over the 30-second maximum. Temporary. |
+| `error-too-many-requests.json` | 429 | `FailureKindTests.test_rate_limiting_is_temporary` | The burst or daily limit. Temporary. |
+| `error-service-unavailable.json` | 503 | `FailureKindTests.test_a_server_that_is_temporarily_unavailable_is_temporary` | Temporarily unavailable, safe to retry. Temporary. |
+
+The bodies are the shapes `docs/research/hardcover-api.md` §5 documents, which are
+the API's documented replies rather than any recording: **no committed recording
+has a status other than 200**, and a re-record cannot ask for a 401, a 429 or a
+503. What each one freezes is which of the two kinds CBO-78 sorts it into, and
+whether it is the key's fault - `rejected`, which is what the health line and
+CBO-44's notice read. The `error_description` texts are Colophon's own words: the
+docs say such a field is there and quote it as `"..."`, so nothing here invents a
+value the API is on record as sending.
+
 ## The CBO-90 case: an Edition the source states is Audio
 
 | File | Reads it | The case, and why a live recording cannot carry it |

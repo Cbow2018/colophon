@@ -20,6 +20,19 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+# The two kinds a failure is sorted into, and the two rules that decide which
+# one a socket error or a status is: one definition, shared with the sources, so
+# the LLM's failures cannot drift from theirs (CBO-78).
+from colophon.sources import (
+    DEFAULT_REASONS,
+    HELD,
+    REJECTED_KEY,
+    TEMPORARY,
+    TRANSPORT_FAILURES,
+    network_failure,
+    status_failure,
+)
+
 LOG = logging.getLogger("colophon")
 
 # The token parameters are a guard on a reply that should be one small object
@@ -71,7 +84,22 @@ GENRE_SYSTEM_PROMPT = (
 
 
 class LlmError(Exception):
-    """The endpoint could not answer, or answered with a refusal."""
+    """The endpoint could not answer, or answered with a refusal.
+
+    `kind` is `TEMPORARY` or `HELD`, the same two a source's failures carry:
+    whether asking again later is worth it, or whether a person has to change
+    something first. `reason` is the short phrase for the log line, the health
+    file and the notice, in Colophon's own words - never the message, which may
+    quote the provider. `rejected` says whether it was the key that was refused,
+    which is one held failure among several, carried separately for the log line
+    the user reads. Where each leads is CBO-43's.
+    """
+
+    def __init__(self, message, kind=HELD, reason=None, rejected=False):
+        super().__init__(message)
+        self.kind = kind
+        self.reason = reason or (REJECTED_KEY if rejected else DEFAULT_REASONS[kind])
+        self.rejected = rejected
 
 
 class LlmLimited(Exception):
@@ -369,21 +397,44 @@ class Llm:
             )
         except LlmError:
             raise
-        except Exception as error:
+        except TRANSPORT_FAILURES as error:
+            # Only the exchange is caught: any other exception is a bug here, and
+            # calling it "could not reach the LLM" would hide it (CBO-78).
+            kind, reason = network_failure(error)
             raise LlmError(
-                f"could not reach the LLM: {self._without_key(error)}"
+                f"could not reach the LLM: {self._without_key(error)}", kind, reason
             ) from error
 
     def _refuse(self, status, body):
-        """Turn a status that is not 2xx into the one error it means."""
+        """Turn a status that is not 2xx into the one error it means.
+
+        A 402 is the one status the LLM reads differently from a source: it
+        means the account is out of balance and topping up fixes it, so it is
+        waited out rather than held (CBO-43, the 402 follow-up).
+        """
         if 200 <= status < 300:
             return
         summary = self._without_key(_summarise(body))
-        if status in (401, 403):
-            raise LlmError(f"the LLM rejected the key (HTTP {status}): {summary}")
+        if status == 402:
+            raise LlmError(
+                f"the LLM is out of balance (HTTP 402): {summary}",
+                TEMPORARY,
+                "out of balance, HTTP 402",
+            )
+        refused_the_key = status in (401, 403)
+        kind, reason = status_failure(status, rejected=refused_the_key)
+        if refused_the_key:
+            raise LlmError(
+                f"the LLM rejected the key (HTTP {status}): {summary}",
+                kind,
+                reason,
+                rejected=True,
+            )
         if status == 429:
-            raise LlmError(f"the LLM is rate limiting (HTTP 429): {summary}")
-        if 400 <= status < 500:
+            raise LlmError(
+                f"the LLM is rate limiting (HTTP 429): {summary}", kind, reason
+            )
+        if 400 <= status < 500 and status != 408:
             # An unknown model, a refused response_format, a base URL that
             # happens to answer: none of these behave differently tomorrow, so
             # this must not read like an outage or the book never finishes.
@@ -394,8 +445,7 @@ class Llm:
                 self.provider,
                 summary,
             )
-            raise LlmError(f"the LLM answered HTTP {status}: {summary}")
-        raise LlmError(f"the LLM answered HTTP {status}: {summary}")
+        raise LlmError(f"the LLM answered HTTP {status}: {summary}", kind, reason)
 
     def _read(self, body, candidates):
         """The reply as a choice, or None for every shape that is not one."""

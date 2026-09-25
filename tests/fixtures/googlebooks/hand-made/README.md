@@ -90,6 +90,24 @@ engine, not a catalogue. A re-record can legitimately return
 variant is gone, CBO-68's tie has different membership, and **nothing fails** —
 a re-record is indistinguishable from a fix. That is what this file is for.
 
+## `error-access-not-configured.json`
+
+The 403 Google answers when the project behind the key may not use the Books API:
+`"reason": "accessNotConfigured"`, "Books API has not been used in project
+123456789 before or it is disabled." Hand-made for CBO-78, because nothing else
+in the corpus is a 403 and a re-record with a working key cannot produce one.
+
+**What it freezes is that the key is not blamed.** `_KEY_WORDS` is what decides
+"key or query" from the message, and this message matches none of them, so the
+failure is held without being the key's - which is the ticket's decision, and the
+opposite of the pairing a status reader would guess. The envelope is Google's own
+error shape and the message is the documented one, with a placeholder project
+number in place of a real one and the console URL its real reply carries left
+out.
+
+`WhenGoogleRefusesTests.test_a_project_that_may_not_use_the_api_is_held_not_blamed_on_the_key`
+reads it.
+
 ## Adding a fixture here
 
 Only when re-recording would destroy the case: a ticket's evidence, or a client

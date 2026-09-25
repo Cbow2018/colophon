@@ -107,3 +107,10 @@ state asserts the transport was never called, which no recorded reply can show.
 `Fiction` is *Berwick*'s only source genre, and the model answers `null` — a
 correct answer that leaves the book with no genres at all. A null is a success,
 not a failure, and the two must not be made to look alike in the log.
+
+## CBO-78: the two refusals that are not recordings
+
+`hand-made/` holds the 401 and the 402 CBO-78 sorts, and they are the only files
+here that no request produced: one echoes key material back and the other costs
+the account's balance to ask for. The directory has its own README with the case
+each one freezes.

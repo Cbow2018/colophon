@@ -1,0 +1,4 @@
+{
+  "error": "Too Many Requests",
+  "message": "Burst limit exceeded; retry after 60 seconds"
+}

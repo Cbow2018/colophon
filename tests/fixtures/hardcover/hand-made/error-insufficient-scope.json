@@ -1,0 +1,5 @@
+{
+  "error": "insufficient_scope",
+  "error_description": "The token does not carry the scope this query needs",
+  "scope": "read"
+}

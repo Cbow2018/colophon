@@ -7,8 +7,11 @@ that was ever called.
 """
 
 import datetime
+import http.client
 import json
+import ssl
 import unittest
+import urllib.error
 from pathlib import Path
 
 from colophon.backups import Backups
@@ -17,12 +20,16 @@ from colophon.correction import Corrector, forget_yesterdays_waits, top_candidat
 from colophon.epub import read
 from colophon.llm import PROVIDERS, Llm, LlmError, LlmLimited
 from colophon.matching import Candidate, FileBook, rank
+from colophon.sources import HELD, TEMPORARY
 from tests.samplebooks import CRAGSIDE, write_epub
 from tests.samplebooks import HOLY_ISLAND as HOLY_ISLAND_BOOK
 from tests.sources import CRAGSIDE_CANDIDATE, FakeSource, no_network
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "llm"
+# The cases a ticket rests on rather than the API's own words: never re-recorded,
+# and each named in `hand-made/README.md`.
+HAND_MADE = RECORDED / "hand-made"
 KEY = "llm-secret-key-4242"
 
 # The candidates the three contract recordings were made against: the real
@@ -84,10 +91,14 @@ A_LOW_BAND = Candidate(
 
 
 class Replay:
-    """Stands in for the network: hands back a recorded reply, remembers the request."""
+    """Stands in for the network: hands back a recorded reply, remembers the request.
 
-    def __init__(self, *names, status=200, body=None):
-        self.bodies = [(RECORDED / name).read_bytes() for name in names]
+    `folder` is for the frozen cases in `hand-made/`, which live beside the live
+    recordings rather than among them.
+    """
+
+    def __init__(self, *names, status=200, body=None, folder=RECORDED):
+        self.bodies = [(folder / name).read_bytes() for name in names]
         self.status = status
         self.body = body
         self.sent = []
@@ -109,7 +120,9 @@ class LlmTestCase(unittest.TestCase):
         self.tmp = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 
-    def client(self, *names, key=KEY, counter=None, limit=200, **kwargs):
+    def client(
+        self, *names, key=KEY, counter=None, limit=200, transport=None, **kwargs
+    ):
         return Llm(
             provider="deepseek",
             model="deepseek-flash",
@@ -117,7 +130,7 @@ class LlmTestCase(unittest.TestCase):
             key=key,
             daily_limit=limit,
             counter=counter or self.tmp / "llm.json",
-            transport=Replay(*names, **kwargs),
+            transport=transport or Replay(*names, **kwargs),
         )
 
 
@@ -639,6 +652,151 @@ class FailureTests(LlmTestCase):
 
         self.assertIn("404", str(caught.exception))
         self.assertIn("empty", str(caught.exception))
+
+
+class FailureKindTests(LlmTestCase):
+    """CBO-78: which LLM failures are worth waiting out, and what each is called.
+
+    The two bodies here are hand-made from DeepSeek's documented error codes and
+    the body shape measured in `docs/research/cbo-40-llm-fallback-chooser.md` §4;
+    each is named in `hand-made/README.md`. The reason is the short phrase the
+    health file and the notice print, and it never quotes the provider's reply.
+    """
+
+    def kind(self, *, status, body=b"nope"):
+        """The one error a refusal with this status and body comes back as."""
+        with self.assertRaises(LlmError) as caught:
+            self.client(status=status, body=body).choose(FILE, [BELSAY_RECORD])
+        return caught.exception
+
+    def test_a_rejected_key_is_held_and_named_as_the_key(self):
+        with self.assertRaises(LlmError) as caught:
+            self.client("error-key-rejected.json", folder=HAND_MADE, status=401).choose(
+                FILE, [BELSAY_RECORD]
+            )
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "rejected the key")
+        self.assertTrue(caught.exception.rejected)
+        self.assertNotIn("****0000", caught.exception.reason)
+
+    def test_a_key_a_provider_will_not_take_is_held_and_named_as_the_key(self):
+        caught = self.kind(status=403)
+
+        self.assertEqual(caught.kind, HELD)
+        self.assertEqual(caught.reason, "rejected the key")
+        self.assertTrue(caught.rejected)
+
+    def test_an_account_out_of_balance_is_temporary(self):
+        """Topping up fixes it, so it is waited out rather than held (CBO-43)."""
+        with self.assertRaises(LlmError) as caught:
+            self.client(
+                "error-out-of-balance.json", folder=HAND_MADE, status=402
+            ).choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "out of balance, HTTP 402")
+        self.assertFalse(caught.exception.rejected)
+        self.assertIn("balance", str(caught.exception))
+
+    def test_a_model_that_does_not_exist_is_held(self):
+        caught = self.kind(status=400)
+
+        self.assertEqual(caught.kind, HELD)
+        self.assertEqual(caught.reason, "configuration problem, HTTP 400")
+        self.assertFalse(caught.rejected)
+
+    def test_a_path_that_does_not_answer_is_held(self):
+        caught = self.kind(status=404, body=b"")
+
+        self.assertEqual(caught.kind, HELD)
+        self.assertEqual(caught.reason, "configuration problem, HTTP 404")
+        self.assertFalse(caught.rejected)
+
+    def test_rate_limiting_is_temporary(self):
+        caught = self.kind(status=429)
+
+        self.assertEqual(caught.kind, TEMPORARY)
+        self.assertEqual(caught.reason, "rate limiting, HTTP 429")
+        self.assertFalse(caught.rejected)
+
+    def test_a_request_that_ran_too_long_is_temporary(self):
+        caught = self.kind(status=408)
+
+        self.assertEqual(caught.kind, TEMPORARY)
+        self.assertEqual(caught.reason, "HTTP 408")
+
+    def test_a_server_error_is_temporary(self):
+        for status in (500, 503):
+            with self.subTest(status=status):
+                caught = self.kind(status=status)
+
+                self.assertEqual(caught.kind, TEMPORARY)
+                self.assertEqual(caught.reason, f"HTTP {status}")
+                self.assertFalse(caught.rejected)
+
+    def test_a_local_llm_that_is_rebooting_is_temporary(self):
+        """A refused connection is why the LLM's window is its own (CBO-43)."""
+
+        def refuse(url, headers, request):
+            raise ConnectionRefusedError(61, "Connection refused")
+
+        with self.assertRaises(LlmError) as caught:
+            self.client(transport=refuse).choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "connection refused")
+
+    def test_a_timeout_is_temporary(self):
+        def time_out(url, headers, request):
+            raise TimeoutError("timed out")
+
+        with self.assertRaises(LlmError) as caught:
+            self.client(transport=time_out).choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "timeout")
+
+    def test_a_reply_that_cannot_be_read_at_all_is_held(self):
+        """`urlopen` raises `BadStatusLine`, which is not an `OSError`."""
+
+        def nonsense(url, headers, request):
+            raise http.client.BadStatusLine("garbage not http")
+
+        with self.assertRaises(LlmError) as caught:
+            self.client(transport=nonsense).choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "unreadable reply")
+
+    def test_a_tls_certificate_failure_is_held(self):
+        def refuse_the_certificate(url, headers, request):
+            raise urllib.error.URLError(
+                ssl.SSLCertVerificationError(1, "certificate verify failed")
+            )
+
+        with self.assertRaises(LlmError) as caught:
+            self.client(transport=refuse_the_certificate).choose(FILE, [BELSAY_RECORD])
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "TLS certificate failure")
+
+    def test_a_bug_is_not_turned_into_an_llm_problem(self):
+        def a_bug(url, headers, request):
+            raise TypeError("'NoneType' object is not subscriptable")
+
+        with self.assertRaises(TypeError):
+            self.client(transport=a_bug).choose(FILE, [BELSAY_RECORD])
+
+    def test_the_daily_limit_is_neither_kind(self):
+        """A spent limit waits for the next UTC day, so nothing sorts it at all."""
+        client = self.client("belsay-picked.json", limit=1)
+        client.choose(FILE, [BELSAY_RECORD])
+
+        with self.assertRaises(LlmLimited) as caught:
+            client.choose(FILE, [BELSAY_RECORD])
+
+        self.assertNotIsInstance(caught.exception, LlmError)
 
 
 class ParsingTests(LlmTestCase):

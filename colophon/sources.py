@@ -19,7 +19,10 @@ same name in two modules would not be caught by one `except` clause - a mistake
 that is invisible until the moment a source actually fails.
 """
 
+import http.client
 import re
+import socket
+import ssl
 import urllib.error
 import urllib.request
 
@@ -27,6 +30,39 @@ from colophon.epub import is_cover
 
 USER_AGENT = "Colophon (+https://github.com/Cbow2018/colophon)"
 IMAGE_TIMEOUT_SECONDS = 30
+
+# What a transport may raise that is the exchange's fault rather than ours: the
+# socket's own errors, and `http.client`'s for a reply that could not be read as
+# HTTP at all - a `BadStatusLine` for a server answering nonsense, which
+# `urlopen` raises and which is *not* an `OSError`. Everything else is a bug in
+# Colophon and is left to raise, rather than being reported as a source that
+# could not be reached (CBO-78).
+TRANSPORT_FAILURES = (OSError, http.client.HTTPException)
+
+# The two kinds every failure is sorted into (CBO-78). A *temporary* failure is
+# one asking again later is worth: an outage. Everything else is *held* - the
+# user has to fix something and restart - so the kind decides what happens to a
+# book, and is carried as data rather than read out of the message. The words
+# live here because `LlmError` carries the same two, and one definition is what
+# keeps the two failure types from drifting apart.
+TEMPORARY = "temporary"
+HELD = "held"
+
+# The reasons shared by every failure of one class, in Colophon's own words. A
+# reason is what a log line, the health file, the webhook and CBO-44's notice
+# print, and none of those may carry the server's text: a reason is built from
+# the status or the socket error, never from the reply (CBO-78).
+REJECTED_KEY = "rejected the key"
+UNREADABLE_REPLY = "unreadable reply"
+
+# What a failure with nothing more specific to say is called, by kind: a held
+# failure is a key or a configuration problem by definition (Q3), and a
+# temporary one is an outage (Q24).
+DEFAULT_REASONS = {TEMPORARY: "outage", HELD: "configuration problem"}
+
+# Every cover failure says the same short thing. A cover is never held (CBO-44's
+# D8), so only a log line reads this and the detail stays in the message.
+COVER_FAILED = "the cover could not be fetched"
 
 # A source genre string is sometimes a BISAC path (`Fantasy:Humour`) and
 # sometimes a list (`Classics; Fantasy; Horror`), so both separators are split
@@ -43,16 +79,63 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 class SourceError(Exception):
     """A source could not answer: a bad key, an outage, or an unreadable reply.
 
-    `rejected` says whether the source refused the credential itself, rather
-    than being temporarily unable to answer. The two lead somewhere different -
-    a rejected key holds books and marks the container unhealthy, an outage
-    waits and retries - so the distinction is carried rather than flattened.
-    The retry window itself is CBO-43's.
+    `kind` is `TEMPORARY` or `HELD`: whether the source will answer later, or
+    whether someone has to fix something first. `reason` is the short phrase for
+    the log line, the health file and the notice, in Colophon's own words - never
+    the message, which may quote the server. `rejected` says whether the source
+    refused the credential itself, which is one held failure among several: a
+    configuration problem is held without being the key's fault, so the two are
+    carried separately rather than inferred from each other. Where each kind
+    leads is CBO-43's.
     """
 
-    def __init__(self, message, rejected=False):
+    def __init__(self, message, kind=HELD, reason=None, rejected=False):
         super().__init__(message)
+        self.kind = kind
+        self.reason = reason or (REJECTED_KEY if rejected else DEFAULT_REASONS[kind])
         self.rejected = rejected
+
+
+def status_failure(status, rejected=False):
+    """What an HTTP refusal is: its kind, and the short reason for it.
+
+    A server that is busy or out of time answers later, so a 408, a 429 and any
+    5xx are temporary; everything else is the request or the credential being
+    refused. The one status a caller reads differently is the LLM's 402, which
+    `llm` adds.
+    """
+    kind = TEMPORARY if status in (408, 429) or status >= 500 else HELD
+    if rejected:
+        return HELD, REJECTED_KEY
+    if status == 429:
+        return kind, "rate limiting, HTTP 429"
+    if kind == HELD and 400 <= status < 500:
+        return kind, f"configuration problem, HTTP {status}"
+    return kind, f"HTTP {status}"
+
+
+def network_failure(error):
+    """What a transport failure is: its kind, and the short reason for it.
+
+    A timeout, a connection refused or reset, and a DNS failure all come right on
+    their own. A TLS certificate failure does not, and neither does a reply that
+    could not be read as HTTP at all - those are held, which is the safe way
+    round, because a retry schedule cannot fix a configuration problem.
+    `URLError` carries the socket's own exception in `reason`, and that is where
+    the distinction really lives.
+    """
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, TimeoutError):
+        return TEMPORARY, "timeout"
+    if isinstance(reason, ConnectionRefusedError):
+        return TEMPORARY, "connection refused"
+    if isinstance(reason, ConnectionError):
+        return TEMPORARY, "connection reset"
+    if isinstance(reason, socket.gaierror):
+        return TEMPORARY, "DNS failure"
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return HELD, "TLS certificate failure"
+    return HELD, UNREADABLE_REPLY
 
 
 def text(value):
@@ -96,6 +179,11 @@ def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):
     opinion: it is whatever the server felt like saying, and a book should not
     take an image the writer will refuse because a header claimed otherwise.
 
+    Every failure here is the temporary kind, whatever caused it: a cover is
+    never held (CBO-44 D8). The book goes out without the image, the cover-only
+    outage tag is CBO-43's and CBO-61 is what applies it, and the caller logs the
+    line - so nothing waits on a picture and no container goes unhealthy for one.
+
     `transport` is the seam the tests replay recorded covers through, and it is
     handed the same `timeout` this was given; left out, this fetches over HTTP.
     """
@@ -106,19 +194,27 @@ def image(url, timeout=IMAGE_TIMEOUT_SECONDS, transport=None):
         status, body = fetch(str(url), {"User-Agent": USER_AGENT}, timeout)
     except SourceError:
         raise
-    except Exception as error:
-        raise SourceError(f"could not fetch the cover: {error}") from error
+    except TRANSPORT_FAILURES as error:
+        raise SourceError(
+            f"could not fetch the cover: {error}", TEMPORARY, COVER_FAILED
+        ) from error
 
     if not 200 <= status < 300:
-        raise SourceError(f"could not fetch the cover: it answered HTTP {status}")
+        raise SourceError(
+            f"could not fetch the cover: it answered HTTP {status}",
+            TEMPORARY,
+            COVER_FAILED,
+        )
     if not body:
         return None
     if len(body) > MAX_IMAGE_BYTES:
         raise SourceError(
-            f"the cover is too large to be one ({len(body)} bytes); leaving the book alone"
+            f"the cover is too large to be one ({len(body)} bytes); leaving the book alone",
+            TEMPORARY,
+            COVER_FAILED,
         )
     if not is_cover(body):
-        raise SourceError("the cover was not an image")
+        raise SourceError("the cover was not an image", TEMPORARY, COVER_FAILED)
     return body
 
 

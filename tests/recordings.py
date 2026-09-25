@@ -335,6 +335,10 @@ SKIPPED = {
     "googlebooks/error-missing-query.json": (
         "a 400 from a deliberately missing q, which the shipped client cannot send"
     ),
+    "googlebooks/hand-made/error-access-not-configured.json": (
+        "hand-made: the 403 a project that may not use the Books API answers, "
+        "which only a misconfigured project can produce"
+    ),
     "googlebooks/hand-made/poe-core-cases.json": (
         "hand-made: a frozen case, never re-recorded"
     ),
@@ -347,6 +351,29 @@ SKIPPED = {
     ),
     "hardcover/hand-made/wider-than-the-question.json": (
         "hand-made: a frozen case, never re-recorded"
+    ),
+    # CBO-78's six: the status bodies `docs/research/hardcover-api.md` §5
+    # documents and no recording holds, because the API only answers them when
+    # something is wrong that a re-record deliberately is not.
+    "hardcover/hand-made/error-invalid-token.json": (
+        "hand-made: the documented 401 body for a missing, invalid or expired "
+        "token; a re-record with a working token cannot produce one"
+    ),
+    "hardcover/hand-made/error-insufficient-scope.json": (
+        "hand-made: the documented 403 body for a token without the scope the "
+        "query needs"
+    ),
+    "hardcover/hand-made/error-malformed-request.json": (
+        "hand-made: the documented 400 body for a query Hardcover will not parse"
+    ),
+    "hardcover/hand-made/error-request-timeout.json": (
+        "hand-made: the documented 408 body for a query that went over the 30s maximum"
+    ),
+    "hardcover/hand-made/error-too-many-requests.json": (
+        "hand-made: the documented 429 body; a re-record cannot spend the quota"
+    ),
+    "hardcover/hand-made/error-service-unavailable.json": (
+        "hand-made: the documented 503 body; no re-record can ask for one"
     ),
     "hardcover/hand-made/sparse-isbn-reply.json": (
         "hand-made: the pre-CBO-38 ISBN reply, freezing what a sparse reply "

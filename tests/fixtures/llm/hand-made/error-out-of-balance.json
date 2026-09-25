@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Insufficient Balance",
+    "type": "insufficient_balance_error",
+    "param": null,
+    "code": "insufficient_balance"
+  }
+}
