@@ -220,6 +220,64 @@ form is reversed before comparison and an uncommaed one falls below the floor.
 
 ---
 
+### 1.4 The Standard Edition: one record per Work, chosen before ranking
+
+A title search answers with Editions, not Works. Before a pool is ranked, its
+candidates are grouped by Work, on a **grouping key**: two candidates are grouped
+as one Work when their titles have the same head, as the scorer normalises it,
+their authors are the same letters once each name has been through the scorer's
+name normalisation, and their Series Placements do not conflict. So `L. J. Ross`,
+`LJ Ross` and `Ross, L. J.` are one author, and `L. K. Ross` or `Edgar Allen Poe`
+is another; a placement is the series and the position together, as the glossary
+defines it.
+
+Two placements conflict when the series, as the scorer normalises it, or the
+position differs, and conflicting placements are two Works. A candidate that
+states no placement joins a group only when exactly one placement is stated in
+it; when two or more are stated, the unplaced candidates are a Work of their own.
+Which of those holds is decided from the set of placements in the group, never
+from the order the candidates arrived in.
+
+**The grouping key does not read the year**, and everything else a pairing of two
+Editions might need to be told apart is CBO-65's, scoped against this key.
+
+Each Work keeps one candidate, its Standard Edition: the one with the **earliest
+date** (dates compared as ISO prefixes; an undated candidate comes last); among
+equal dates, the one from the source **highest in the user's source list**; then
+the one carrying **more of the ten payload fields**; and last, the candidates'
+payloads compared field by field, so two candidates can only tie when they would
+write the same thing. This runs on the pooled candidates each time a source's
+reply joins the pool, before `dedupe` and `rank`, so every source hands up every
+Edition and the choice is made in one place. The rule is
+`matching.standard_editions`. A title-path match therefore comes out the same
+whatever order a source lists its reply in, **except where two Works this key
+separates share one** `dedupe` **identity** — the same title, the same first
+author, the same year and no ISBN-13 on either, with conflicting Series
+Placements. `dedupe` runs after this rule and identifies a record without reading
+Series Placement, so it re-merges that pair and keeps whichever arrived first, and
+for those two the answer follows arrival order. Nothing in the corpus reaches it:
+every recorded pair carries an ISBN-13. CBO-65 owns it. The Standard Edition is
+the earliest *listed* Edition, not necessarily the first published, and nothing
+Colophon writes or logs may call it the first edition.
+
+Two limits come with the rule:
+
+* **Dated files.** A year alone can't separate two Editions (0.15 / 1.95 = 0.0769,
+  under `BAND_GAP` 0.08). Once a Work's Editions are grouped, the Work is a pool
+  of one, graded against `singleton_score` 0.95. A file whose `dc:date` isn't its
+  Work's earliest Edition's year scores 0.9231 and stays medium without an LLM.
+  Accepted (D18), and stated in `README.md` where `colophon:unverified` is
+  explained.
+* **The Work key is synthesized.** Two Hardcover Works with the same title head,
+  the same author letters and no conflicting Series Placement are one key.
+  Accepted (D23).
+
+CBO-68's third limit — an audiobook Edition's ISBN, publisher and date written to
+a file that has none — is closed by §3.9 and the client's exclusion in §5.3
+(CBO-90).
+
+---
+
 ## 2. Field weights
 
 | Field | Weight | Compared when |
@@ -751,6 +809,35 @@ the write of the standard `L.J. Ross`, in eight places. Recounted on `main` at
 `b4d90b5`, before CBO-69 merged, and on the merged suite at `a66bdbd`: eight
 both times.
 
+### 3.9 An ISBN is written only when an ISBN is what recognised the book
+
+§3.8 answers whether a source's value is a different form from the file's own. It
+does not ask *how the record was reached*, and for one field that is the whole
+question. A file that arrives with no ISBN is looked up by title, and `isbn`
+defaults to `fill`, so whichever Edition represents the Work supplies the ISBN
+that goes into the file. Before CBO-68 that was whichever Edition the source
+happened to list first, so the reply's order decided it — and one of the three
+*Infirmary* Editions is published by Audible Studios on Brilliance, which
+Hardcover labels an ebook (`reading_format_id: 4`). Since CBO-68 it is the
+earliest-dated Edition, which on this book is a print one by luck of dates rather
+than by any rule.
+
+> **A title match never supplies an ISBN.** A record reached by title is not
+> written into the file as its ISBN: a file that arrived with no ISBN leaves with
+> none, and the ISBN path's title fallback, reached because no source has the
+> file's ISBN, keeps the ISBN the file came with. The publisher, the date and the
+> cover are still filled from the Standard Edition. Only an ISBN that is what
+> recognised the book is written, which is the ISBN path, where an ISBN identifies
+> one Edition.
+
+The reason is provenance rather than form: a record reached by title agrees with
+the file, and agreement is not the same as having been shown to be the same
+Edition, so its ISBN says nothing about this book. `isbn`'s own rule is therefore
+not enough to decide the field, and the ISBN is held back before the rule is read
+— under `overwrite` as much as under `fill`. That is CBO-92: the promise that the
+fallback keeps the file's ISBN held under `fill` only, and holds whatever the rule
+says now.
+
 ---
 
 ## 4. Band boundaries
@@ -1098,6 +1185,7 @@ well as scoring), so this section audits what is inside rather than proposing a 
 | `rank()` (new) | Replaces `nearest_candidate()`. Returns the whole ordered pool — the gap needs the second entry, and the LLM needs the ranked list. |
 | `band_of()` (new) | The grading, as a pure function of the ranked pool **and the bands it is asked about**: `band_of(ranked, bands=BANDS)`. See §5.2. |
 | `dedupe()` (new) | Merges candidates describing one record (§6, item 4). |
+| `standard_editions()` (new) | One candidate per Work: the Standard Edition §1.4 names, chosen before `dedupe()` and `rank()`. |
 | `normalise()` | **Frozen** — the record's durable key (§3.7), pinned by a golden test below. |
 | `comparison_text()` (new) | The §3.1 pipeline, for comparison only. |
 
@@ -1165,7 +1253,8 @@ is a change of *measurement* rather than of *flow*.
 - **`correction.py`'s `_by_title` becomes gather-then-grade.** Today it scores one
   source's reply at a time and returns on the first candidate that clears the threshold
   (`correction.py:558-598`). The settled design gathers every source's candidates into
-  a pool, dedupes, then grades once — and the *gather* is the only impure part (§5.2).
+  a pool, keeps each Work's Standard Edition (§1.4), dedupes, then grades once — and
+  the *gather* is the only impure part (§5.2).
   The walk stops as soon as the pool grades strong (§1.2).
 - **`FileBook` construction gains one argument** (`correction.py:552`), from
   `book.date`. Publisher is not passed, because it is not scored.
@@ -1185,6 +1274,19 @@ is a change of *measurement* rather than of *flow*.
   scored field") is consumed: the demotion is a weight of zero in §2's table. **Both
   tickets need editing in Linear before session 2 starts**, or session 2 will build
   against a plan describing two overlapping implementations of the same thing.
+- **`hardcover.py` stops offering the Editions it labels audio.** An Edition the
+  source states has an audio Reading Format is not offered on either path:
+  `_candidates` filters it out of a title reply before the pool is formed, and
+  `by_isbn` reads it as an ISBN Hardcover does not have, so the walk moves on and
+  then falls back to the title, where the file's own ISBN is kept (CBO-90). Only a
+  stated 2 acts — an Edition stated as physical, ebook or both, or a reply
+  recorded before the field was asked for, stays eligible — because the field is
+  not a reliable statement of what an Edition is: Hardcover labels the Audible
+  Studios on Brilliance Edition of *The Infirmary* `4` (Ebook) with
+  `edition_format: "Kindle"`. Nothing in this module changes; the exclusion is the
+  client's, so a Work listed only as audio offers no candidate, and the walk asks
+  the next source, or the book ends `colophon:unverified`, rather than being
+  written from.
 
 ---
 
