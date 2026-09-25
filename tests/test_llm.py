@@ -939,7 +939,8 @@ class ChooserTests(unittest.TestCase):
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified)
 
-    def test_a_remembered_reply_picks_the_candidate_and_writes_only_its_values(self):
+    def test_the_picked_candidate_is_the_one_written_from(self):
+        """The model's pick is what the book is written from, and its ISBN is not."""
         path = self.book()
         llm = self.llm("belsay-picked.json")
 
