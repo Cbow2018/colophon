@@ -77,6 +77,7 @@ from tests.sources import (
     FakeSource,
 )
 from tests.tempdir import TemporaryDirectory
+from tests.test_googlebooks import HAND_MADE as GOOGLE_HAND_MADE
 from tests.test_googlebooks import Replay as GoogleReplay
 from tests.test_googlebooks import ReplayByQuery
 from tests.test_hardcover import HAND_MADE as HARDCOVER_HAND_MADE
@@ -3457,6 +3458,47 @@ class ABookMatchedFromGoogleBooksTests(CorrectionTestCase):
         self.assertIsNotNone(outcome.passed_over, "the reply was read and scored")
         self.assertGreater(outcome.confidence, 0.9, "and what it scored was high")
         # Nothing was written from it, so the book is the one that arrived.
+        self.assertEqual(read(path).title, "The Masque of the Red Death")
+
+    def test_the_source_s_casing_of_the_title_is_not_written_over_the_files_own(self):
+        """CBO-69: a match the comparison calls perfect is not a reason to rewrite.
+
+        The frozen volume `du6sYyygMgIC` spells the title `The Masque Of The Red
+        Death` where the file spells it `The Masque of the Red Death`. The five
+        frozen volumes collapse to this one Work, and a file sharing its own
+        `2013-01-29` date makes it the whole pool at a score of 1.0000, so the
+        band is strong and everything else the volume holds is written.
+
+        The title is not. A difference the comparison cannot see is not a change,
+        and the source's capital `O` is a spelling rather than a fact about the
+        book. This has to be the frozen fixture: the live recording spells all
+        twenty of its volumes `of`, so a re-record is what would have made the
+        case unreachable rather than a fix. `hand-made/README.md` names this
+        volume as this ticket's whole reproduction.
+        """
+        path = write_epub(
+            self.folder / "The Masque of the Red Death.epub",
+            """    <dc:title>The Masque of the Red Death</dc:title>
+    <dc:creator>Edgar Allan Poe</dc:creator>
+    <dc:language>en</dc:language>
+    <dc:date>2013-01-29</dc:date>
+""",
+            version="2.0",
+        )
+        source = GoogleBooks(
+            "a-key",
+            transport=GoogleReplay("poe-core-cases.json", folder=GOOGLE_HAND_MADE),
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.confidence, 1.0, "the volume is the file's own date")
+        self.assertEqual(
+            [change.field for change in outcome.changed if change.field == "title"],
+            [],
+            "the difference in the capital is not a change",
+        )
         self.assertEqual(read(path).title, "The Masque of the Red Death")
 
     def test_the_original_is_kept_before_google_books_values_are_written(self):
