@@ -1,0 +1,52 @@
+{
+  "data": {
+    "editions": [
+      {
+        "title": "The Infirmary",
+        "isbn_13": "9781799729945",
+        "isbn_10": "179972994X",
+        "reading_format_id": 2,
+        "publisher": {
+          "name": "Audible Studios on Brilliance"
+        },
+        "release_date": "2019-02-10",
+        "image": {
+          "url": "https://assets.hardcover.app/editions/31223073/3246324269708276.jpg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 1198266,
+          "title": "The Infirmary",
+          "description": "** THE PREQUEL TO THE #1 INTERNATIONAL BESTSELLER HOLY ISLAND ** No man is an island...",
+          "release_date": "2019-02-10",
+          "image": {
+            "url": "https://assets.hardcover.app/editions/31223073/3246324269708276.jpg"
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 318638,
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 11,
+              "series": {
+                "id": 23832,
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

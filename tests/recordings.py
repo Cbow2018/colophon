@@ -366,6 +366,10 @@ SKIPPED = {
         "hand-made: the CBO-90 case, an Edition the source states is Audio dated "
         "earliest; no live reply labels anything Audio"
     ),
+    "hardcover/hand-made/audio-edition-by-isbn.json": (
+        "hand-made: the same CBO-90 case as an ISBN reply; no live reply labels "
+        "anything Audio"
+    ),
 }
 
 # Where a fixture of each source lives, under `tests/fixtures/`.
