@@ -5,6 +5,7 @@
         "title": "Cragside",
         "isbn_13": "9781521748831",
         "isbn_10": "1521748837",
+        "reading_format_id": 1,
         "publisher": {
           "name": "Independently Published"
         },

@@ -273,6 +273,7 @@ query BookByIsbn13($isbn: String!) {
     isbn_10_valid
     isbns_match
     edition_format
+    reading_format_id
     pages
     release_date
     publisher {
@@ -430,6 +431,7 @@ which both traverse `book { contributions { author { name } } }` and `book_serie
         "isbn_10_valid": true,
         "isbns_match": true,
         "edition_format": "hardcover",
+        "reading_format_id": 1,
         "pages": 541,
         "release_date": "2006-07-17",
         "publisher": {
@@ -481,9 +483,10 @@ which both traverse `book { contributions { author { name } } }` and `book_serie
 | All key names, nesting, and `null` vs `[]` placement | **Documented** — [Editions](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Editions.mdx), [Book Series](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/BookSeries.mdx), [Languages](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Languages.mdx) |
 | ISBN `9780765311788` ↔ "Mistborn - The Final Empire" ↔ "Brandon Sanderson" | **Documented** (as `isbn_meta` output quoted by Hardcover) — [ISBN and ASIN](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/librarians/Resources/ISBNAndASIN.mdx) |
 | `edition_format: "hardcover"` as a legal value | **Documented** — [Editions schema](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Editions.mdx) ("hardcover, paperback, ebook, audiobook") |
+| `reading_format_id: 1` as a legal value | **Documented as `Int!`, never null** — [Editions schema](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Editions.mdx) (1 = Physical, 2 = Audio, 3 = Both, 4 = Ebook). **Observed** in **CBO-90**'s build session, which asked for it live for the first time: every Edition of a re-recorded fixture carries it — 40 of them, 32 × 1 and 8 × 4 — and the 6 Editions without it are all in hand-made fixtures, which are never re-recorded. **It is not a reliable statement of what an Edition is**: Hardcover labels `9781799729945`, the Audible Studios on Brilliance recording of *The Infirmary*, `4` (Ebook) with `edition_format: "Kindle"`, and no Edition on the title path came back `2` (Audio) or `3` (Both). Only a stated `2` may be acted on. |
 | `contribution: "Author"` as a legal value | **Documented** — [Contributions schema](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Contributions.mdx) |
 | `code2: "en"` / `code3: "eng"` format | **Documented as ISO 639-1 / 639-2** — [Languages schema](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Languages.mdx) |
-| `id`, `slug`, `pages`, `release_date`, `publisher`, `subtitle`, `isbn_10`, `isbns_match`, series name/position, `details`, `featured`, `compilation` | **Illustrative** — plausible values, not a captured record |
+| `id`, `slug`, `pages`, `release_date`, `publisher`, `subtitle`, `isbn_10`, `isbns_match`, `reading_format_id`, series name/position, `details`, `featured`, `compilation` | **Illustrative** — plausible values, not a captured record |
 | Whole-book `id: 328491` and edition `id: 21953653` | **Illustrative here**; those two IDs appear elsewhere in the docs as an Oathbringer example ([Books](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/GraphQL/Schemas/Books.mdx), [Getting Book Details](https://raw.githubusercontent.com/hardcoverapp/hardcover-docs/main/src/content/docs/api/guides/GettingBookDetails.mdx)), not as Mistborn |
 
 Note the top-level shape: results are under `data.editions` — an **array**, because the root field

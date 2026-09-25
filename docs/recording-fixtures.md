@@ -229,6 +229,7 @@ mask is the same for every Google request and is not repeated here.
 | `by-title-belsay.json` | Hardcover | `{"titles": ["Belsay"], "language": "en"}` |
 | `by-title-the-infirmary.json` | Hardcover | `{"titles": ["The Infirmary"], "language": "en"}` |
 | `by-title-poe.json` | Google | `intitle:"The Masque of the Red Death" inauthor:"Edgar Allan Poe"` `langRestrict=en` `maxResults=40` |
+| `by-title-poe.json` | Hardcover | `{"titles": ["The Masque of the Red Death"], "language": "en"}` |
 | `by-title-cragside.json` | Google | `intitle:"Cragside" inauthor:"L. J. Ross"` `langRestrict=en` `maxResults=40` |
 | `by-title-cragside-other-fields.json` | Google | `intitle:"Cragside" inauthor:"L. J. Ross"` `langRestrict=en` `maxResults=40` |
 | `by-title-berwick.json` | Google | `intitle:"Berwick" inauthor:"L. J. Ross"` `langRestrict=en` `maxResults=40` |
@@ -253,8 +254,7 @@ mask is the same for every Google request and is not repeated here.
 | `by-isbn-9781529196382-packed-genres.json` | Hardcover | `{"isbn": "9781529196382"}` |
 | `by-isbn-9781529978940-genres.json` | Hardcover | `{"isbn": "9781529978940"}` |
 | `by-isbn-berwick-authors.json` | Hardcover | `{"isbn": "9781529978940"}` |
-| `by-isbn-9781799729945-genres.json` | Hardcover | `{"isbn": "9781799729945"}` |
-| `by-isbn-the-infirmary-authors.json` | Hardcover | `{"isbn": "9781799729945"}` |
+| `by-isbn-9781792780844-genres.json` | Hardcover | `{"isbn": "9781792780844"}` |
 | `by-isbn-edition-title.json` | Hardcover | `{"isbn": "9780007458424"}` |
 | `by-isbn-9781473225374-genres.json` | Hardcover | `{"isbn": "9781473225374"}` |
 | `by-title-the-infirmary-other-fields.json` | Hardcover | `{"titles": ["The Infirmary"], "language": "en"}` |

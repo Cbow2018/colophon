@@ -59,6 +59,18 @@ scoped against this key.
   placements that conflict are two Works. The Edition it kept was chosen before
   anything was scored, so the pool lost the record that agreed with the file.
   `test_the_pool_is_what_picks_the_record_that_gets_written` is the case.
+- **Prefer ebook Editions in the Standard Edition order** (CBO-90). Rejected. It
+  would put format ahead of date in the order above and make "standard" mean "the
+  ebook", which no source states reliably: asked live, Hardcover labelled 40
+  Editions in the re-recorded fixtures and only 8 of them ebook, one of which was
+  a recording of an audiobook. Leaving the order alone and never writing an ISBN
+  from a title match closes the risk without a rule that reads a field the source
+  gets wrong.
+- **Do not write a non-ebook Edition's ISBN, and keep the rest of its values**
+  (CBO-90). Rejected, because the same Edition's publisher, date and cover would
+  still be written, and a hardback's ISBN is the allowance the ISBN path already
+  makes - so the rule would have to name which formats count and would still
+  write from an Edition the source had mislabelled.
 
 ## Consequences
 
@@ -67,9 +79,14 @@ scoped against this key.
 - A Work becomes a pool of one, graded against `singleton_score`. A dated file
   whose Edition isn't the earliest therefore stays medium without an LLM. This is
   accepted, and the figures are on CBO-76.
-- Every format is an Edition, so the Standard Edition can be an audiobook or a
-  hardback, and its ISBN, publisher and date are written to an EPUB when the file
-  has none. This is CBO-90.
+- Every format is an Edition, but the title path writes no ISBN, so the Standard
+  Edition's ISBN cannot reach an ebook that has none (CBO-90). Its publisher,
+  date and cover are still filled, and the ISBN path keeps the allowance it has
+  always made, where an ISBN identifies one Edition and is written only when it
+  is what recognised the book. An Edition the source states has an audio Reading
+  Format is dropped by the source client before this rule sees it, on the title
+  path and the ISBN path alike, so a Work listed only as audio offers no
+  candidate at all. The Standard Edition can still be a hardback or a paperback.
 - Source Priority decides between two Editions of one Work that share a date, so
   the trust order now reaches a value that gets written. That is deliberate: it
   is the one tiebreak a user can see and change.

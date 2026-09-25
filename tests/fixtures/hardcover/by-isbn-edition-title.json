@@ -4,6 +4,7 @@
       {
         "isbn_13": "9780007458424",
         "isbn_10": "0007458428",
+        "reading_format_id": 1,
         "title": "The Hobbit",
         "publisher": {
           "name": "HarperCollins Children's Books"

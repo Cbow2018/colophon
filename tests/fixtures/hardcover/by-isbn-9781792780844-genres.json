@@ -2,15 +2,16 @@
   "data": {
     "editions": [
       {
-        "isbn_13": "9781799729945",
-        "isbn_10": "179972994X",
-        "title": "The Infirmary",
+        "isbn_13": "9781792780844",
+        "isbn_10": "1792780842",
+        "reading_format_id": 1,
+        "title": "The Infirmary: A DCI Ryan Mystery",
         "publisher": {
-          "name": "Audible Studios on Brilliance"
+          "name": "Independently Published"
         },
-        "release_date": "2019-02-10",
+        "release_date": "2019-01-01",
         "image": {
-          "url": "https://assets.hardcover.app/editions/31223073/3246324269708276.jpg"
+          "url": "https://assets.hardcover.app/edition/32320911/3b70603313d31991e18e6107daae2db42ac9e253.jpeg"
         },
         "language": {
           "language": "English",

@@ -4,6 +4,7 @@
       {
         "isbn_13": "9781529196382",
         "isbn_10": "1529196388",
+        "reading_format_id": 1,
         "title": "The Trial",
         "publisher": {
           "name": "Century"

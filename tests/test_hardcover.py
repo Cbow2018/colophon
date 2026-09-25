@@ -639,7 +639,11 @@ class GenreTests(unittest.TestCase):
     """
 
     CRAGSIDE_GENRES = "9781521748831"
-    THE_INFIRMARY_GENRES = "9781799729945"
+    # The print Edition, not the Audible Studios on Brilliance one: CBO-90 moved
+    # this test to the recording made against the print Edition the live title
+    # reply keeps as the Standard Edition. `9781799729945` is not refused - the
+    # source labels it `reading_format_id: 4`, not Audio.
+    THE_INFIRMARY_GENRES = "9781792780844"
     PYRAMIDS = "9780575064843"
     THE_TRIAL = "9781529196382"
     NO_EDITION = "9781473225374"
@@ -681,7 +685,7 @@ class GenreTests(unittest.TestCase):
         one genre this book brings that the other did not, which is the whole
         complaint the ticket exists for.
         """
-        book = self.source("by-isbn-9781799729945-genres.json").by_isbn(
+        book = self.source("by-isbn-9781792780844-genres.json").by_isbn(
             self.THE_INFIRMARY_GENRES
         )
 
@@ -859,6 +863,104 @@ class QueryFieldTests(unittest.TestCase):
         replay = Replay()
         Hardcover(TOKEN, transport=replay).by_isbn(CRAGSIDE)
         return replay.sent["body"]["query"]
+
+
+class AudioEditionTests(unittest.TestCase):
+    """CBO-90: an Edition the source states is Audio is not offered as a candidate.
+
+    The signal is `reading_format_id`, which both shipped queries ask for: 2 is
+    Audio. Only 2 excludes, so an Edition stated physical, both or ebook stays
+    eligible, and so does one whose reply predates the field.
+
+    The reply is hand-made because no live one can carry the case: Hardcover
+    labels *The Infirmary*'s Audible Studios on Brilliance Edition
+    `reading_format_id: 4`, and no Edition on any recorded title path is stated
+    Audio. See `fixtures/hardcover/hand-made/README.md`.
+    """
+
+    THE_AUDIO_EDITION = "9781799729945"
+
+    def source(self, replay):
+        return Hardcover(TOKEN, transport=replay)
+
+    def test_an_audio_edition_is_not_offered(self):
+        """The Audio Edition is dated earliest, so D15 would otherwise choose it."""
+        replay = Replay("audio-edition-earliest.json", folder=HAND_MADE)
+
+        candidates = self.source(replay).by_title([THE_INFIRMARY_TITLE], "en")
+
+        self.assertNotIn(
+            self.THE_AUDIO_EDITION,
+            [candidate.isbn for candidate in candidates],
+        )
+
+    def test_an_audio_edition_is_an_isbn_hardcover_does_not_have(self):
+        """So the caller asks the next source, and then falls back to the title."""
+        replay = Replay("audio-edition-only.json", folder=HAND_MADE)
+
+        self.assertIsNone(self.source(replay).by_isbn(self.THE_AUDIO_EDITION))
+
+
+class ReadingFormatTests(unittest.TestCase):
+    """CBO-90: only an Edition the source states is Audio is dropped.
+
+    The reply is built here rather than recorded, because what each value of
+    `reading_format_id` means is the schema's, and a recording can only hold the
+    one value Hardcover happened to store. What the committed corpus does show is
+    the other half: no recorded title path states Audio at all.
+    """
+
+    THE_AUDIO_EDITION = "9781799729945"
+
+    def reply(self, **edition):
+        """One edition's worth of a title reply, with whatever the test sets."""
+        return [
+            {
+                "title": "The Infirmary",
+                "isbn_13": self.THE_AUDIO_EDITION,
+                "publisher": {"name": "Audible Studios on Brilliance"},
+                "release_date": "2019-02-10",
+                "language": {"code2": "en"},
+                "book": {"id": 1198266, "title": "The Infirmary"},
+                **edition,
+            }
+        ]
+
+    def source(self, editions):
+        payload = json.dumps({"data": {"editions": editions}}).encode("utf-8")
+        return Hardcover(TOKEN, transport=answering(200, payload))
+
+    def test_the_other_reading_formats_stay_eligible(self):
+        """1 physical, 3 both, 4 ebook and an unstated one are all offered.
+
+        3 is the value Q11 keeps eligible: an Edition that is both physical and
+        audio is not excluded until a real Work shows it causing a wrong write.
+        """
+        for stated in (1, 3, 4, None):
+            with self.subTest(reading_format_id=stated):
+                given = {} if stated is None else {"reading_format_id": stated}
+
+                candidates = self.source(self.reply(**given)).by_title(
+                    [THE_INFIRMARY_TITLE], "en"
+                )
+                found = self.source(self.reply(**given)).by_isbn(self.THE_AUDIO_EDITION)
+
+                self.assertEqual(
+                    [candidate.isbn for candidate in candidates],
+                    [self.THE_AUDIO_EDITION],
+                )
+                self.assertIsNotNone(found)
+                self.assertEqual(found.isbn, self.THE_AUDIO_EDITION)
+
+    def test_only_a_stated_two_is_dropped(self):
+        candidates = self.source(self.reply(reading_format_id=2)).by_title(
+            [THE_INFIRMARY_TITLE], "en"
+        )
+
+        self.assertEqual(candidates, [])
+        self.assertIsNone(
+            self.source(self.reply(reading_format_id=2)).by_isbn(self.THE_AUDIO_EDITION)
+        )
 
 
 class GenreSplitTests(unittest.TestCase):

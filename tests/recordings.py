@@ -51,7 +51,13 @@ NO_EDITION_ISBN = "9789999999991"
 NORMAL_PEOPLE_ISBN = "9780571334650"
 MISTBORN_ISBN = "9780765311788"
 THE_HOBBIT_ISBN = "9780007458424"
-THE_INFIRMARY_ISBN = "9781799729945"
+# *The Infirmary*'s print Edition. It stops naming the Audible Studios on
+# Brilliance ISBN, `9781799729945`: the genres recording made against it moved to
+# this Edition, and the authors one was retired with its row (CBO-90, settled in
+# review). Hardcover does not label that Edition Audio - it says
+# `reading_format_id: 4` - so the client still offers it, and the recordings went
+# because their readers did.
+THE_INFIRMARY_ISBN = "9781792780844"
 BERWICK_ISBN = "9781529978940"
 PYRAMIDS_ISBN = "9780575064843"
 THE_TRIAL_ISBN = "9781529196382"
@@ -270,13 +276,7 @@ RECORDINGS = (
     },
     {
         "source": "hardcover",
-        "fixture": "by-isbn-9781799729945-genres.json",
-        "lookup": "isbn",
-        "isbn": THE_INFIRMARY_ISBN,
-    },
-    {
-        "source": "hardcover",
-        "fixture": "by-isbn-the-infirmary-authors.json",
+        "fixture": "by-isbn-9781792780844-genres.json",
         "lookup": "isbn",
         "isbn": THE_INFIRMARY_ISBN,
     },
@@ -363,6 +363,15 @@ SKIPPED = {
     "hardcover/hand-made/two-series-featured-last.json": (
         "hand-made: a reply whose featured series is last, freezing that the "
         "client picks it out by the flag rather than by taking the first row"
+    ),
+    "hardcover/hand-made/audio-edition-earliest.json": (
+        "hand-made: the CBO-90 case, an Edition the source states is Audio dated "
+        "earliest; no live reply labels anything Audio"
+    ),
+    "hardcover/hand-made/audio-edition-only.json": (
+        "hand-made: the CBO-90 case where the only Edition is an Audio one, read "
+        "as both an ISBN reply and a title reply, since the two shipped queries "
+        "select the same Edition fields; no live reply labels anything Audio"
     ),
 }
 

@@ -109,6 +109,13 @@ the question. Freezing the sparse reply makes the client's behaviour on a sparse
 reply a permanent claim instead of a side effect of what one recording happened to
 contain.
 
+## The CBO-90 case: an Edition the source states is Audio
+
+| File | Reads it | The case, and why a live recording cannot carry it |
+| --- | --- | --- |
+| `audio-edition-earliest.json` | `AudioEditionTests.test_an_audio_edition_is_not_offered`, `StandardEditionTests.test_the_title_path_writes_no_isbn_even_when_an_audio_edition_is_dropped` | The three Work 1198266 Editions of *The Infirmary* out of the live `by-title-the-infirmary.json`, with the Audio Edition `9781799729945` dated **earliest** (`2018-12-01`, where the live reply says `2019-02-10`) so that CBO-68's Standard Edition rule would choose it. **No live reply can carry this case**: Hardcover labels `9781799729945`, the Audible Studios on Brilliance Edition, as `reading_format_id: 4` (Ebook) with `edition_format: "Kindle"`, and none of the 28 Editions on the title path is stated Audio. The live reply's date is the one value this file invents; the dates of the other Editions are the real recording's, which is what leaves the print Edition the Standard Edition once the Audio one is dropped. |
+| `audio-edition-only.json` | `AudioEditionTests.test_an_audio_edition_is_an_isbn_hardcover_does_not_have`, `StandardEditionTests.test_a_work_hardcover_lists_only_as_audio_offers_nothing` | The CBO-90 case where the Work's only Edition is an Audio one: the widened `QUERY`'s fields for `9781799729945`, out of `by-isbn-9781799729945-genres.json` as it stood before that recording was superseded, with `reading_format_id: 2`. The same body answers a title reply, because the two shipped queries select the same Edition fields. Two cases rest on it: Q10's, an ISBN Hardcover lists only as an Audio Edition is an ISBN it does not have, and §8 test 4's, a Work with nothing but an Audio Edition offers no candidate at all. |
+
 ## What is not here
 
 The re-recordable ISBN and title recordings stay in the parent directory, even the

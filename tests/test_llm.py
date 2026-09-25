@@ -939,7 +939,8 @@ class ChooserTests(unittest.TestCase):
         self.assertFalse(outcome.matched)
         self.assertTrue(outcome.unverified)
 
-    def test_a_remembered_reply_picks_the_candidate_and_writes_only_its_values(self):
+    def test_the_picked_candidate_is_the_one_written_from(self):
+        """The model's pick is what the book is written from, and its ISBN is not."""
         path = self.book()
         llm = self.llm("belsay-picked.json")
 
@@ -948,7 +949,10 @@ class ChooserTests(unittest.TestCase):
         self.assertTrue(outcome.matched)
         self.assertEqual(outcome.source, "hardcover")
         self.assertEqual(read(path).title, "Belsay")
-        self.assertEqual(read(path).isbn, BELSAY_RECORD.isbn)
+        self.assertIsNone(
+            read(path).isbn,
+            "the model chose a record by title, so no ISBN is written (CBO-90)",
+        )
 
     def test_the_outcome_says_the_llm_chose_and_at_what_confidence(self):
         """The number is the model's own, on its own scale, and the line says so."""
