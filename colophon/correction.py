@@ -575,7 +575,14 @@ class Corrector:
                     path, [(source.name, str(error))], f"ISBN {book.isbn}"
                 )
             if found is not None:
-                return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
+                return self._write(
+                    path,
+                    found,
+                    CONFIDENCE,
+                    isbn=book.isbn,
+                    book=book,
+                    isbn_identifies=True,
+                )
 
         if not search_titles(book.title):
             return self._unverified(path, book, None, tried)
@@ -858,12 +865,27 @@ class Corrector:
             )
         return self._hold(path, "; ".join(phrases))
 
-    def _write(self, path, found, confidence=None, isbn=None, book=None, llm=None):
+    def _write(
+        self,
+        path,
+        found,
+        confidence=None,
+        isbn=None,
+        book=None,
+        llm=None,
+        isbn_identifies=False,
+    ):
         """Back the original up, then write what the source is sure of.
 
         `found` carries the source it came from, so nothing here has to be told
         where the values are from. `isbn` is set only when an ISBN is what
         recognised the book, because that is what the log line then reports.
+
+        `isbn_identifies` says whether that ISBN is what recognised the book, and
+        it is what makes the ISBN a field the title path may write: a source
+        whose record was reached by title has not been shown to be an Edition of
+        this book, so its ISBN is not written over - or into - a file that was
+        found some other way (§3 of CBO-90's note, and CBO-92).
 
         `found` is None when no source matched: there is nothing to write from,
         and the only thing this pass has to say is that the book is unverified.
@@ -891,7 +913,9 @@ class Corrector:
         standards = self._standards(found)
         if standards is not None:
             found = standards.applied_to(found)
-        edits = self._edits(found, book, unverified=unverified)
+        edits = self._edits(
+            found, book, unverified=unverified, isbn_identifies=isbn_identifies
+        )
         # The genres are mapped before anything is decided, because the answer is
         # part of what the book is written with.
         genres, mappings = (), ()
@@ -1159,7 +1183,7 @@ class Corrector:
             genres=genres,
         )
 
-    def _edits(self, found, book, unverified=False):
+    def _edits(self, found, book, unverified=False, isbn_identifies=False):
         """The fields this source's record is allowed to write, and no others.
 
         Each field is decided on its own, which is what the config is for: a book
@@ -1167,6 +1191,13 @@ class Corrector:
         the other way round. `fill` is judged against the file, so a field the
         file already carries is left as it is; `overwrite` writes the source's
         value whenever the source has one.
+
+        The ISBN is the one field whose rule is not enough on its own. A title
+        path's match is an Edition that agrees with the file, not one shown to be
+        the same edition, so its ISBN says nothing about this file and is not
+        written into it: a book with no ISBN keeps none, and a book whose own
+        ISBN no source has keeps that one under `overwrite` too (CBO-90, CBO-92).
+        `isbn_identifies` is true only when an ISBN is what recognised the book.
 
         A field the source said nothing about is written by no rule at all: `fill`
         on a field a source is silent about is not a blank, and a source with no
@@ -1210,6 +1241,11 @@ class Corrector:
         for name in KNOWN_FIELDS:
             rule = self.fields.get(name, "skip")
             value = getattr(found, name, None)
+            if name == "isbn" and not isbn_identifies:
+                # Not written on the title path whatever the rule says, and set
+                # rather than skipped so that a field the source does state is
+                # excluded by the same line as one it does not.
+                value = None
             if name == "authors":
                 value = tuple(value or ()) or None
             if rule == "skip" or not value:

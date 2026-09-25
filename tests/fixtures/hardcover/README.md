@@ -40,15 +40,19 @@ these recordings are the ISBN query widened to ask for `authors.id` and
 | --- | --- | --- | --- |
 | `by-isbn-cragside-authors.json` | 9781521748831 | *Cragside*, author id 318638 `L.J. Ross`, series id 23832 `DCI Ryan Mysteries` | recorded |
 | `by-isbn-berwick-authors.json` | 9781529978940 | *Berwick*, the same two ids | recorded |
-| `by-isbn-the-infirmary-authors.json` | 9781799729945 | *The Infirmary*, the same two ids | recorded |
 | `author-lj-ross.json` | — | the `authors` row itself: id 318638, `alternate_names: []`, `canonical_id: null`, `alias_id: null` | recorded |
 | `authors-spelling-variants.json` | — | three separate author rows for one person: 318638 `L.J. Ross`, 350233 `L. J. Ross`, 350235 `LJ Ross` | recorded |
 | `works-good-omens-authors.json` | — | one work called *Good Omens* spelt `Terry Pratchett`, another spelt `Terry David John Pratchett`, and a third with the two authors in a different order | recorded |
 
-Three DCI Ryan books carry the same author id and the same series id, which is
-what makes an id worth recording: it is a stable identity for a person across
-books, and it is what CBO-41 anchors a standard to. What the fixtures **do not**
-show is the id resolving a spelling difference — **no committed recording has one
+`by-isbn-the-infirmary-authors.json` was the third of these, recorded against the
+Audible Studios on Brilliance ISBN `9781799729945`. **CBO-90 retired it**, along
+with its `RECORDINGS` row: the client no longer offers that Audio Edition as a
+candidate, and its ISBN answers nothing on the ISBN path.
+
+Two DCI Ryan books carry the same author id and the same series id, which is what
+makes an id worth recording: it is a stable identity for a person across books,
+and it is what CBO-41 anchors a standard to. What the fixtures **do not** show is
+the id resolving a spelling difference — **no committed recording has one
 author id under two spellings**, and the two works in
 `works-good-omens-authors.json` are two different ids (`Terry Pratchett` is
 227859, `Terry David John Pratchett` is 1566154).
@@ -90,6 +94,11 @@ record has the same ids the live API gave.
 
 ## CBO-42: the genres
 
+*The Infirmary*'s row names `9781792780844`, its print Edition. It named the
+Audible Studios on Brilliance ISBN `9781799729945` until **CBO-90**: that Edition
+is an Audio Edition, so `by_isbn` no longer answers with it, and the genres test
+moved to the Edition the client does offer.
+
 CBO-42 (genre mapping) maps a source's genres onto the user's own tag list, so a
 library does not collect `Murder`, `Crime`, `Thriller` and `Mystery` as four tags
 for one kind of book. Hardcover keeps genres in `books.cached_tags`, reached from
@@ -100,7 +109,7 @@ through a real `Hardcover` client.
 | File | ISBN | What it is | How |
 | --- | --- | --- | --- |
 | `by-isbn-9781521748831-genres.json` | 9781521748831 | *Cragside*, Genre `Murder`, `Crime`, `Thriller`, `Mystery` | recorded |
-| `by-isbn-9781799729945-genres.json` | 9781799729945 | *The Infirmary*, Genre `Thriller`, `Crime`, `Suspense`, `Mystery` | recorded |
+| `by-isbn-9781792780844-genres.json` | 9781792780844 | *The Infirmary*, Genre `Thriller`, `Crime`, `Suspense`, `Mystery` | recorded |
 | `by-isbn-9781529978940-genres.json` | 9781529978940 | *Berwick*, Genre **`Fiction`** alone | recorded |
 | `by-isbn-9780575064843-packed-genres.json` | 9780575064843 | *Pyramids*, ten Genre tags including the packed `Fantasy:Humour` and `Humor` beside `Humour` | recorded |
 | `by-isbn-9781529196382-packed-genres.json` | 9781529196382 | *The Trial*, Genre `Mystery`, `Thriller & Suspense:Crime Fiction`, `Fiction` | recorded |

@@ -109,6 +109,12 @@ the question. Freezing the sparse reply makes the client's behaviour on a sparse
 reply a permanent claim instead of a side effect of what one recording happened to
 contain.
 
+## The CBO-90 case: an Edition the source states is Audio
+
+| File | Reads it | The case, and why a live recording cannot carry it |
+| --- | --- | --- |
+| `audio-edition-earliest.json` | `AudioEditionTests.test_an_audio_edition_is_not_offered`, `AudioEditionTests.test_the_standard_edition_is_chosen_from_the_editions_that_remain` | The three Work 1198266 Editions of *The Infirmary* out of the live `by-title-the-infirmary.json`, with the Audio Edition `9781799729945` dated **earliest** (`2018-12-01`) so that CBO-68's Standard Edition rule would choose it. **No live reply can carry this case**: Hardcover labels `9781799729945`, the Audible Studios on Brilliance Edition, as `reading_format_id: 4` (Ebook) with `edition_format: "Kindle"`, and none of the 28 Editions on the title path is stated Audio. The dates of the other two Editions are the real recording's. |
+
 ## What is not here
 
 The re-recordable ISBN and title recordings stay in the parent directory, even the

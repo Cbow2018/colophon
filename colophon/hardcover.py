@@ -181,14 +181,19 @@ class Hardcover:
         return cls(_without_bearer(token), **kwargs) if token else None
 
     def by_isbn(self, isbn):
-        """The book carrying this ISBN, or None when Hardcover has no such edition."""
+        """The book carrying this ISBN, or None when Hardcover has no such edition.
+
+        An ISBN Hardcover lists only as an Audio Edition is an ISBN it does not
+        have, so the caller moves on to the next source and then to the title
+        fallback, which keeps the file's own ISBN.
+        """
         isbn = str(isbn).strip()
         payload = self._ask({"query": QUERY, "variables": {"isbn": isbn}})
         editions = _dig(payload, "data", "editions")
         if editions is None:
             # An answer without the field we asked for is not an answer.
             raise SourceError("Hardcover's reply did not contain any editions")
-        if not editions:
+        if not editions or _is_audio(editions[0]):
             return None
         return _candidate(editions[0], isbn)
 
@@ -360,8 +365,25 @@ def _candidates(editions):
     second place, choosing by reply order. The ISBN, the publisher and the date
     are the edition's, and dropping an edition here is what made the value written
     to a file depend on which one Hardcover happened to list first.
+
+    An Edition the source states is Audio is the one exception, and it is dropped
+    before the matcher can group it: a file Colophon corrects is never an
+    audiobook, so an Audio Edition is no answer for the Work whatever date it
+    carries, and the rule is stated once here rather than in every caller. The
+    drop is silent, because `hardcover` does no logging by design.
     """
-    return [_candidate(edition) for edition in editions]
+    return [_candidate(edition) for edition in editions if not _is_audio(edition)]
+
+
+def _is_audio(edition):
+    """Whether the source states an audio Reading Format for this edition.
+
+    `reading_format_id` is 1 physical, 2 audio, 3 both, 4 ebook, and the schema
+    marks it non-null. Only a stated 2 is acted on: a non-null column can carry a
+    default, so 1 is read as "not stated" rather than as proven print, and a reply
+    recorded before the query asked for the field reads as not stated too.
+    """
+    return edition.get("reading_format_id") == 2
 
 
 def _authors(book):

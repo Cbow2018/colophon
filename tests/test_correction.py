@@ -657,7 +657,14 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertEqual(book.publisher, "Somewhere Else", "and so is the publisher")
         self.assertEqual(book.date, "1999-01-01")
 
-    def test_filling_the_isbn_puts_the_source_s_isbn_into_a_book_with_none(self):
+    def test_the_isbn_is_not_written_into_a_book_that_has_none(self):
+        """The title path writes no ISBN, whatever its rule says (CBO-90).
+
+        The source's record was reached by title, so it is an Edition that agrees
+        with the file rather than one shown to be the same edition, and its ISBN
+        says nothing about this book. Before CBO-90 an `isbn = "fill"` wrote it,
+        which is how an Audio Edition's ISBN reached an EPUB.
+        """
         path = write_epub(
             self.folder / "Cragside.epub",
             """    <dc:title>Cragside: A DCI Ryan Mystery</dc:title>
@@ -678,9 +685,14 @@ class FieldRuleTests(CorrectionTestCase):
             ],
         )
 
-        self.corrector(source=source, rules=self.rules(isbn="fill")).correct(path)
+        outcome = self.corrector(source=source, rules=self.rules(isbn="fill")).correct(
+            path
+        )
 
-        self.assertEqual(read(path).isbn, ISBN)
+        self.assertIsNone(read(path).isbn)
+        self.assertEqual(
+            [change for change in outcome.changed if change.field == "isbn"], []
+        )
 
     def test_filling_the_isbn_leaves_the_one_the_file_already_has(self):
         path = self.book(
@@ -3661,7 +3673,10 @@ class StandardEditionTests(CorrectionTestCase):
 
         Before CBO-68 the client kept whichever Edition the reply listed first,
         so the ISBN written to the file was `9781799729945` - the `Audible
-        Studios on Brilliance` one - and the reply's order decided it.
+        Studios on Brilliance` one - and the reply's order decided it. CBO-68
+        resolves the tie; CBO-90 is why the ISBN below is now absent rather than
+        the Standard Edition's, since a title-path match is not shown to be this
+        book's edition.
         """
         path = self.write(
             "The Infirmary.epub",
@@ -3676,9 +3691,10 @@ class StandardEditionTests(CorrectionTestCase):
 
         self.assertTrue(outcome.matched, outcome.fragment())
         self.assertEqual(read(path).title, "The Infirmary")
+        self.assertIsNone(read(path).isbn, "no ISBN is written on the title path")
         self.assertEqual(
             [change.value for change in outcome.changed if change.field == "isbn"],
-            ["9781792780844"],
+            [],
         )
         self.assertEqual(
             [change.value for change in outcome.changed if change.field == "publisher"],
@@ -3708,10 +3724,61 @@ class StandardEditionTests(CorrectionTestCase):
 
         self.assertTrue(outcome.matched, outcome.fragment())
         self.assertEqual(outcome.confidence, 1.0)
+        self.assertIsNone(
+            read(path).isbn,
+            "no ISBN is written on the title path, the Reagon one included",
+        )
+
+    def test_the_title_path_writes_no_isbn_even_when_an_audio_edition_is_dropped(self):
+        """CBO-90: the file keeps no ISBN, and everything else comes from the Edition kept.
+
+        The reply is the hand-made one where the Audio Edition of *The Infirmary*
+        is the earliest, so CBO-68's rule would otherwise choose it. The rule
+        drops it before the pool is formed, and the title path writes no ISBN at
+        all - which holds however Hardcover labels an Edition, and is what makes
+        the acceptance criterion true by construction. The publisher, the date and
+        the cover are still filled, from the Standard Edition of what is left.
+        """
+        path = self.write(
+            "The Infirmary.epub",
+            """    <dc:title>The Infirmary</dc:title>
+    <dc:creator>L. J. Ross</dc:creator>
+    <dc:language>en</dc:language>
+""",
+        )
+        source = Hardcover(
+            "a-token",
+            transport=Replay("audio-edition-earliest.json", folder=HARDCOVER_HAND_MADE),
+        )
+        fetched = []
+
+        def a_cover(url):
+            fetched.append(url)
+            return COVER_FIXTURE.read_bytes()
+
+        outcome = self.corrector(source=source, fetch=a_cover).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        book = read(path)
+        self.assertIsNone(book.isbn, "the title path never writes an ISBN")
         self.assertEqual(
-            [change.value for change in outcome.changed if change.field == "isbn"],
-            ["9781408733363"],
-            "the Reagon Work's own Edition",
+            [change.value for change in outcome.changed if change.field == "isbn"], []
+        )
+        self.assertEqual(book.publisher, "Dark Skies Publishing")
+        self.assertEqual(book.date, "2018-12-01")
+        self.assertEqual(
+            fetched,
+            [
+                (
+                    "https://assets.hardcover.app/edition/30564808/"
+                    "e772d711777ceff8890d0060509f60fcdf706dc3.jpeg"
+                ),
+            ],
+            "the cover is the kept Edition's, never the Audio Edition's square one",
+        )
+        self.assertNotIn(
+            "Audible Studios on Brilliance",
+            [change.value for change in outcome.changed],
         )
 
     def test_a_tie_between_editions_is_broken_by_the_earliest_date(self):
@@ -3733,9 +3800,12 @@ class StandardEditionTests(CorrectionTestCase):
         outcome = self.corrector(source=source).correct(path)
 
         self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertIsNone(
+            read(path).isbn, "the title path writes no ISBN (CBO-90), the tie included"
+        )
         self.assertEqual(
-            [change.value for change in outcome.changed if change.field == "isbn"],
-            ["9781521748831"],
+            [change.value for change in outcome.changed if change.field == "date"],
+            ["2017-07-07"],
             "the 2017 original, not the 2021 large print",
         )
 
@@ -3757,6 +3827,10 @@ class StandardEditionTests(CorrectionTestCase):
         values each source order writes are asserted too. Berwick is the one book
         whose two source orders write a different Edition, which is Source
         Priority reached through the walk rather than the reply's order.
+
+        The ISBN is None in every one of them, whatever the source order: the
+        title path writes no ISBN (CBO-90), so the first value below is always
+        the absence of one.
         """
         cases = (
             {
@@ -3768,12 +3842,12 @@ class StandardEditionTests(CorrectionTestCase):
                 },
                 "writes": {
                     ("hardcover", "google_books"): (
-                        "9781521748831",
+                        None,
                         "Independently Published",
                         "2017-07-07",
                     ),
                     ("google_books", "hardcover"): (
-                        "9781521748831",
+                        None,
                         None,
                         "2017-07-07",
                     ),
@@ -3788,12 +3862,12 @@ class StandardEditionTests(CorrectionTestCase):
                 },
                 "writes": {
                     ("hardcover", "google_books"): (
-                        "9781529978940",
+                        None,
                         "Century",
                         "2026-02-26",
                     ),
                     ("google_books", "hardcover"): (
-                        "9781804960387",
+                        None,
                         "Penguin Group",
                         "2026-01-22",
                     ),
@@ -3808,11 +3882,11 @@ class StandardEditionTests(CorrectionTestCase):
                 },
                 "writes": {
                     ("hardcover", "google_books"): (
-                        "9781792780844",
+                        None,
                         "Independently Published",
                         "2019-01-01",
                     ),
-                    ("google_books", "hardcover"): ("9781792780844", None, "2019-02"),
+                    ("google_books", "hardcover"): (None, None, "2019-02"),
                 },
             },
             {
@@ -4091,6 +4165,9 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
         rather than marked. Before it, this reply was `colophon:unverified` and
         which edition was written from was whichever Google listed first. The
         ISBN path, below, is where an edition is recognised exactly.
+
+        The file carries no ISBN and leaves with none: a title-path match is not
+        shown to be this book's edition, so its ISBN is not written (CBO-90).
         """
         path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
         source = GoogleBooks("a-key", transport=GoogleReplay("by-title-cragside.json"))
@@ -4100,9 +4177,7 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
         self.assertTrue(outcome.matched, outcome.fragment())
         self.assertEqual(outcome.confidence, 1.0, "the reply was read and scored")
         self.assertIn("google_books", outcome.fragment())
-        self.assertEqual(
-            read(path).isbn, ISBN, "the file keeps its own ISBN either way"
-        )
+        self.assertIsNone(read(path).isbn)
 
     def test_the_real_google_books_answers_the_isbn_path(self):
         """The recording carries the ISBN that was asked about, so it is a match."""

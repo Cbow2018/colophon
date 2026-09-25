@@ -948,7 +948,10 @@ class ChooserTests(unittest.TestCase):
         self.assertTrue(outcome.matched)
         self.assertEqual(outcome.source, "hardcover")
         self.assertEqual(read(path).title, "Belsay")
-        self.assertEqual(read(path).isbn, BELSAY_RECORD.isbn)
+        self.assertIsNone(
+            read(path).isbn,
+            "the model chose a record by title, so no ISBN is written (CBO-90)",
+        )
 
     def test_the_outcome_says_the_llm_chose_and_at_what_confidence(self):
         """The number is the model's own, on its own scale, and the line says so."""

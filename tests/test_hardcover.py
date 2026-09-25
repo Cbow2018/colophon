@@ -639,7 +639,9 @@ class GenreTests(unittest.TestCase):
     """
 
     CRAGSIDE_GENRES = "9781521748831"
-    THE_INFIRMARY_GENRES = "9781799729945"
+    # The print Edition, not the Audio one: CBO-90 stopped the Audio Edition
+    # `9781799729945` being offered at all, so its ISBN answers no genres.
+    THE_INFIRMARY_GENRES = "9781792780844"
     PYRAMIDS = "9780575064843"
     THE_TRIAL = "9781529196382"
     NO_EDITION = "9781473225374"
@@ -681,7 +683,7 @@ class GenreTests(unittest.TestCase):
         one genre this book brings that the other did not, which is the whole
         complaint the ticket exists for.
         """
-        book = self.source("by-isbn-9781799729945-genres.json").by_isbn(
+        book = self.source("by-isbn-9781792780844-genres.json").by_isbn(
             self.THE_INFIRMARY_GENRES
         )
 
@@ -859,6 +861,36 @@ class QueryFieldTests(unittest.TestCase):
         replay = Replay()
         Hardcover(TOKEN, transport=replay).by_isbn(CRAGSIDE)
         return replay.sent["body"]["query"]
+
+
+class AudioEditionTests(unittest.TestCase):
+    """CBO-90: an Edition the source states is Audio is not offered as a candidate.
+
+    The signal is `reading_format_id`, which both shipped queries ask for: 2 is
+    Audio. Only 2 excludes, so an Edition stated physical, both or ebook stays
+    eligible, and so does one whose reply predates the field.
+
+    The reply is hand-made because no live one can carry the case: Hardcover
+    labels *The Infirmary*'s Audible Studios on Brilliance Edition
+    `reading_format_id: 4`, and no Edition on any recorded title path is stated
+    Audio. See `fixtures/hardcover/hand-made/README.md`.
+    """
+
+    THE_AUDIO_EDITION = "9781799729945"
+
+    def source(self, replay):
+        return Hardcover(TOKEN, transport=replay)
+
+    def test_an_audio_edition_is_not_offered(self):
+        """The Audio Edition is dated earliest, so D15 would otherwise choose it."""
+        replay = Replay("audio-edition-earliest.json", folder=HAND_MADE)
+
+        candidates = self.source(replay).by_title([THE_INFIRMARY_TITLE], "en")
+
+        self.assertNotIn(
+            self.THE_AUDIO_EDITION,
+            [candidate.isbn for candidate in candidates],
+        )
 
 
 class GenreSplitTests(unittest.TestCase):
