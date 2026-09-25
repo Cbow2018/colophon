@@ -556,6 +556,68 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertNotIn("title", {change.field for change in outcome.changed})
         self.assertEqual(read(path).title, "The Masque of the Red Death")
 
+    def test_a_title_the_comparison_almost_reads_as_the_files_own_is_still_written(
+        self,
+    ):
+        """Sameness is the key's equality, not a similarity the scorer forgives.
+
+        `The Masque of the Red Deaths` and `The Masque of the Red Death` score a
+        raw 0.9787, above the 0.97 dead band, so a write gated on the scorer's
+        own similarity would leave the typo on the file. The comparison keys
+        differ, so the title is a different one and the source's is written.
+        """
+        path = self.book(
+            metadata=f"""    <dc:title>The Masque of the Red Deaths</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+"""
+        )
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="The Masque of the Red Death",
+                authors=("L.J. Ross",),
+                isbn=ISBN,
+            )
+        )
+
+        outcome = self.corrector(
+            source=source, rules=self.rules(title="overwrite")
+        ).correct(path)
+
+        self.assertIn("title", {change.field for change in outcome.changed})
+        self.assertEqual(read(path).title, "The Masque of the Red Death")
+
+    def test_a_title_the_file_has_none_of_is_written(self):
+        """A missing title is not a title the file already carries.
+
+        The rule suppresses a write only between two values, so a file with no
+        `<dc:title>` at all takes the source's - which is `overwrite`'s oldest
+        job, and the one the rule must not quietly take over.
+        """
+        path = self.book(
+            metadata=f"""    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+"""
+        )
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Cragside",
+                authors=("L.J. Ross",),
+                isbn=ISBN,
+            )
+        )
+
+        outcome = self.corrector(
+            source=source, rules=self.rules(title="overwrite")
+        ).correct(path)
+
+        self.assertIn("title", {change.field for change in outcome.changed})
+        self.assertEqual(read(path).title, "Cragside")
+
     def test_a_spelling_the_record_decided_is_written_even_so(self):
         """CBO-69 decision 3: the rule is about what a source said, not the Record.
 
