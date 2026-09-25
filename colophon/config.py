@@ -93,8 +93,10 @@ _FALSE = ("false", "0", "no", "off")
 
 # The retry windows, as a number and a unit. `0` is the one bare number that is
 # a duration of its own - it says do not hold - and the units are lower case
-# only, so `24H` is a refusal rather than a guess at which one was meant.
-_DURATION = re.compile(r"(\d+)([mhd])?")
+# only, so `24H` is a refusal rather than a guess at which one was meant. The
+# digits are `[0-9]` rather than `\d`, which is Unicode-aware and would read
+# `٢٤h` as a duration.
+_DURATION = re.compile(r"([0-9]+)([mhd])?")
 _UNIT_SECONDS = {"m": 60, "h": 60 * 60, "d": 24 * 60 * 60}
 
 # The default window, written the two ways it is needed: a user copies the

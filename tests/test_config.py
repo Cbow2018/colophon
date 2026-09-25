@@ -4,8 +4,11 @@ import unittest
 from pathlib import Path
 
 from colophon.config import (
+    DEFAULT_RETRY,
+    DEFAULT_RETRY_SECONDS,
     FIELD_DEFAULTS,
     KNOWN_SOURCES,
+    Config,
     ConfigError,
     load_config,
 )
@@ -435,8 +438,6 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(
             config.allowed_genres, (), "and with no tags list, as it ships"
         )
-        self.assertEqual(config.source_retry, 86400, "the retry windows as they ship")
-        self.assertEqual(config.llm_retry, 86400)
         for name in (
             "add_cover",
             "strong_score",
@@ -449,9 +450,21 @@ class LoadConfigTests(unittest.TestCase):
         ):
             with self.subTest(setting=name):
                 self.assertIn(f"# {name} = ", written, "shown, and commented out")
-        for name in ("source_retry", "llm_retry"):
+        # The retry windows are the one pair `FIELD_DEFAULTS` cannot hold, so
+        # `test_the_rules_the_example_shows_are_the_ones_the_code_defaults_to`
+        # cannot guard them and this is the only thing standing between the value
+        # a user copies and the window the code ships. `DEFAULT_RETRY` is parsed
+        # rather than compared to `DEFAULT_RETRY_SECONDS`, which is a second
+        # literal of the same fact and can drift from the first.
+        for name, window in (
+            ("source_retry", config.source_retry),
+            ("llm_retry", config.llm_retry),
+        ):
             with self.subTest(setting=name):
-                self.assertIn(f'# {name} = "24h"', written, "shown, and commented out")
+                self.assertIn(
+                    f'# {name} = "{DEFAULT_RETRY}"', written, "shown, and commented out"
+                )
+                self.assertEqual(window, int(getattr(Config, name)))
 
     def test_the_rules_the_example_shows_are_the_ones_the_code_defaults_to(self):
         """Uncommenting the example has to be a no-op, not a change.
@@ -679,6 +692,9 @@ class RetryWindowTests(unittest.TestCase):
 
         self.assertEqual(config.source_retry, 86400)
         self.assertEqual(config.llm_retry, 86400)
+        # `DEFAULT_RETRY_SECONDS` is a second literal of the same fact as
+        # `DEFAULT_RETRY`, and only this says the two agree.
+        self.assertEqual(DEFAULT_RETRY_SECONDS, 86400)
 
     def test_a_number_and_a_suffix_are_read_as_seconds(self):
         self.assertEqual(self.load('"24h"').source_retry, 86400)
@@ -722,6 +738,18 @@ class RetryWindowTests(unittest.TestCase):
         ):
             with self.subTest(given=given), self.assertRaises(ConfigError):
                 self.load(given)
+
+    def test_digits_that_are_not_ascii_are_refused_too(self):
+        """`[0-9]` is the ten digits a user types; `\\d` is not, and `int` reads more.
+
+        Arabic-Indic, Extended Arabic-Indic and fullwidth digits each match
+        `\\d` and each convert, so `٢٤h` would set a 24-hour window without
+        saying so. The format is a number and a unit, and a number here is
+        ASCII: `str.isdigit` does not decide it, `[0-9]` does.
+        """
+        for given in ("٢٤h", "۲۴h", "２４h"):
+            with self.subTest(given=given), self.assertRaises(ConfigError):
+                self.load(f'"{given}"')
 
     def test_a_refusal_names_the_setting_it_came_from(self):
         """The two windows are read by the same parser, so it has to say which."""
