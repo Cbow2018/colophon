@@ -218,7 +218,8 @@ log_level = "INFO"
 
 # What to do with each metadata field when a source has the book. One rule each:
 #
-#   "overwrite" - write the source's value, whatever the file already says
+#   "overwrite" - write the source's value, unless the title the file has is the
+#                 same title the comparison reads the source's as
 #   "fill"      - write it only when the file has nothing for that field
 #   "skip"      - never write it; the file keeps what it came with
 #

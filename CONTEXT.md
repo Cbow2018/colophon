@@ -140,6 +140,10 @@ _Avoid_: fix, update, enrichment
 The user's choice, per field, of skip, fill if empty, or overwrite.
 _Avoid_: field policy, merge rule
 
+**Same Value**:
+A source's value and the file's own that differ only where the comparison does not look, so no rule writes between them: `The Masque Of The Red Death` and `The Masque of the Red Death` are the Same Value, and a title is written only when it is a different one. An author's value is the exception, because an author's identity is the Record's rather than the comparison's.
+_Avoid_: equal, identical (that is the characters), close (that is the Score)
+
 **Unverified**:
 The final state of a book with no confident Match: it keeps its own metadata, is tagged `colophon:unverified`, and says so at the end of its description. It is not retried.
 _Avoid_: unmatched, failed, skipped

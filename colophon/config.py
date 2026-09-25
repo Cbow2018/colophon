@@ -64,6 +64,13 @@ DEFAULT_MEDIUM_SCORE = 0.80
 # carries a value keeps it even when `overwrite` would have changed it. A field
 # here that no source can supply is not an error - `fill` on a field the source
 # is silent about simply writes nothing.
+#
+# A rule is judged against the file's own value as well as the source's, and
+# `overwrite` writes a value the file does not already carry in another form:
+# a title whose comparison key is the file's own is the same title, and is not
+# written over. An author is the exception - an author's identity is the
+# Record's business rather than the comparison's, so a spelling the Record
+# settled on always reaches the file. `correction._edits` states both in full.
 FIELD_DEFAULTS = (
     ("title", "overwrite"),
     ("authors", "overwrite"),

@@ -56,12 +56,13 @@ author id under two spellings**, and the two works in
 The id therefore does **not** merge 318638, 350233 and 350235 — those are three
 separate rows for one human, and nothing in the API says they are related
 (`canonical_id` and `alias_id` are null on all three). Neither does the id merge
-227859 and 1566154. What does merge some of them is the *name*: CBO-41's key for a
-spelling is `matching.normalise`'s output, and `L.J. Ross` (318638) and
-`L. J. Ross` (350233) both come out as `l j ross`, while `LJ Ross` (350235) is
-`lj ross`. So **`[authors]` in `config.toml` is the only merge for spellings that
-do not normalise together**, and CBO-41's test says so rather than implying the id
-solves it.
+227859 and 1566154. What merges them is the *name*, and it merges all three:
+CBO-41's key is `matching.normalise`'s output, and all three spellings —
+`L.J. Ross`, `L. J. Ross`, `LJ Ross` — come out as `lj ross`. (The key that
+splits `LJ Ross` from the other two is `comparison_text`'s, which is for
+comparison and never stored.) So **`[authors]` in `config.toml` is the only
+merge for spellings `normalise` keeps apart**, and CBO-41's test says so rather
+than implying the id solves it.
 
 The id was first looked for in the `authors` root field, where **`_ilike` is
 refused** — `{"error":"ilike and related operations are not permitted on this

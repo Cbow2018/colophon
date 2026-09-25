@@ -38,6 +38,7 @@ from colophon.matching import (
     FileBook,
     Ranked,
     band_of,
+    comparison_text,
     dedupe,
     primary_language,
     rank,
@@ -1171,6 +1172,20 @@ class Corrector:
         on a field a source is silent about is not a blank, and a source with no
         publisher has not offered an empty one.
 
+        `overwrite` writes a title the file does not already carry in another
+        form: a title whose comparison key is the file's own is the same title,
+        and nothing is written between two of those. That is what the score
+        already says - a title scoring 1.0000 is one the comparison read as
+        identical - so a rule that wrote it anyway would put a capital onto a
+        correct title because a comparison called the two the same.
+
+        The test is the comparison's own reader rather than the scorer's dead
+        band, which is a different question: at 0.97 the band calls `The Masque
+        of the Red Deaths` the same title as `The Masque of the Red Death`, and a
+        write gated on that would keep a file's typo. Identity is equality of
+        keys; similarity is a score. Author fields are not tested this way, and
+        `config.FIELD_DEFAULTS` says why.
+
         `unverified` is the state rather than a value, so it is not a rule: it is
         carried through to the file, which is where the tag and the description
         note are actually written and taken off. Marking a book is the only thing
@@ -1205,6 +1220,8 @@ class Corrector:
             if name == "authors":
                 current = tuple(current or ())
             if rule == "fill" and current:
+                continue
+            if name == "title" and comparison_text(value) == comparison_text(current):
                 continue
             wanted[name] = value
 
