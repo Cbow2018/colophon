@@ -1221,7 +1221,7 @@ class Corrector:
                 current = tuple(current or ())
             if rule == "fill" and current:
                 continue
-            if name == "title" and _same_title(value, current):
+            if name == "title" and comparison_text(value) == comparison_text(current):
                 continue
             wanted[name] = value
 
@@ -1353,18 +1353,6 @@ def _same_series(one, other):
     if not one or not other:
         return False
     return str(one).strip().casefold() == str(other).strip().casefold()
-
-
-def _same_title(one, other):
-    """Whether two titles are the same title, as the comparison reads them.
-
-    A file with no title at all has nothing to be the same as, and a source with
-    no title offered nothing: either way there is no match to test for, and the
-    rule is not what decides a missing value.
-    """
-    if not one or not other:
-        return False
-    return comparison_text(one) == comparison_text(other)
 
 
 def _build(name, config):
