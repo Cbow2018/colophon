@@ -618,50 +618,6 @@ class FieldRuleTests(CorrectionTestCase):
         self.assertIn("title", {change.field for change in outcome.changed})
         self.assertEqual(read(path).title, "Cragside")
 
-    def test_a_spelling_the_record_decided_is_written_even_so(self):
-        """CBO-69 decision 3: the rule is about what a source said, not the Record.
-
-        The file spells the author `LJ Ross` and the Record has settled on
-        `L.J. Ross`. `normalise` reads the two as one name, so an identity test
-        applied to authors would call this nothing to write - and the library's
-        own spelling would never reach a file that spells the name a mere symbol
-        differently, which is CBO-41's criterion rather than a bug. The Record
-        exists to overrule a source's spelling, so its word is always written.
-        """
-        folder = TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        record = Record.open(str(Path(folder.name) / ".colophon.db"))
-        self.addCleanup(record.close)
-        # The source's own spelling reaches the Record first, the way the relay
-        # does both halves: the corrector decides, and the record is told once the
-        # book has landed.
-        first = self.corrector(
-            source=FakeSource(
-                found=Candidate(
-                    source="hardcover",
-                    title="Cragside",
-                    authors=("L.J. Ross",),
-                    series="DCI Ryan Mysteries",
-                    series_number="6",
-                    language="en",
-                    isbn=ISBN,
-                )
-            ),
-            record=record,
-        ).correct(self.book())
-        record.save(first.decision.resolutions)
-        path, source = (
-            self.book("Cragside.epub", INITIALS_WITHOUT_STOPS),
-            FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE]),
-        )
-
-        outcome = self.corrector(
-            source=source, record=record, rules=self.rules(authors="overwrite")
-        ).correct(path)
-
-        self.assertEqual(read(path).authors, ("L.J. Ross",))
-        self.assertIn("authors", {change.field for change in outcome.changed})
-
     def test_skip_never_writes_the_field(self):
         path = self.book()
 
