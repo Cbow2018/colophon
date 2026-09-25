@@ -525,6 +525,7 @@ class FieldRuleTests(CorrectionTestCase):
 
         self.assertEqual(read(path).title, "Cragside")
         self.assertIn("title", {change.field for change in outcome.changed})
+
     def test_a_title_the_source_cases_differently_is_not_written(self):
         """CBO-69 at the field rule, where the fix lives.
 
@@ -548,9 +549,9 @@ class FieldRuleTests(CorrectionTestCase):
             )
         )
 
-        outcome = self.corrector(source=source, rules=self.rules(title="overwrite")).correct(
-            path
-        )
+        outcome = self.corrector(
+            source=source, rules=self.rules(title="overwrite")
+        ).correct(path)
 
         self.assertNotIn("title", {change.field for change in outcome.changed})
         self.assertEqual(read(path).title, "The Masque of the Red Death")
@@ -587,8 +588,9 @@ class FieldRuleTests(CorrectionTestCase):
             record=record,
         ).correct(self.book())
         record.save(first.decision.resolutions)
-        path, source = self.book("Cragside.epub", INITIALS_WITHOUT_STOPS), FakeSource(
-            found=None, candidates=[CRAGSIDE_CANDIDATE]
+        path, source = (
+            self.book("Cragside.epub", INITIALS_WITHOUT_STOPS),
+            FakeSource(found=None, candidates=[CRAGSIDE_CANDIDATE]),
         )
 
         outcome = self.corrector(
