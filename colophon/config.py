@@ -5,6 +5,7 @@ here is a plain, non-secret one, so an environment override is safe.
 """
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,6 +91,25 @@ KNOWN_FIELDS = tuple(name for name, _ in FIELD_DEFAULTS)
 _TRUE = ("true", "1", "yes", "on")
 _FALSE = ("false", "0", "no", "off")
 
+# The retry windows, as a number and a unit. `0` is the one bare number that is
+# a duration of its own - it says do not hold - and the units are lower case
+# only, so `24H` is a refusal rather than a guess at which one was meant.
+_DURATION = re.compile(r"(\d+)([mhd])?")
+_UNIT_SECONDS = {"m": 60, "h": 60 * 60, "d": 24 * 60 * 60}
+
+# The default window, written the two ways it is needed: a user copies the
+# duration into config.toml, and `Config` holds the seconds the parser makes of
+# it. Both windows default to this.
+DEFAULT_RETRY = "24h"
+DEFAULT_RETRY_SECONDS = 86400
+
+# A default whose value a user writes in another form is given that form here
+# too, for the same reason: `Config` holds a retry window as seconds, so reading
+# the default off the dataclass would hand the parser a number and refuse it.
+# Every other setting reads its default off `Config`, which is what a user
+# writes anyway.
+_RAW_DEFAULTS = {"source_retry": DEFAULT_RETRY, "llm_retry": DEFAULT_RETRY}
+
 
 class ConfigError(Exception):
     """A setting is missing, misspelt or unusable."""
@@ -167,6 +187,13 @@ class Config:
     # reach the model; it does not disable early exit, and it does not make a
     # book the rules already graded strong spend a call.
     llm_full_scan: bool = True
+    # How long a book waits for a source, or for the LLM, before it goes on
+    # without it, each as a number of seconds. The two are separate because a
+    # provider being topped up or a local model rebooting is a different wait
+    # from a source outage. Nothing reads them yet: the schedule and the
+    # pass-through are CBO-80's, and the fallback is CBO-82's.
+    source_retry: int = DEFAULT_RETRY_SECONDS
+    llm_retry: int = DEFAULT_RETRY_SECONDS
 
 
 def load_config(env=None):
@@ -232,6 +259,10 @@ def load_config(env=None):
     values["llm_full_scan"] = _to_bool(
         _setting(env, values, "llm_full_scan", bool), "llm_full_scan"
     )
+    # Both windows arrive as a duration string - `"24h"` - except that `0` in
+    # TOML is an int, which is the one bare number that is a duration.
+    for name in ("source_retry", "llm_retry"):
+        values[name] = _to_retry_seconds(_setting(env, values, name, (str, int)), name)
 
     return Config(**values)
 
@@ -259,7 +290,14 @@ def _read_file(path):
 
 
 def _setting(env, values, name, expected_type):
-    """The environment value if there is one, else the file value, else the default."""
+    """The environment value if there is one, else the file value, else the default.
+
+    `expected_type` is what the file is allowed to write, and it can be a tuple
+    for a setting that takes more than one kind of value - the retry windows
+    take a duration string and the bare integer `0`. The environment is never
+    checked here: it is always a string, and each setting's own reader is what
+    decides whether the text means anything.
+    """
     from_env = env.get("COLOPHON_" + name.upper())
     if from_env is not None:
         return from_env
@@ -270,7 +308,7 @@ def _setting(env, values, name, expected_type):
         ):
             raise ConfigError(f"{name} in config.toml has the wrong kind of value")
         return value
-    return getattr(Config, name)
+    return _RAW_DEFAULTS.get(name, getattr(Config, name))
 
 
 def _to_bool(value, name):
@@ -319,6 +357,28 @@ def _to_threshold(value, name):
     if not 0 < number <= 1:
         raise ConfigError(f"{name} should be above 0 and at most 1, not {number:g}")
     return number
+
+
+def _to_retry_seconds(value, name):
+    """A retry window as a number of seconds: `"90m"`, or `0` for do not hold.
+
+    The one number that carries its own unit is zero, and the file writes it as
+    a TOML integer, so the text of both that and `"0"` is read the same way.
+    A bare number with any other value is refused rather than guessed at:
+    `source_retry = 24` could be a day or twenty-four seconds, and either guess
+    would be a window the user did not ask for. Upper case is refused for the
+    same reason - the settings say which units exist, and nothing else is a
+    duration.
+    """
+    match = _DURATION.fullmatch(str(value).strip())
+    if match is None or match.group(2) is None and match.group(1) != "0":
+        raise ConfigError(
+            f"{name} should be a number and a unit - m, h or d, as in 90m or 24h "
+            f"- or 0 to not wait at all, not {value!r}"
+        )
+    if match.group(2) is None:
+        return 0
+    return int(match.group(1)) * _UNIT_SECONDS[match.group(2)]
 
 
 def _to_call_limit(value):
