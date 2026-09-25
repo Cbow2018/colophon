@@ -3714,6 +3714,20 @@ class StandardEditionTests(CorrectionTestCase):
     def write(self, name, meta):
         return write_epub(self.folder / name, meta, version="2.0")
 
+    def recording_cover(self, fetched):
+        """A cover fetcher that answers with the fixture and records the URL.
+
+        The URL is what the test cares about: a cover fetched from the Audio
+        Edition is a square one, and the URL asked for is the evidence that the
+        Edition dropped is the Edition nothing was written from.
+        """
+
+        def a_cover(url):
+            fetched.append(url)
+            return COVER_FIXTURE.read_bytes()
+
+        return a_cover
+
     def test_an_isbn_hardcover_lists_only_as_audio_is_not_found(self):
         """CBO-90 Q10, on a hand-made fixture: the reply states the Edition is Audio.
 
@@ -3810,53 +3824,64 @@ class StandardEditionTests(CorrectionTestCase):
         """CBO-90: the file keeps no ISBN, and everything else comes from the Edition kept.
 
         The reply is the hand-made one where the Audio Edition of *The Infirmary*
-        is the earliest, so CBO-68's rule would otherwise choose it. The rule
-        drops it before the pool is formed, and the title path writes no ISBN at
-        all - which holds however Hardcover labels an Edition, and is what makes
-        the acceptance criterion true by construction. The publisher, the date and
-        the cover are still filled, from the Standard Edition of what is left.
+        is dated earliest, so CBO-68's rule would otherwise choose it. `_is_audio`
+        drops it before the pool is formed, and the Standard Edition of what is
+        left is the print Edition the live reply yields. The publisher, the date
+        and the cover are that Edition's, never the Audio Edition's square one,
+        and the title path writes no ISBN at all - which holds however Hardcover
+        labels an Edition, and is what makes the acceptance criterion true by
+        construction. Both reply orders are run, because the drop is the client's
+        and no order may decide the answer.
         """
-        path = self.write(
-            "The Infirmary.epub",
-            """    <dc:title>The Infirmary</dc:title>
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                path = self.write(
+                    f"The Infirmary-{reverse}.epub",
+                    """    <dc:title>The Infirmary</dc:title>
     <dc:creator>L. J. Ross</dc:creator>
     <dc:language>en</dc:language>
 """,
-        )
-        source = Hardcover(
-            "a-token",
-            transport=Replay("audio-edition-earliest.json", folder=HARDCOVER_HAND_MADE),
-        )
-        fetched = []
+                )
+                source = Hardcover(
+                    "a-token",
+                    transport=Replay(
+                        "audio-edition-earliest.json",
+                        folder=HARDCOVER_HAND_MADE,
+                        reverse=reverse,
+                    ),
+                )
+                fetched = []
+                outcome = self.corrector(
+                    source=source, fetch=self.recording_cover(fetched)
+                ).correct(path)
 
-        def a_cover(url):
-            fetched.append(url)
-            return COVER_FIXTURE.read_bytes()
-
-        outcome = self.corrector(source=source, fetch=a_cover).correct(path)
-
-        self.assertTrue(outcome.matched, outcome.fragment())
-        book = read(path)
-        self.assertIsNone(book.isbn, "the title path never writes an ISBN")
-        self.assertEqual(
-            [change.value for change in outcome.changed if change.field == "isbn"], []
-        )
-        self.assertEqual(book.publisher, "Dark Skies Publishing")
-        self.assertEqual(book.date, "2018-12-01")
-        self.assertEqual(
-            fetched,
-            [
-                (
-                    "https://assets.hardcover.app/edition/30564808/"
-                    "e772d711777ceff8890d0060509f60fcdf706dc3.jpeg"
-                ),
-            ],
-            "the cover is the kept Edition's, never the Audio Edition's square one",
-        )
-        self.assertNotIn(
-            "Audible Studios on Brilliance",
-            [change.value for change in outcome.changed],
-        )
+                self.assertTrue(outcome.matched, outcome.fragment())
+                book = read(path)
+                self.assertIsNone(book.isbn, "the title path never writes an ISBN")
+                self.assertEqual(
+                    [
+                        change.value
+                        for change in outcome.changed
+                        if change.field == "isbn"
+                    ],
+                    [],
+                )
+                self.assertEqual(book.publisher, "Independently Published")
+                self.assertEqual(book.date, "2019-01-01")
+                self.assertEqual(
+                    fetched,
+                    [
+                        (
+                            "https://assets.hardcover.app/edition/32320911/"
+                            "3b70603313d31991e18e6107daae2db42ac9e253.jpeg"
+                        ),
+                    ],
+                    "the cover is the kept Edition's, never the Audio Edition's square one",
+                )
+                self.assertNotIn(
+                    "Audible Studios on Brilliance",
+                    [change.value for change in outcome.changed],
+                )
 
     def test_a_tie_between_editions_is_broken_by_the_earliest_date(self):
         """Cragside's Google reply: the large print and the original, both 1.0000.
