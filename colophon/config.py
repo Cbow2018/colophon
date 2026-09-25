@@ -5,10 +5,9 @@ here is a plain, non-secret one, so an environment override is safe.
 """
 
 import os
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-
-import tomllib
 
 from colophon.matching import normalise
 

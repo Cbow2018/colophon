@@ -394,15 +394,11 @@ Secrets are never read from the environment: each is read from the file its
 setting points at, and never logged. A log line names the source a value came
 from, never the key it was fetched with.
 
-## Running the tests
+## Contributing
 
-No dependencies to install:
-
-```
-python -m unittest discover -s tests -t .
-```
-
-They run on every push in GitHub Actions, on Python 3.11 and 3.12.
+Colophon needs Python 3.11 or newer and nothing else: it has no dependencies.
+How to set up, run the tests and run the linter is in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How this was built
 

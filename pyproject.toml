@@ -1,0 +1,20 @@
+# Colophon is standard library only: nothing needs installing to run it or its
+# tests. This file states the Python floor and pins the development tools.
+# It is deliberately not a package: no [build-system], and nothing runs
+# `pip install .` (see docs/adr/ — "Colophon declares its dependencies but is
+# not a package").
+
+[project]
+name = "colophon"
+version = "0.0.0" # placeholder until CBO-47 tags v1.0.0
+# tomllib and datetime.UTC both arrived in 3.11. ruff also reads this line as
+# its target version.
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    # Exact pin: ruff's default rule set grows between releases, so an unpinned
+    # install would silently change what CI enforces (commit 3d0962a).
+    "ruff==0.16.8",
+]

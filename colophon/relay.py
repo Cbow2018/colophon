@@ -10,7 +10,7 @@ import hashlib
 import logging
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from colophon.backups import Backups, free_name
@@ -267,7 +267,7 @@ def _utc_now():
     ISO 8601 with a `Z` rather than anything local: two hosts in two time zones
     writing one record must not disagree about the order books arrived in.
     """
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _attached(fragment):
