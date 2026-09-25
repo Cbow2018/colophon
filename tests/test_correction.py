@@ -505,6 +505,99 @@ class FieldRuleTests(CorrectionTestCase):
 
         self.assertEqual(read(path).description, CRAGSIDE_BLURB)
 
+    def test_a_genuinely_different_title_is_still_written(self):
+        """The other half of CBO-69's rule: sameness is the exception, not the rule.
+
+        A title the comparison does *not* read as the file's own is a different
+        title and is written, so a rule that suppressed writes on similarity
+        rather than on identity - the scorer's dead band, say - would show up
+        here rather than only in a case nothing reaches.
+        """
+        path = self.book(
+            metadata=f"""    <dc:title>Something Else Entirely</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+"""
+        )
+
+        outcome = self.corrector(rules=self.rules(title="overwrite")).correct(path)
+
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertIn("title", {change.field for change in outcome.changed})
+    def test_a_title_the_source_cases_differently_is_not_written(self):
+        """CBO-69 at the field rule, where the fix lives.
+
+        `overwrite` is the rule with the most to say about a title, and this is
+        the case that says how little it has to say about one the comparison
+        already reads as the file's own.
+        """
+        path = self.book(
+            metadata=f"""    <dc:title>The Masque of the Red Death</dc:title>
+    <dc:creator>L.J. Ross</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+"""
+        )
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="The Masque Of The Red Death",
+                authors=("L.J. Ross",),
+                isbn=ISBN,
+            )
+        )
+
+        outcome = self.corrector(source=source, rules=self.rules(title="overwrite")).correct(
+            path
+        )
+
+        self.assertNotIn("title", {change.field for change in outcome.changed})
+        self.assertEqual(read(path).title, "The Masque of the Red Death")
+
+    def test_a_spelling_the_record_decided_is_written_even_so(self):
+        """CBO-69 decision 3: the rule is about what a source said, not the Record.
+
+        The file spells the author `LJ Ross` and the Record has settled on
+        `L.J. Ross`. `normalise` reads the two as one name, so an identity test
+        applied to authors would call this nothing to write - and the library's
+        own spelling would never reach a file that spells the name a mere symbol
+        differently, which is CBO-41's criterion rather than a bug. The Record
+        exists to overrule a source's spelling, so its word is always written.
+        """
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        record = Record.open(str(Path(folder.name) / ".colophon.db"))
+        self.addCleanup(record.close)
+        # The source's own spelling reaches the Record first, the way the relay
+        # does both halves: the corrector decides, and the record is told once the
+        # book has landed.
+        first = self.corrector(
+            source=FakeSource(
+                found=Candidate(
+                    source="hardcover",
+                    title="Cragside",
+                    authors=("L.J. Ross",),
+                    series="DCI Ryan Mysteries",
+                    series_number="6",
+                    language="en",
+                    isbn=ISBN,
+                )
+            ),
+            record=record,
+        ).correct(self.book())
+        record.save(first.decision.resolutions)
+        path, source = self.book("Cragside.epub", INITIALS_WITHOUT_STOPS), FakeSource(
+            found=None, candidates=[CRAGSIDE_CANDIDATE]
+        )
+
+        outcome = self.corrector(
+            source=source, record=record, rules=self.rules(authors="overwrite")
+        ).correct(path)
+
+        self.assertEqual(read(path).authors, ("L.J. Ross",))
+        self.assertIn("authors", {change.field for change in outcome.changed})
+
     def test_skip_never_writes_the_field(self):
         path = self.book()
 
