@@ -4,6 +4,7 @@
       {
         "isbn_13": "9780571334650",
         "isbn_10": "0571334652",
+        "reading_format_id": 1,
         "title": "Normal People",
         "publisher": {
           "name": "Faber & Faber"

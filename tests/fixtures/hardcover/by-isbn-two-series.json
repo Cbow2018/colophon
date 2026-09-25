@@ -4,6 +4,7 @@
       {
         "isbn_13": "9780765311788",
         "isbn_10": "076531178X",
+        "reading_format_id": 1,
         "title": "Mistborn: The Final Empire",
         "publisher": {
           "name": "Tor Books"

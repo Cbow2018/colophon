@@ -3,8 +3,61 @@
     "editions": [
       {
         "title": "The Infirmary",
+        "isbn_13": "9781408733363",
+        "isbn_10": "1408733366",
+        "reading_format_id": 4,
+        "publisher": {
+          "name": "Hachette UK"
+        },
+        "release_date": "2025-10-09",
+        "image": {
+          "url": "https://assets.hardcover.app/external_data/2054253/dff04312fab8f42c23c81437c7a144e0a435d713.jpeg"
+        },
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "id": 2284109,
+          "title": "The Infirmary",
+          "description": "Obsession is a sickness For which there is no cure. Suffolk, 1847. Charles Keller needs to escape London, so he leaps when he is offered a position as surgeon at a country infirmary for the poor. But St Cross is not as he expected, and he soon finds himself reflecting on a promise he once made. A promise to do no harm. Some promises are made to be broken. Suffolk, 2023. Liam has brought his family to an old country house for a holiday, a former infirmary called St Cross. He can't tell them why they are really here, but he hopes that, after this, he can start again. No more lies, no more secrets. But what Liam doesn't know is that the house is keeping secrets of its own. And some secrets are so dark, they should never be brought to light.",
+          "release_date": "2025-10-09",
+          "image": {
+            "url": "https://assets.hardcover.app/external_data/2054253/dff04312fab8f42c23c81437c7a144e0a435d713.jpeg"
+          },
+          "cached_tags": {
+            "Tag": [],
+            "Mood": [],
+            "Genre": [
+              {
+                "tag": "Fiction",
+                "count": 1,
+                "tagSlug": "fiction",
+                "category": "Genre",
+                "categorySlug": "genre",
+                "spoilerRatio": 0.0
+              }
+            ],
+            "Content Warning": []
+          },
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 692067,
+                "name": "Carly Reagon"
+              }
+            }
+          ],
+          "book_series": []
+        }
+      },
+      {
+        "title": "The Infirmary",
         "isbn_13": "9781799729945",
         "isbn_10": "179972994X",
+        "reading_format_id": 4,
         "publisher": {
           "name": "Audible Studios on Brilliance"
         },
@@ -122,6 +175,7 @@
         "title": "The Infirmary: A DCI Ryan Mystery",
         "isbn_13": "9781912310111",
         "isbn_10": "1912310112",
+        "reading_format_id": 1,
         "publisher": {
           "name": "Dark Skies Publishing"
         },
@@ -239,6 +293,7 @@
         "title": "The Infirmary: A DCI Ryan Mystery",
         "isbn_13": "9781792780844",
         "isbn_10": "1792780842",
+        "reading_format_id": 1,
         "publisher": {
           "name": "Independently Published"
         },
@@ -350,57 +405,6 @@
               }
             }
           ]
-        }
-      },
-      {
-        "title": "The Infirmary",
-        "isbn_13": "9781408733363",
-        "isbn_10": "1408733366",
-        "publisher": {
-          "name": "Hachette UK"
-        },
-        "release_date": "2025-10-09",
-        "image": {
-          "url": "https://assets.hardcover.app/external_data/2054253/dff04312fab8f42c23c81437c7a144e0a435d713.jpeg"
-        },
-        "language": {
-          "language": "English",
-          "code2": "en",
-          "code3": "eng"
-        },
-        "book": {
-          "id": 2284109,
-          "title": "The Infirmary",
-          "description": "Obsession is a sickness For which there is no cure. Suffolk, 1847. Charles Keller needs to escape London, so he leaps when he is offered a position as surgeon at a country infirmary for the poor. But St Cross is not as he expected, and he soon finds himself reflecting on a promise he once made. A promise to do no harm. Some promises are made to be broken. Suffolk, 2023. Liam has brought his family to an old country house for a holiday, a former infirmary called St Cross. He can't tell them why they are really here, but he hopes that, after this, he can start again. No more lies, no more secrets. But what Liam doesn't know is that the house is keeping secrets of its own. And some secrets are so dark, they should never be brought to light.",
-          "release_date": "2025-10-09",
-          "image": {
-            "url": "https://assets.hardcover.app/external_data/2054253/dff04312fab8f42c23c81437c7a144e0a435d713.jpeg"
-          },
-          "cached_tags": {
-            "Tag": [],
-            "Mood": [],
-            "Genre": [
-              {
-                "tag": "Fiction",
-                "count": 1,
-                "tagSlug": "fiction",
-                "category": "Genre",
-                "categorySlug": "genre",
-                "spoilerRatio": 0.0
-              }
-            ],
-            "Content Warning": []
-          },
-          "contributions": [
-            {
-              "contribution": "Author",
-              "author": {
-                "id": 692067,
-                "name": "Carly Reagon"
-              }
-            }
-          ],
-          "book_series": []
         }
       }
     ]

@@ -4,6 +4,7 @@
       {
         "isbn_13": "9780575064843",
         "isbn_10": "0575064846",
+        "reading_format_id": 1,
         "title": "Pyramids",
         "publisher": {
           "name": "Gollancz"

@@ -4,6 +4,7 @@
       {
         "isbn_13": "9781529978940",
         "isbn_10": "1529978947",
+        "reading_format_id": 1,
         "title": "Berwick",
         "publisher": {
           "name": "Century"
