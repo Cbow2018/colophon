@@ -38,6 +38,7 @@ from colophon.matching import (
     FileBook,
     Ranked,
     band_of,
+    comparison_text,
     dedupe,
     primary_language,
     rank,
@@ -1171,6 +1172,20 @@ class Corrector:
         on a field a source is silent about is not a blank, and a source with no
         publisher has not offered an empty one.
 
+        `overwrite` writes a title the file does not already carry in another
+        form: a title whose comparison key is the file's own is the same title,
+        and nothing is written between two of those. That is what the score
+        already says - a title scoring 1.0000 is one the comparison read as
+        identical - so a rule that wrote it anyway would put a capital onto a
+        correct title because a comparison called the two the same.
+
+        The test is the comparison's own reader rather than the scorer's dead
+        band, which is a different question: at 0.97 the band calls `The Masque
+        of the Red Deaths` the same title as `The Masque of the Red Death`, and a
+        write gated on that would keep a file's typo. Identity is equality of
+        keys; similarity is a score. Author fields are not tested this way, and
+        `config.FIELD_DEFAULTS` says why.
+
         `unverified` is the state rather than a value, so it is not a rule: it is
         carried through to the file, which is where the tag and the description
         note are actually written and taken off. Marking a book is the only thing
@@ -1205,6 +1220,8 @@ class Corrector:
             if name == "authors":
                 current = tuple(current or ())
             if rule == "fill" and current:
+                continue
+            if name == "title" and _same_title(value, current):
                 continue
             wanted[name] = value
 
@@ -1336,6 +1353,18 @@ def _same_series(one, other):
     if not one or not other:
         return False
     return str(one).strip().casefold() == str(other).strip().casefold()
+
+
+def _same_title(one, other):
+    """Whether two titles are the same title, as the comparison reads them.
+
+    A file with no title at all has nothing to be the same as, and a source with
+    no title offered nothing: either way there is no match to test for, and the
+    rule is not what decides a missing value.
+    """
+    if not one or not other:
+        return False
+    return comparison_text(one) == comparison_text(other)
 
 
 def _build(name, config):
