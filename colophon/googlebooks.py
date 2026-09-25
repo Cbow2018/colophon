@@ -33,7 +33,14 @@ import urllib.request
 from pathlib import Path
 
 from colophon.matching import Candidate
-from colophon.sources import SourceError, genre_parts
+from colophon.sources import (
+    TRANSPORT_FAILURES,
+    UNREADABLE_REPLY,
+    SourceError,
+    genre_parts,
+    network_failure,
+    status_failure,
+)
 from colophon.sources import text as _text
 
 __all__ = ["SOURCE", "GoogleBooks"]
@@ -173,9 +180,14 @@ class GoogleBooks:
             status, reply = self._transport(url, self._headers())
         except SourceError:
             raise
-        except Exception as error:
+        except TRANSPORT_FAILURES as error:
+            # Only the exchange is caught: any other exception is a bug here, and
+            # calling it "could not reach Google Books" would hide it (CBO-78).
+            kind, reason = network_failure(error)
             raise SourceError(
-                f"could not reach Google Books: {self._without_key(error)}"
+                f"could not reach Google Books: {self._without_key(error)}",
+                kind,
+                reason,
             ) from error
         return self._read(status, reply)
 
@@ -185,12 +197,17 @@ class GoogleBooks:
         except (TypeError, ValueError) as error:
             if not 200 <= status < 300:
                 raise SourceError(*self._refusal(status, None)) from error
-            raise SourceError(f"Google Books' reply was not JSON: {error}") from error
+            raise SourceError(
+                f"Google Books' reply was not JSON: {error}", reason=UNREADABLE_REPLY
+            ) from error
 
         if not 200 <= status < 300:
             raise SourceError(*self._refusal(status, payload))
         if not isinstance(payload, dict):
-            raise SourceError("Google Books' reply was not what was asked for")
+            raise SourceError(
+                "Google Books' reply was not what was asked for",
+                reason=UNREADABLE_REPLY,
+            )
         if payload.get("error"):
             # A reply that carries an error is not an answer, whatever it came
             # with. It is judged as if it had failed, because it did.
@@ -198,17 +215,36 @@ class GoogleBooks:
         return payload
 
     def _refusal(self, status, payload):
-        """What to say about a refusal, and whether it was the key's fault.
+        """What to say about a refusal, which kind it is, and whose fault.
 
-        A spent daily quota is the one refusal that is not about the key and not
-        about the query either: it resets, so it is an outage.
+        The status decides the kind and the reason, and the message decides the
+        blame, and those are separate questions (CBO-78): a spent daily quota is
+        an outage and a 400 that names no key is not, but which of the two kinds
+        a refusal is never turns on the blame. A 403 `accessNotConfigured` names
+        no key either, and is held rather than retried, because nothing about it
+        changes by asking again.
         """
-        reason = _reason(payload) or "unexpected reply"
+        said = _reason(payload) or "unexpected reply"
+        # Whatever the reply said is on its way into a log line, so the key is
+        # taken back out of it here, where Google's own words reach a message.
+        said = self._without_key(said)
+        blamed_on_the_key = status in (400, 403) and _blames_the_key(said)
+        kind, reason = status_failure(status, rejected=blamed_on_the_key)
         if status == 429:
-            return f"Google Books is rate limiting (HTTP {status}): {reason}", False
-        if status in (400, 403) and _blames_the_key(reason):
-            return f"Google Books rejected the key (HTTP {status}): {reason}", True
-        return f"Google Books answered HTTP {status}: {reason}", False
+            return (
+                f"Google Books is rate limiting (HTTP {status}): {said}",
+                kind,
+                reason,
+                False,
+            )
+        if blamed_on_the_key:
+            return (
+                f"Google Books rejected the key (HTTP {status}): {said}",
+                kind,
+                reason,
+                True,
+            )
+        return f"Google Books answered HTTP {status}: {said}", kind, reason, False
 
     def _headers(self):
         return {"Accept": "application/json", "User-Agent": USER_AGENT}

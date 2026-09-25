@@ -218,8 +218,10 @@ test to assert what is true now, or, if the value was the point, freeze it into
 
 ## Every declared fixture, and the request it is recorded with
 
-Generated from `tests/recordings.py`; `--list` prints the same thing. The `fields`
-mask is the same for every Google request and is not repeated here.
+Transcribed from `tests/recordings.py`, and it has to be kept that way by hand:
+`tools/record-fixtures.py --list` prints the same requests in the recorder's own
+format, which is not this table. The `fields` mask is the same for every Google
+request and is not repeated here.
 
 | Fixture | Source | Request |
 | --- | --- | --- |
@@ -268,8 +270,8 @@ file is a decision nobody has taken.
 ## The fixtures no shipped query produces
 
 These have no request to be re-recorded with, and each says why in
-`tests/recordings.py`. They are not "frozen evidence" and not "drifted": they are
-replies to questions the client does not ask.
+`tests/recordings.py`, in the order `SKIPPED` declares them. They are not "frozen
+evidence" and not "drifted": they are replies to questions the client does not ask.
 
 | Fixture | Why it has no request |
 | --- | --- |
@@ -281,9 +283,23 @@ replies to questions the client does not ask.
 | `googlebooks/error-key-rejected.json` | a 400 from a deliberately wrong key |
 | `googlebooks/error-max-results-too-high.json` | a 400 from a deliberately out-of-range `maxResults` |
 | `googlebooks/error-missing-query.json` | a 400 from a deliberately missing `q` |
+| `googlebooks/hand-made/error-access-not-configured.json` | hand-made: the 403 a project that may not use the Books API answers, which only a misconfigured project can produce |
 | `googlebooks/hand-made/poe-core-cases.json` | hand-made: a frozen case |
+| `googlebooks/hand-made/no-categories.json` | hand-made: the CBO-38-era ISBN reply, from before the mask asked for categories, freezing what a volume with no categories answers |
 | `hardcover/hand-made/work-without-title.json` | hand-made: a frozen case |
 | `hardcover/hand-made/wider-than-the-question.json` | hand-made: a frozen case |
+| `hardcover/hand-made/error-invalid-token.json` | hand-made: the documented 401 body for a missing, invalid or expired token; a re-record with a working token cannot produce one |
+| `hardcover/hand-made/error-insufficient-scope.json` | hand-made: the documented 403 body for a token without the scope the query needs |
+| `hardcover/hand-made/error-malformed-request.json` | hand-made: the documented 400 body for a query Hardcover will not parse |
+| `hardcover/hand-made/error-request-timeout.json` | hand-made: the documented 408 body for a query that went over the 30s maximum |
+| `hardcover/hand-made/error-too-many-requests.json` | hand-made: the documented 429 body; a re-record cannot spend the quota |
+| `hardcover/hand-made/error-service-unavailable.json` | hand-made: the documented 503 body; no re-record can ask for one |
+| `hardcover/hand-made/sparse-isbn-reply.json` | hand-made: the pre-CBO-38 ISBN reply, freezing what a sparse reply answers for the ids, the tags, the publisher and the cover |
+| `hardcover/hand-made/cbo-38-without-tags.json` | hand-made: the CBO-38-era title reply, from before CBO-42 asked for cached_tags |
+| `hardcover/hand-made/no-series.json` | hand-made: the pre-CBO-38 ISBN reply for a standalone book, freezing that a book in no series answers no series |
+| `hardcover/hand-made/two-series-featured-last.json` | hand-made: a reply whose featured series is last, freezing that the client picks it out by the flag rather than by taking the first row |
+| `hardcover/hand-made/audio-edition-earliest.json` | hand-made: the CBO-90 case, an Edition the source states is Audio dated earliest; no live reply labels anything Audio |
+| `hardcover/hand-made/audio-edition-only.json` | hand-made: the CBO-90 case where the only Edition is an Audio one, read as both an ISBN reply and a title reply, since the two shipped queries select the same Edition fields; no live reply labels anything Audio |
 
 **The two Google empty replies are the interesting pair, and they were re-recorded
 with everything else.** `googlebooks/by-title-nothing.json` and

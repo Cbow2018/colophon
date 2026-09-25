@@ -5,6 +5,7 @@ needs no key and never touches the network. See
 `fixtures/googlebooks/README.md` for what each one is and which query made it.
 """
 
+import http.client
 import json
 import random
 import unittest
@@ -14,7 +15,7 @@ from pathlib import Path
 from colophon.epub import read as read_epub
 from colophon.googlebooks import GoogleBooks
 from colophon.matching import FileBook, score_candidate
-from colophon.sources import SourceError
+from colophon.sources import HELD, TEMPORARY, SourceError
 from tests.tempdir import TemporaryDirectory
 
 RECORDED = Path(__file__).parent / "fixtures" / "googlebooks"
@@ -295,7 +296,14 @@ class FromSecretFileTests(unittest.TestCase):
 
 
 class WhenGoogleRefusesTests(unittest.TestCase):
-    """Google answers 400 for a great many things that are not the key's fault."""
+    """Google answers 400 for a great many things that are not the key's fault.
+
+    Every refusal here is held or temporary (CBO-78), and which of the two it is
+    never turns on whether the key was blamed: a 429 and a 5xx are the source
+    being busy, everything else is something the user has to change. The reason
+    is the short phrase for the health file and the notice, and it never carries
+    what Google said.
+    """
 
     def source(self, name="error-key-rejected.json", status=400):
         return GoogleBooks(KEY, transport=Replay(name, status=status))
@@ -304,6 +312,8 @@ class WhenGoogleRefusesTests(unittest.TestCase):
         with self.assertRaises(SourceError) as caught:
             self.source().by_isbn(CRAGSIDE)
 
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "rejected the key")
         self.assertTrue(caught.exception.rejected)
         self.assertIn("key", str(caught.exception).lower())
 
@@ -314,6 +324,8 @@ class WhenGoogleRefusesTests(unittest.TestCase):
         with self.assertRaises(SourceError) as caught:
             source.by_isbn(CRAGSIDE)
 
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "configuration problem, HTTP 400")
         self.assertFalse(caught.exception.rejected)
 
     def test_a_parameter_we_got_wrong_is_not_a_rejected_key(self):
@@ -322,13 +334,35 @@ class WhenGoogleRefusesTests(unittest.TestCase):
         with self.assertRaises(SourceError) as caught:
             source.by_isbn(CRAGSIDE)
 
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "configuration problem, HTTP 400")
         self.assertFalse(caught.exception.rejected)
+
+    def test_a_project_that_may_not_use_the_api_is_held_not_blamed_on_the_key(self):
+        """`accessNotConfigured` says nothing about the key, and is still not an
+        outage: nothing about it changes by asking again."""
+        source = GoogleBooks(
+            KEY,
+            transport=Replay(
+                "error-access-not-configured.json", status=403, folder=HAND_MADE
+            ),
+        )
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "configuration problem, HTTP 403")
+        self.assertFalse(caught.exception.rejected)
+        self.assertIn("403", str(caught.exception))
 
     def test_a_spent_quota_is_not_a_rejected_key(self):
         """It resets, so it is a source that is temporarily unavailable."""
         with self.assertRaises(SourceError) as caught:
             self.source("error-key-rejected.json", status=429).by_isbn(CRAGSIDE)
 
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "rate limiting, HTTP 429")
         self.assertFalse(caught.exception.rejected, "a 429 is not a key problem")
         self.assertIn("429", str(caught.exception))
 
@@ -336,6 +370,8 @@ class WhenGoogleRefusesTests(unittest.TestCase):
         with self.assertRaises(SourceError) as caught:
             self.source(status=503).by_isbn(CRAGSIDE)
 
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "HTTP 503")
         self.assertFalse(caught.exception.rejected)
         self.assertIn("503", str(caught.exception))
 
@@ -344,7 +380,54 @@ class WhenGoogleRefusesTests(unittest.TestCase):
             KEY, transport=lambda url, headers: (200, b"<html>nope</html>")
         )
 
-        with self.assertRaises(SourceError):
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "unreadable reply")
+
+    def test_a_server_error_with_a_body_that_is_not_json_is_still_named(self):
+        """There is no reason to quote, and `None` is not one."""
+        source = GoogleBooks(
+            KEY, transport=lambda url, headers: (503, b"<html>oops</html>")
+        )
+
+        with self.assertRaises(SourceError) as caught:
+            source.by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertIn("503", str(caught.exception))
+        self.assertIn("unexpected reply", str(caught.exception))
+
+    def test_a_timeout_is_temporary(self):
+        def time_out(url, headers):
+            raise TimeoutError("timed out")
+
+        with self.assertRaises(SourceError) as caught:
+            GoogleBooks(KEY, transport=time_out).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, TEMPORARY)
+        self.assertEqual(caught.exception.reason, "timeout")
+
+    def test_a_reply_that_cannot_be_read_at_all_is_held(self):
+        """`urlopen` raises `BadStatusLine`, which is not an `OSError`."""
+
+        def nonsense(url, headers):
+            raise http.client.BadStatusLine("garbage not http")
+
+        with self.assertRaises(SourceError) as caught:
+            GoogleBooks(KEY, transport=nonsense).by_isbn(CRAGSIDE)
+
+        self.assertEqual(caught.exception.kind, HELD)
+        self.assertEqual(caught.exception.reason, "unreadable reply")
+
+    def test_a_bug_is_not_turned_into_a_source_problem(self):
+        def a_bug(url, headers):
+            raise TypeError("'NoneType' object is not subscriptable")
+
+        source = GoogleBooks(KEY, transport=a_bug)
+
+        with self.assertRaises(TypeError):
             source.by_isbn(CRAGSIDE)
 
     def test_a_failure_never_puts_the_key_in_the_message(self):

@@ -14,7 +14,14 @@ import urllib.request
 from pathlib import Path
 
 from colophon.matching import Candidate
-from colophon.sources import SourceError, genre_parts
+from colophon.sources import (
+    TRANSPORT_FAILURES,
+    UNREADABLE_REPLY,
+    SourceError,
+    genre_parts,
+    network_failure,
+    status_failure,
+)
 from colophon.sources import text as _text
 
 # `SourceError` is imported from `colophon.sources` for this module's own use and
@@ -192,7 +199,10 @@ class Hardcover:
         editions = _dig(payload, "data", "editions")
         if editions is None:
             # An answer without the field we asked for is not an answer.
-            raise SourceError("Hardcover's reply did not contain any editions")
+            raise SourceError(
+                "Hardcover's reply did not contain any editions",
+                reason=UNREADABLE_REPLY,
+            )
         if not editions or _is_audio(editions[0]):
             return None
         return _candidate(editions[0], isbn)
@@ -228,7 +238,10 @@ class Hardcover:
         editions = _dig(payload, "data", "editions")
         if editions is None:
             # An answer without the field we asked for is not an answer.
-            raise SourceError("Hardcover's reply did not contain any editions")
+            raise SourceError(
+                "Hardcover's reply did not contain any editions",
+                reason=UNREADABLE_REPLY,
+            )
         return _candidates(editions)
 
     def _ask(self, question):
@@ -243,25 +256,38 @@ class Hardcover:
             status, reply = self._transport(self._url, headers, request)
         except SourceError:
             raise
-        except Exception as error:
+        except TRANSPORT_FAILURES as error:
+            # Only the exchange is caught: any other exception is a bug here, and
+            # calling it "could not reach Hardcover" would hide it (CBO-78).
+            kind, reason = network_failure(error)
             raise SourceError(
-                f"could not reach Hardcover: {self._without_token(error)}"
+                f"could not reach Hardcover: {self._without_token(error)}", kind, reason
             ) from error
 
-        if status in (401, 403):
-            raise SourceError(f"Hardcover rejected the token (HTTP {status})")
-        if status == 429:
-            raise SourceError("Hardcover is rate limiting (HTTP 429)")
         if not 200 <= status < 300:
-            raise SourceError(f"Hardcover answered HTTP {status}")
+            refused_the_token = status in (401, 403)
+            kind, reason = status_failure(status, rejected=refused_the_token)
+            if refused_the_token:
+                raise SourceError(
+                    f"Hardcover rejected the token (HTTP {status})",
+                    kind,
+                    reason,
+                    rejected=True,
+                )
+            if status == 429:
+                raise SourceError("Hardcover is rate limiting (HTTP 429)", kind, reason)
+            raise SourceError(f"Hardcover answered HTTP {status}", kind, reason)
 
         try:
             payload = json.loads(reply)
         except (TypeError, ValueError) as error:
-            raise SourceError(f"Hardcover's reply was not JSON: {error}") from error
+            raise SourceError(
+                f"Hardcover's reply was not JSON: {error}", reason=UNREADABLE_REPLY
+            ) from error
         if not isinstance(payload, dict) or payload.get("errors"):
             raise SourceError(
-                f"Hardcover refused the query: {self._without_token(_summarise(payload))}"
+                f"Hardcover refused the query: {self._without_token(_summarise(payload))}",
+                reason="the query was refused",
             )
         return payload
 

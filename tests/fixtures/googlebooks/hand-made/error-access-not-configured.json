@@ -1,0 +1,14 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Books API has not been used in project 123456789 before or it is disabled.",
+    "errors": [
+      {
+        "message": "Books API has not been used in project 123456789 before or it is disabled.",
+        "domain": "usageLimits",
+        "reason": "accessNotConfigured"
+      }
+    ],
+    "status": "PERMISSION_DENIED"
+  }
+}
