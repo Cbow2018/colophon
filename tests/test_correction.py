@@ -65,6 +65,7 @@ from tests.samplebooks import (
     set_title,
     write_epub,
 )
+
 # The record's own title, which CBO-60 requires a file's title to agree with
 # before an ISBN hit is written from.
 CRAGSIDE_TITLE = "Cragside - L J Ross"
@@ -1472,7 +1473,9 @@ class FromConfigTests(unittest.TestCase):
 
         written = {change.field for change in outcome.changed}
         self.assertIn("description", written, "the source's blurb replaced the file's")
-        self.assertEqual(read(book).title, "Cragside - L J Ross", "the title was skipped")
+        self.assertEqual(
+            read(book).title, "Cragside - L J Ross", "the title was skipped"
+        )
         self.assertEqual(read(book).description, CRAGSIDE_BLURB)
         self.assertNotIn("cover", written, "the config turned covers off, too")
 
@@ -2913,7 +2916,8 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         what reads those as one title rather than as two.
         """
         path = self.an_isbn_book(
-            "Cragside.epub", "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)"
+            "Cragside.epub",
+            "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
         )
 
         outcome = self.corrector().correct(path)
@@ -3123,9 +3127,7 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         path = self.book()
         source = Hardcover(
             "a-token",
-            transport=Replay(
-                "sibling-on-the-isbn.json", folder=HARDCOVER_HAND_MADE
-            ),
+            transport=Replay("sibling-on-the-isbn.json", folder=HARDCOVER_HAND_MADE),
         )
         before = path.read_bytes()
 
