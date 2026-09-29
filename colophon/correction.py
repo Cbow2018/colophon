@@ -540,12 +540,21 @@ class Corrector:
         return self._by_title(path, book)
 
     def _by_isbn(self, path, book):
-        """The ISBN path, which falls back to the title when the ISBN finds nothing.
+        """The ISBN path, which falls back to the title.
 
         The walk stops at the first source that has the edition. An ISBN
         identifies one, so the first source to know it is as good as any other,
         and the ISBN itself is only ever written by its own rule - usually
         nothing, since the file already carries it.
+
+        The hit is read before it is written. An ebook ISBN is often stale,
+        absent or the print edition's, so the record the identifier reaches can
+        belong to another book entirely - and writing from it would put that
+        book's title, series, publisher and date into this file without a word
+        of the contradiction being noticed. So the title decides: when the
+        record's title agrees with the file's, the hit is written as it always
+        was, and the author is not read at all on this path. When it does not
+        agree, the ISBN is stale and the book takes the fallback below.
 
         No source having the ISBN is not the end of the road. The ISBN a file
         carries can be one no source has - a self-published book, an edition
@@ -554,17 +563,20 @@ class Corrector:
         path is for. So the fallback is a title search over the same list, and its
         answer is the answer: a match corrects the book, and nothing at or above
         the threshold leaves it marked unverified like any other book no source
-        can vouch for.
+        can vouch for. A stale ISBN takes that same fallback, which is what
+        `_stale_isbn` is.
 
         The match the fallback finds keeps the ISBN the file came with: the record
         that recognised the book is a different edition, and writing its ISBN over
         the file's would be claiming an edition this book has not been shown to be.
 
-        A file with no title has nothing to fall back to. The sources were asked
-        about it - by its ISBN, which is the one thing the file did say - and none
-        of them had it, so the book is marked like any other nobody could vouch
-        for. Returning the title path's "no title, so no source was asked" would
-        be a plain falsehood on this path: they were asked.
+        A file with no title has nothing to fall back to and nothing to
+        contradict it. A hit on one is written, because the ISBN is the only
+        identity the file has; a file whose ISBN *no* source has is marked like
+        any other nobody could vouch for, the sources having been asked by the
+        one thing the file did say. Returning the title path's "no title, so no
+        source was asked" would be a plain falsehood on this path: they were
+        asked.
         """
         tried = []
         for source in self.sources:
@@ -1248,7 +1260,10 @@ class Corrector:
         the same edition, so its ISBN says nothing about this file and is not
         written into it: a book with no ISBN keeps none, and a book whose own
         ISBN no source has keeps that one under `overwrite` too (CBO-90, CBO-92).
-        `isbn_identifies` is true only when an ISBN is what recognised the book.
+        `isbn_identifies` is true only when an ISBN is what recognised the book -
+        and since CBO-60 that means an ISBN whose record's title agreed with the
+        file's, because a contradicted hit is demoted to the title path before
+        any field rule is reached.
 
         A field the source said nothing about is written by no rule at all: `fill`
         on a field a source is silent about is not a blank, and a source with no
