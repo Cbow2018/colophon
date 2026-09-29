@@ -404,8 +404,8 @@ def title_agrees(file_title, record_title):
     belong to another book in the series - so a hit is written on the title's
     agreement rather than on the identifier alone. Two ways to agree:
 
-    the record's whole title, as `comparison_text` reads it, is contained in the
-    file's as whole words. Whole words and not characters, so `Angel` is not
+    the record's title head, as `comparison_text` reads it, is contained in the
+    file's head as whole words. Whole words and not characters, so `Angel` is not
     found in `Evangeline` and `Us` is not found in `Tempus Fugit`; the leading
     article is dropped by `comparison_text` on both sides, so a file that lost
     its article still contains the record.
