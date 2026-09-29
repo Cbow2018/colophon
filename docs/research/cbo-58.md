@@ -860,12 +860,15 @@ The hit is read before it is written. The title decides, not the author:
 - **The record's title agrees with the file's — the hit is written, as it always
   was.** The author is not read on this path at all: the identifier is what
   identified the book, so an ISBN-bearing file with no author, or with `Unknown`,
-  is not demoted for saying nothing. That population is why the hit is not graded
-  through `score_candidate`, which caps a candidate at `NO_AGREEMENT_CEILING = 0.7`
-  when the file names no creator.
-- **It does not agree — the ISBN is a stale ISBN**, and the book takes the fallback
-  §3.9 already describes: the title path on the file's own title, with the file's
-  ISBN kept.
+  is not demoted for saying nothing. That population is also why the hit is not
+  graded through `score_candidate`, which caps a candidate at
+  `NO_AGREEMENT_CEILING = 0.7` when the file names no creator.
+- **It does not agree — the ISBN is a Stale ISBN**, and the book takes the
+  fallback §3.9 already describes: the title walk on the file's own title, with
+  the file's ISBN kept.
+- **The file's title is missing or unsearchable — the hit is written**, as it
+  always was. There is nothing to contradict, and on that path the ISBN is the only
+  identity the file has.
 
 **A title agrees** when either of two things holds. The record's **title head**,
 through `comparison_text`, is contained in the file's as **whole words**
@@ -881,21 +884,19 @@ and scores 0.8533.
 **Both legs read the heads, and the heads only.** A series puts one subtitle on
 every record of it, so `The Shrine: A DCI Ryan Mystery` and `The Infirmary: A DCI
 Ryan Mystery` — two different books — are one word apart on the full titles and
-0.1417 apart on the heads. Reading the full titles there admits the series sibling
-the rule exists to refuse, which is what the implementation did before the
-correction at `48b44f2`. `TITLE_AGREES` is deliberately its own constant and not a
-reuse of `AUTHOR_AGREES`, so tuning the author gate never moves what the ISBN path
-writes. A file with no searchable title never contradicts — it has nothing to
-disagree with, and on that path the ISBN is the only identity it has.
+0.1417 apart on the heads. Reading the full titles there would admit the series
+sibling the rule exists to refuse. `TITLE_AGREES` is deliberately its own constant
+and not a reuse of `AUTHOR_AGREES`, so tuning the author gate never moves what the
+ISBN path writes.
 
-**A contradicted record is not thrown away with the identifier.** It is offered to
-the LLM Chooser as a candidate of its own, because a file whose title is the wrong
-half (`Untitled`, `Microsoft Word - doc1`) can only be matched to the book its ISBN
-names by a reader of both. It is **offered and never graded**: it does not join
-the pool, which is what keeps it out of the band, out of the walk's Early Exit, out
+**The contradicted record is still offered to the LLM Chooser, and is never
+graded.** It is a candidate of its own in what the model is shown, because a file
+whose title is the wrong half (`Untitled`, `Microsoft Word - doc1`) can only be
+matched to the book its ISBN names by a reader of both. It **does not join the
+pool**, which is what keeps it out of the band, out of the walk's Early Exit, out
 of which sources are asked and out of the Half-asked hold (§4.2) — those are the
 ones the sources' own replies built. It joins what the model may see only when the
-title walk does not grade strong, after that hold. With no LLM Chooser configured
+title walk has not graded strong, after that hold. With no LLM Chooser configured
 the outcome is the title walk's own.
 
 **When the model picks that record, the write is a title match, not an ISBN
@@ -1705,16 +1706,4 @@ re-derived, no threshold moved, and no decision listed as settled was reopened.
 | §1.3: `L. K. Ross` **moved to the agreeing side** of the floor's worked list | It was listed at 0.6814 among the names that do not agree. 0.6814 clears the 0.5 gate, so it does agree — which is the premise of §6 item 3's whole containment argument, and of §4.1's window. The table two paragraphs above already said so, and §1.3 contradicted it |
 | §1.3: the claim that the floor **"refuses nothing that is genuinely the same name" removed** | False, and §3.4 holds the counterexample: a bare transposition (`LJ Ross` / `Ross LJ`, 0.1914) is the same name and is refused, because only the comma form is reversed before comparison. Replaced with the qualified statement |
 | §6 item 3: the **denominator-dependence of the containment margin** added as an open point | The window's lower bound of 0.8584 is the wrong author's score at denominator 1.80. At 2.15 the same author scores 0.8814 — 0.0086 under `strong_score`, not 0.0316. A wrong author at 0.705 similarity grades strong at 2.15, and at 0.725 at 2.00. Not a blocker; nothing in the fixture set reaches it. Flagged for §4.4 rather than fixed here, because fixing it means moving a threshold |
-
-## Changelog — session 1g
-
-One amendment, made by hand from the merged code (PR #28, `12f801d`) and its
-handover. No number was re-derived, no threshold moved, and no decision listed as
-settled was reopened.
-
-| Change | Why |
-| --- | --- |
-| **§3.10 added: an ISBN hit is written only when the title agrees** | The rule CBO-60 shipped, which this note did not state. The note's §5.3 said the demotion was a weight of zero, and it is not: the weight stays zero, and the short-circuit is demoted by a title check instead. The section records the two ways a title agrees (whole-word head containment, and `TITLE_AGREES = 0.5` on the heads), that a contradicted record is offered to the LLM and never graded, that the model's pick of it is a title match, the accepted `Dune Messiah` limit, and that pooling waits on CBO-61 |
-| §2: the claim that an agreeing ISBN after this is **"context, passed to the LLM in the medium band"** corrected | The code passes the model `{"title", "filename"}` and nothing else (`correction.py:793`), and deliberately: a record carries its ISBN already, so the string adds nothing, and the contradicted record reaches the prompt only when the title walk did not grade strong |
-| §4.2: the ISBN path's **half-asked behaviour recorded as settled**, and item 18's pointer corrected | CBO-67 was closed as already fixed on `main` — an ISBN-path `SourceError` returns `_failed`, which holds the book, so there is nothing left for CBO-67 to settle. Carry on to the next source is CBO-82's clause. Item 18 is left as written and labelled historical; the asymmetry it names is a decision, not an open question |
-| §5.3: CBO-60 recorded as **not only the weight of zero it predicted** | The note called CBO-60 "consumed"; the title check is its whole content and the weight is unchanged. Corrected in place and pointed at §3.10 |
+| §3.10, §2, §4.2, §5.3: **an ISBN hit is written only when the title agrees** (CBO-60, ADR-0003, PR #28) | The amendment of 2026-09-29. §3.10 states the rule the build decided; the other three are sentences that described CBO-60 wrongly — the field is not "context in the medium band", CBO-67 needed nothing, and the demotion was never a weight |
