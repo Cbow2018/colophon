@@ -400,7 +400,13 @@ ticket forbids. The consequence the ticket does not state is that **an agreeing 
 is no longer evidence either** — two candidates identical on every scored field but
 carrying different ISBNs are indistinguishable to the scorer. Today a matching ISBN
 is a short-circuit and therefore decisive (`correction.py:513`); after this it is
-context, passed to the LLM in the medium band and read by nothing else. This makes
+context, passed to the LLM in the medium band and read by nothing else. **Corrected
+2026-09-29: the second half of that sentence is not what shipped — see §3.10.** The
+file's ISBN reaches no LLM as context: the record the identifier reached carries it
+and the record's own title, so the string would add nothing, and a contradicted
+record is offered only when the title walk has not already graded strong. What
+demotes the short-circuit is a title check rather than a weight — the weight stays
+zero, and CBO-60's title is therefore only half the story. This makes
 CBO-60's "demote from short-circuit to scored field" a slightly different change
 than its title suggests: the field is demoted to *context*, not to a small penalty.
 
@@ -838,6 +844,84 @@ not enough to decide the field, and the ISBN is held back before the rule is rea
 fallback keeps the file's ISBN held under `fill` only, and holds whatever the rule
 says now.
 
+### 3.10 An ISBN hit is written only when the title agrees
+
+§3.9 settles which match may *write* an ISBN. It does not ask what happens when the
+identifier reaches a record that is not this book. An exact ISBN hit was a
+short-circuit: `_by_isbn` stopped at the first source that had the ISBN and wrote
+that record whole, reading no part of the file's own title. Ebook ISBNs are
+frequently stale, absent, or the print edition's, so a file titled `Seahouses`
+carrying Cragside's ISBN was rewritten as *Cragside* — another book's title,
+series, publisher and date, with no word of the contradiction in the log. **CBO-60,
+decision of 2026-09-29; ADR-0003; merged as PR #28 (`12f801d`).**
+
+The hit is read before it is written. The title decides, not the author:
+
+- **The record's title agrees with the file's — the hit is written, as it always
+  was.** The author is not read on this path at all: the identifier is what
+  identified the book, so an ISBN-bearing file with no author, or with `Unknown`,
+  is not demoted for saying nothing. That population is also why the hit is not
+  graded through `score_candidate`, which caps a candidate at
+  `NO_AGREEMENT_CEILING = 0.7` when the file names no creator.
+- **It does not agree — the ISBN is a Stale ISBN**, and the book takes the
+  fallback §3.9 already describes: the title walk on the file's own title, with
+  the file's ISBN kept.
+- **The file's title is missing or unsearchable — the hit is written**, as it
+  always was. There is nothing to contradict, and on that path the ISBN is the only
+  identity the file has.
+
+**A title agrees** when either of two things holds. The record's **title head**,
+through `comparison_text`, is contained in the file's as **whole words**
+(`f" {record} " in f" {file} "`), which admits every messy title measured
+(`Cragside - L J Ross`, `Cragside.epub`, `L. J. Ross - Cragside (DCI Ryan 6)`) and
+refuses every sibling (`Seahouses`, `Angel`, `Holy Island`). Whole words and not
+characters, so `Angel` is not found in `Evangeline`; the leading article is dropped
+by `comparison_text` on both sides, so a file that lost its article still contains
+the record. Or the calibrated title similarity reaches `TITLE_AGREES = 0.5`, which
+catches the misspelling containment cannot: `Cragsde` does not contain `cragside`
+and scores 0.8533.
+
+**Both legs read the heads, and the heads only.** A series puts one subtitle on
+every record of it, so `The Shrine: A DCI Ryan Mystery` and `The Infirmary: A DCI
+Ryan Mystery` — two different books — are one word apart on the full titles and
+0.1417 apart on the heads. Reading the full titles there would admit the series
+sibling the rule exists to refuse. `TITLE_AGREES` is deliberately its own constant
+and not a reuse of `AUTHOR_AGREES`, so tuning the author gate never moves what the
+ISBN path writes.
+
+**The contradicted record is still offered to the LLM Chooser, and is never
+graded.** It is a candidate of its own in what the model is shown, because a file
+whose title is the wrong half (`Untitled`, `Microsoft Word - doc1`) can only be
+matched to the book its ISBN names by a reader of both. It **does not join the
+pool**, which is what keeps it out of the band, out of the walk's Early Exit, out
+of which sources are asked and out of the Half-asked hold (§4.2) — those are the
+ones the sources' own replies built. It joins what the model may see only when the
+title walk has not graded strong, after that hold. With no LLM Chooser configured
+the outcome is the title walk's own.
+
+**When the model picks that record, the write is a title match, not an ISBN
+match.** The file's ISBN did not identify this book — the record contradicting the
+file's title is why the book is on the fallback at all — so the ISBN field keeps
+its own rule and the record's ISBN is not written over the file's. §3.9's rule,
+that only an ISBN that identified the book is written, therefore stays true rather
+than gaining an exception.
+
+**The ISBN's weight stays zero (§2), and that is not in tension with the rule.**
+The field is not scored: the walk *reads* the ISBN to know which record it reached,
+and reads the title to decide whether that record is this book. An agreeing ISBN is
+still not evidence for the scorer, and a conflicting one still carries no penalty.
+
+**Known limit, accepted and pinned by a test:** containment is one-directional, so
+a record whose title is the first word(s) of the file's is still written — `Dune
+Messiah` carrying Dune's ISBN is written as *Dune*. It is never worse than the rule
+it replaces, which wrote every case including this one, and it is marked with a
+`ponytail:` comment where containment is tested.
+
+**Pooling the title query into the ISBN walk is deferred, not rejected.** The two
+designs interact through `dedupe`'s keep-first, which makes the written payload a
+function of Source Priority until CBO-61 merges duplicates; the conflict veto this
+rule implies and the pooling both wait on CBO-61.
+
 ---
 
 ## 4. Band boundaries
@@ -1006,8 +1090,14 @@ errored, and whether the walk exited early — that belongs on the walk's result
 `correction.py`, not inside `Ranked`, because the matcher grades a pool and cannot
 know how the pool was gathered.
 
-**The rule above is written about the pooled title walk.** Whether it reaches the
-non-pooled ISBN path is open, and CBO-67 settles it — see §6 item 18.
+**The rule above is written about the pooled title walk.** Resolved 2026-09-29: it
+reaches the ISBN path too, which records a source error and holds the book as
+half-asked like any other walk (`correction.py:585-592`). Carrying on to the next
+source instead of holding is CBO-82's clause. **The asymmetry §6 item 18 names is
+left standing deliberately, not left open** — first-hit remains the ISBN path's
+shape. That item reads CBO-67 as the ticket that settles it; CBO-67 was closed as
+already fixed on `main`, by the `_failed` this paragraph requires. See §3.10 for the
+ISBN path's own rule.
 
 ### 4.3 The LLM's gate, and the two thresholds that must not be confused
 
@@ -1271,8 +1361,11 @@ is a change of *measurement* rather than of *flow*.
   before confidence grading") cannot implement dedupe if CBO-58's banding depends on a
   deduped pool — they are one change to one module. **CBO-58 takes `dedupe()`; CBO-59
   keeps the flow wiring.** CBO-60 ("demote exact ISBN match from short-circuit to
-  scored field") is consumed: the demotion is a weight of zero in §2's table. **Both
-  tickets need editing in Linear before session 2 starts**, or session 2 will build
+  scored field") is **built, and was not only the weight of zero §2 gives it**
+  (corrected 2026-09-29, §3.10): the ISBN path keeps its fallback and its first-hit
+  shape, and an exact hit is written only when the record's title agrees with the
+  file's. That rule is CBO-60's whole content; the weight stays zero. **Both tickets
+  needed editing in Linear before session 2 started**, or session 2 would have built
   against a plan describing two overlapping implementations of the same thing.
 - **`hardcover.py` stops offering the Editions it labels audio.** An Edition the
   source states has an audio Reading Format is not offered on either path:
@@ -1613,3 +1706,4 @@ re-derived, no threshold moved, and no decision listed as settled was reopened.
 | §1.3: `L. K. Ross` **moved to the agreeing side** of the floor's worked list | It was listed at 0.6814 among the names that do not agree. 0.6814 clears the 0.5 gate, so it does agree — which is the premise of §6 item 3's whole containment argument, and of §4.1's window. The table two paragraphs above already said so, and §1.3 contradicted it |
 | §1.3: the claim that the floor **"refuses nothing that is genuinely the same name" removed** | False, and §3.4 holds the counterexample: a bare transposition (`LJ Ross` / `Ross LJ`, 0.1914) is the same name and is refused, because only the comma form is reversed before comparison. Replaced with the qualified statement |
 | §6 item 3: the **denominator-dependence of the containment margin** added as an open point | The window's lower bound of 0.8584 is the wrong author's score at denominator 1.80. At 2.15 the same author scores 0.8814 — 0.0086 under `strong_score`, not 0.0316. A wrong author at 0.705 similarity grades strong at 2.15, and at 0.725 at 2.00. Not a blocker; nothing in the fixture set reaches it. Flagged for §4.4 rather than fixed here, because fixing it means moving a threshold |
+| §3.10, §2, §4.2, §5.3: **an ISBN hit is written only when the title agrees** (CBO-60, ADR-0003, PR #28) | The amendment of 2026-09-29. §3.10 states the rule the build decided; the other three are sentences that described CBO-60 wrongly — the field is not "context in the medium band", CBO-67 needed nothing, and the demotion was never a weight |
