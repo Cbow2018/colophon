@@ -127,7 +127,7 @@ A Walk that ran to the end with a configured Source erroring. Its Pool is missin
 _Avoid_: partial walk, degraded
 
 **Stale ISBN**:
-The ISBN a file carries, when the record it reaches has a title that contradicts the file's. The record is not written from: the Walk continues on the file's own title and the file keeps the ISBN it came with, because the record the ISBN reached is a different Edition. With no LLM Chooser configured that usually leaves the book Unverified.
+An ISBN whose record contradicts the file's own title. The record is not written from: the book takes a title search as its fallback, and the file keeps the ISBN it came with, because the record the ISBN reached is not the book the file says it is. The contradicted record is still offered to the LLM Chooser. With no LLM Chooser configured that usually leaves the book Unverified.
 _Avoid_: wrong ISBN, bad ISBN, conflicting ISBN
 
 **LLM Chooser**:
