@@ -44,6 +44,7 @@ from colophon.matching import (
     rank,
     search_titles,
     standard_editions,
+    title_agrees,
     top_candidates,
 )
 from colophon.record import AUTHOR, SERIES, Match, book_key
@@ -575,7 +576,11 @@ class Corrector:
                     path, [(source.name, str(error))], f"ISBN {book.isbn}"
                 )
             if found is not None:
-                return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
+                if title_agrees(book.title, found.title):
+                    return self._write(
+                        path, found, CONFIDENCE, isbn=book.isbn, book=book
+                    )
+                return self._stale_isbn(path, book, found)
 
         if not search_titles(book.title):
             return self._unverified(path, book, None, tried)
@@ -586,7 +591,34 @@ class Corrector:
         # what recognised the book.
         return replace(self._by_title(path, book), carried_isbn=book.isbn)
 
-    def _by_title(self, path, book):
+    def _stale_isbn(self, path, book, found):
+        """The ISBN hit whose title contradicts it: a stale ISBN, so fall back.
+
+        The identifier reached a record that contradicts the file's own title,
+        which is what a reused or stale ISBN looks like. The record is not
+        written from, and the book is not held for it either: it takes the
+        fallback that a file whose ISBN no source has already takes - the title
+        path on the file's own title, with the file's own ISBN kept, because the
+        record that recognised it is a different Edition (CBO-90, CBO-92).
+
+        The contradicted record is not thrown away either. It is what the file's
+        ISBN points at, and a file whose title is the wrong half - `Untitled` -
+        can only be matched to it by a reader of both. So it joins the pool the
+        LLM Chooser is offered when the title walk does not grade strong.
+
+        A file with no title has nothing to contradict it, and never reaches
+        here: `title_agrees` answers yes for it, and the hit is written.
+
+        The record joins what the model is offered, because the file's title
+        walk is not a decision here - it is the search that came up empty - and
+        the identifier is the only other thing the file said. A file whose title
+        is `Untitled` has no other way to be recognised as the book its ISBN
+        names, and the title walk's own answer is unchanged when the model is
+        not there to be asked.
+        """
+        return replace(self._by_title(path, book, extra=found), carried_isbn=book.isbn)
+
+    def _by_title(self, path, book, extra=None):
         """The title path, for a file that carries no ISBN.
 
         The title is cleaned first, because the file's title has the subtitle
@@ -613,6 +645,16 @@ class Corrector:
         for tomorrow rather than written or marked (§4.2). A walk that *exited*
         early is not half-asked whatever a source below it might have done - the
         source was never going to be asked.
+
+        `extra` is a record the walk would not otherwise have found and that the
+        model should still see. It is passed by the ISBN path when the title
+        contradicts the ISBN the file carries (CBO-60): the identifier reached a
+        book whose title disagrees with the file's, so the title is what the walk
+        searches by - but the record the identifier reached is the one thing the
+        file's ISBN points at, and a file titled `Untitled` can only be matched
+        to it by a reader of both. It is offered to the model and never written
+        from by the rules: it is graded in that pool, and only a strong title
+        walk or the model's own pick is ever written from.
         """
         titles = search_titles(book.title)
         if not titles:
@@ -628,10 +670,11 @@ class Corrector:
         file_book = FileBook(book.title, book.authors, language, book.date)
         author = next((name for name in book.authors if str(name).strip()), None)
 
-        walk = self._gather(file_book, titles, language, author)
+        walk = self._gather(file_book, titles, language, author, extra=extra)
         # The band is not a property of the pool: the thresholds are the user's,
         # so it is asked of them rather than read off the `Ranked`.
-        band = band_of(walk.ranked, self.bands)
+        ranked = walk.ranked
+        band = band_of(ranked, self.bands)
 
         if walk.errored and not walk.exited:
             return self._failed(path, walk.errored, title)
@@ -641,19 +684,19 @@ class Corrector:
             # leader the author gate rejected at every threshold, so a candidate
             # that is not an explanation of this book is never written from on
             # the rules' say-so.
-            match = walk.ranked.leader
+            match = ranked.leader
             return self._write(path, match.candidate, match.score, book=book)
 
         # The best candidate that does agree on both halves, which is what a
         # book no source could match still names: a reply that agrees on neither
         # is not an explanation of this book and is not named as one, though it
         # is still offered to the model.
-        nearest = next((match for match in walk.ranked.matches if match.agrees), None)
+        nearest = next((match for match in ranked.matches if match.agrees), None)
         # What the model may be shown. `medium` is the band that was always
         # meant to ask; `llm_full_scan` widens that to low and none, which are
         # the books every source was asked about and nothing usable came back
         # for (§4.3). A strong pool never reaches here.
-        offered = top_candidates(walk.ranked)
+        offered = top_candidates(ranked)
         if offered and (band == "medium" or self.llm_full_scan):
             chosen, answered = self._ask_llm(path, book, offered)
             if chosen is not None:
@@ -675,7 +718,7 @@ class Corrector:
         # reaches the ISBN path, where the sources were asked and did not have it.
         return self._unverified(path, book, title, walk.asked, nearest)
 
-    def _gather(self, file_book, titles, language, author):
+    def _gather(self, file_book, titles, language, author, extra=None):
         """Ask every source in turn, pool what they offer, and grade the pool.
 
         Returns the `Walk`: which sources answered, which could not be asked,
@@ -708,6 +751,15 @@ class Corrector:
             # in `standard_editions` the user's Source Priority. Filling in a kept
             # record's missing fields from the others is CBO-61's, not this.
             pool = dedupe(standard_editions([*pool, *candidates]))
+            if extra is not None:
+                # The record that reached the walk by another road joins only
+                # after every source has been asked, so it cannot affect which
+                # of them were: a Work it shares with one of them keeps that
+                # source's record, `dedupe` keeping the first, and it is graded
+                # by the same rules every other candidate is - never trusted for
+                # having carried the file's ISBN. It is graded here rather than
+                # in a second pass so that one reply is still scored once.
+                pool = dedupe(standard_editions([*pool, extra]))
             ranked = rank(file_book, pool)
             if band_of(ranked, self.bands) == "strong":
                 # A source the decision never reached is not a source that
@@ -751,6 +803,13 @@ class Corrector:
         except (LlmError, LlmLimited) as error:
             return self._wait(path, error), None
 
+        if choice is None:
+            # CBO-98: a reply that is not the contract is `None`, not a `Choice`,
+            # and it means the model answered nothing usable rather than that it
+            # could not be asked - so the book ends at `_unverified` like any
+            # other the rules could not match. Reading `.candidate` off it threw
+            # the whole scan away for one unreadable reply.
+            return None, None
         if choice.candidate is not None and choice.confidence >= self.strong_score:
             return self._write(
                 path, choice.candidate, choice.confidence, book=book, llm=choice
