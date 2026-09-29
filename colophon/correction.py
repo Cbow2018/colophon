@@ -615,18 +615,18 @@ class Corrector:
 
         The contradicted record is not thrown away either. It is what the file's
         ISBN points at, and a file whose title is the wrong half - `Untitled` -
-        can only be matched to it by a reader of both. So it joins the pool the
-        LLM Chooser is offered when the title walk does not grade strong.
+        can only be matched to it by a reader of both. So it is offered to the
+        LLM Chooser when the title walk does not grade strong.
 
         A file with no title has nothing to contradict it, and never reaches
         here: `title_agrees` answers yes for it, and the hit is written.
 
-        The record joins what the model is offered, because the file's title
-        walk is not a decision here - it is the search that came up empty - and
-        the identifier is the only other thing the file said. A file whose title
-        is `Untitled` has no other way to be recognised as the book its ISBN
-        names, and the title walk's own answer is unchanged when the model is
-        not there to be asked.
+        The record is offered and not graded, because the file's title walk is
+        not a decision here - it is the search that came up empty - and the
+        identifier is the only other thing the file said. A file whose title is
+        `Untitled` has no other way to be recognised as the book its ISBN names,
+        and the title walk's own answer is unchanged when the model is not there
+        to be asked.
         """
         return replace(self._by_title(path, book, extra=found), carried_isbn=book.isbn)
 
@@ -664,9 +664,9 @@ class Corrector:
         book whose title disagrees with the file's, so the title is what the walk
         searches by - but the record the identifier reached is the one thing the
         file's ISBN points at, and a file titled `Untitled` can only be matched
-        to it by a reader of both. It is offered to the model and never written
-        from by the rules: it is graded in that pool, and only a strong title
-        walk or the model's own pick is ever written from.
+        to it by a reader of both. It is appended to what the model is offered and
+        is never graded: the pool, the band, the walk's Early Exit and every write
+        the rules make are the ones the sources' own replies built.
         """
         titles = search_titles(book.title)
         if not titles:
@@ -682,7 +682,7 @@ class Corrector:
         file_book = FileBook(book.title, book.authors, language, book.date)
         author = next((name for name in book.authors if str(name).strip()), None)
 
-        walk = self._gather(file_book, titles, language, author, extra=extra)
+        walk = self._gather(file_book, titles, language, author)
         # The band is not a property of the pool: the thresholds are the user's,
         # so it is asked of them rather than read off the `Ranked`.
         ranked = walk.ranked
@@ -709,6 +709,15 @@ class Corrector:
         # the books every source was asked about and nothing usable came back
         # for (§4.3). A strong pool never reaches here.
         offered = top_candidates(ranked)
+        if extra is not None and extra not in offered:
+            # The record the file's ISBN reached, when its title contradicted the
+            # file's (CBO-60). It is offered and never graded: it is what the
+            # file's own identifier points at, and a file whose title is the
+            # wrong half - `Untitled` - can only be matched to it by a reader of
+            # both. So it does not join the pool, which is what keeps it out of
+            # the band, out of the walk's Early Exit and out of the rules' write
+            # - `top_candidates` is where the sources' own replies stop.
+            offered.append(extra)
         if offered and (band == "medium" or self.llm_full_scan):
             chosen, answered = self._ask_llm(path, book, offered)
             if chosen is not None:
@@ -730,7 +739,7 @@ class Corrector:
         # reaches the ISBN path, where the sources were asked and did not have it.
         return self._unverified(path, book, title, walk.asked, nearest)
 
-    def _gather(self, file_book, titles, language, author, extra=None):
+    def _gather(self, file_book, titles, language, author):
         """Ask every source in turn, pool what they offer, and grade the pool.
 
         Returns the `Walk`: which sources answered, which could not be asked,
@@ -763,15 +772,6 @@ class Corrector:
             # in `standard_editions` the user's Source Priority. Filling in a kept
             # record's missing fields from the others is CBO-61's, not this.
             pool = dedupe(standard_editions([*pool, *candidates]))
-            if extra is not None:
-                # The record that reached the walk by another road joins only
-                # after every source has been asked, so it cannot affect which
-                # of them were: a Work it shares with one of them keeps that
-                # source's record, `dedupe` keeping the first, and it is graded
-                # by the same rules every other candidate is - never trusted for
-                # having carried the file's ISBN. It is graded here rather than
-                # in a second pass so that one reply is still scored once.
-                pool = dedupe(standard_editions([*pool, extra]))
             ranked = rank(file_book, pool)
             if band_of(ranked, self.bands) == "strong":
                 # A source the decision never reached is not a source that

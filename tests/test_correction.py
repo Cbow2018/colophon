@@ -3105,6 +3105,148 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
         self.assertIn("title=Cragside author=L.J. Ross", prompt)
 
+    def test_the_contradicted_record_is_never_written_from_by_the_rules(self):
+        """What the model is offered is not a candidate, whatever it scores.
+
+        The contradicted record carries the same series subtitle as the file and
+        scores 0.809 against it - a medium band on its own, and high enough to be
+        the leader of this walk's pool. In the pool it is graded with the rest and
+        the rules write the leader; offered to the model and nothing else, the
+        rules write what they always would have.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        source = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            candidates=[BERWICK_CANDIDATE],
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(
+            outcome.matched,
+            "Berwick agrees on neither half of this book, so nothing is written",
+        )
+        self.assertEqual(
+            read(path).title,
+            "The Shrine: A DCI Ryan Mystery",
+            "and the record the ISBN reached is not written over it",
+        )
+        self.assertTrue(outcome.unverified, outcome.fragment())
+
+    def test_the_contradicted_record_cannot_close_the_walk_early(self):
+        """A strong source below it is still asked, and still writes.
+
+        The record would be the leader of this pool if it were graded with it -
+        it scores 0.809 where both sources' records score 0.4458 and 0.4444 - and
+        the pool would then be medium with a gap of 0.36, so the walk would exit
+        at the first source and ``Belsay`` would never be offered. The record is
+        not a candidate, so the walk does not stop.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        first = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            candidates=[BERWICK_CANDIDATE],
+        )
+        second = FakeSource(candidates=[BELSAY_CANDIDATE], name="google_books")
+        corrector = self.corrector_over(first, second)
+
+        outcome = corrector.correct(path)
+
+        self.assertEqual(
+            [len(first.asked_titles), len(second.asked_titles)],
+            [1, 1],
+            "both sources were asked by title, so the record did not end the walk",
+        )
+        self.assertFalse(outcome.waiting, "and nothing was held for the record")
+
+    def test_the_contradicted_record_is_offered_even_when_it_is_not_the_best(self):
+        """The offer does not depend on the pool's order, so the model sees it.
+
+        The pool's own leader is a record that agrees on neither half of this
+        book, and the record the ISBN reached is ranked below it - the prompt's
+        per-source cap and the pool's order are about what the sources offered.
+        The record is what the file's own identifier points at, so it is offered
+        whatever the pool makes of it, and the model can pick it.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        source = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            candidates=[BERWICK_CANDIDATE],
+        )
+        llm = self.an_llm_picking(2)
+
+        outcome = self.corrector(source=source, llm=llm).correct(path)
+
+        self.assertEqual(
+            len(llm._transport.sent), 1, "the model was asked once, for this book"
+        )
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn(
+            "title=Cragside: A DCI Ryan Mystery author=L.J. Ross",
+            prompt,
+            "the record the ISBN reached is offered as a candidate of its own",
+        )
+        self.assertIn(
+            "1. title=Berwick",
+            prompt,
+            "and the pool's own order is what numbers the rest, not the record",
+        )
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(
+            outcome.chosen_by, "llm", "the model is what matched this book"
+        )
+        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery")
+
+    def test_the_contradicted_record_does_not_excuse_a_half_asked_walk(self):
+        """A source that could not answer still holds the book.
+
+        The contradicted record is the reason the book is on the fallback at
+        all, and it is not a source that answered: with a source erroring the
+        walk is half-asked, the book waits, and nothing is written - the record
+        changes neither the hold nor a byte of the file.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        before = path.read_bytes()
+        source = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            title_error=SourceError("Hardcover answered HTTP 503"),
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.waiting, outcome.fragment())
+        self.assertIn("Hardcover answered HTTP 503", outcome.fragment())
+        self.assertEqual(path.read_bytes(), before, "the file was not touched")
+        self.assertEqual(self.kept(), [], "and nothing was backed up")
+
+    def test_the_contradicted_record_is_offered_when_no_source_answers(self):
+        """Scenario (c): every source silent, and the record is still shown.
+
+        The walk's own sources have nothing at all, so the pool is empty - and
+        the record the file's ISBN reached is the only thing either half of the
+        file said. It has to reach the model from there, or a file with a stale
+        ISBN and a wrong title has no route to its own book.
+        """
+        path = self.an_isbn_book("Untitled.epub", "Untitled")
+        source = FakeSource(found=self.a_sibling("Cragside"), candidates=[])
+        llm = self.an_llm_picking(1)
+
+        outcome = self.corrector(source=source, llm=llm).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.chosen_by, "llm")
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(
+            len(llm._transport.sent), 1, "the model was asked once, for this book"
+        )
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn(
+            "title=Cragside author=L.J. Ross",
+            prompt,
+            "the record the ISBN reached is in the list, though no source offered it",
+        )
+
     def test_a_record_titled_dune_is_written_over_a_dune_messiah_file_known_limit(
         self,
     ):
