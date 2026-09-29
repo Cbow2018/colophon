@@ -563,8 +563,11 @@ class Corrector:
         path is for. So the fallback is a title search over the same list, and its
         answer is the answer: a match corrects the book, and nothing at or above
         the threshold leaves it marked unverified like any other book no source
-        can vouch for. A stale ISBN takes that same fallback, which is what
-        `_stale_isbn` is.
+        can vouch for. A stale ISBN - a hit whose record contradicts the file's own
+        title, which is what a reused or stale ISBN looks like - takes that same
+        fallback. The contradicted record is not thrown away with it: it is
+        offered to the LLM Chooser rather than graded, because a file whose title
+        is the wrong half can only be matched to it by a reader of both.
 
         The match the fallback finds keeps the ISBN the file came with: the record
         that recognised the book is a different edition, and writing its ISBN over
@@ -592,7 +595,9 @@ class Corrector:
                     return self._write(
                         path, found, CONFIDENCE, isbn=book.isbn, book=book
                     )
-                return self._stale_isbn(path, book, found)
+                return replace(
+                    self._by_title(path, book, extra=found), carried_isbn=book.isbn
+                )
 
         if not search_titles(book.title):
             return self._unverified(path, book, None, tried)
@@ -602,33 +607,6 @@ class Corrector:
         # with onto that outcome, for the line to name, without claiming it was
         # what recognised the book.
         return replace(self._by_title(path, book), carried_isbn=book.isbn)
-
-    def _stale_isbn(self, path, book, found):
-        """The ISBN hit whose title contradicts it: a stale ISBN, so fall back.
-
-        The identifier reached a record that contradicts the file's own title,
-        which is what a reused or stale ISBN looks like. The record is not
-        written from, and the book is not held for it either: it takes the
-        fallback that a file whose ISBN no source has already takes - the title
-        path on the file's own title, with the file's own ISBN kept, because the
-        record that recognised it is a different Edition (CBO-90, CBO-92).
-
-        The contradicted record is not thrown away either. It is what the file's
-        ISBN points at, and a file whose title is the wrong half - `Untitled` -
-        can only be matched to it by a reader of both. So it is offered to the
-        LLM Chooser when the title walk does not grade strong.
-
-        A file with no title has nothing to contradict it, and never reaches
-        here: `title_agrees` answers yes for it, and the hit is written.
-
-        The record is offered and not graded, because the file's title walk is
-        not a decision here - it is the search that came up empty - and the
-        identifier is the only other thing the file said. A file whose title is
-        `Untitled` has no other way to be recognised as the book its ISBN names,
-        and the title walk's own answer is unchanged when the model is not there
-        to be asked.
-        """
-        return replace(self._by_title(path, book, extra=found), carried_isbn=book.isbn)
 
     def _by_title(self, path, book, extra=None):
         """The title path, for a file that carries no ISBN.
