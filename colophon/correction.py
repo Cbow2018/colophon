@@ -792,12 +792,14 @@ class Corrector:
     def _ask_llm(self, path, book, candidates):
         """Put the candidates to the LLM, and say what it answered.
 
-        Returns `(outcome, choice)`, and the three answers are three of those:
-        a pick that clears the threshold is `(the book written, choice)`; a pick
-        that is not sure enough, a null pick, or a reply that is not the contract
-        at all is `(None, choice)` - the model answered, so there is nothing to
-        wait for, and the caller ends it in the unverified path; and not being
-        able to ask at all is `(the book left waiting, None)`.
+        Returns `(outcome, choice)`, and the answers are these: a pick that clears
+        the threshold is `(the book written, choice)`; a pick that is not sure
+        enough or a null pick is `(None, choice)` - the model answered, so there
+        is nothing to wait for, and the caller ends it in the unverified path
+        with the pick and the number it gave; a reply that is not the contract at
+        all is `(None, None)`, because the model answered nothing usable and
+        there is no pick to record (CBO-98); and not being able to ask at all is
+        `(the book left waiting, None)`.
 
         "Not being able to ask" is not only an outage: the day's call limit is
         spent, and a 4xx that is not a 401 is a configuration mistake that
