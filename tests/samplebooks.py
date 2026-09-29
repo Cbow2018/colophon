@@ -4,10 +4,15 @@ Tests write their metadata out in full, because the difference between an
 EPUB 2 identifier and an EPUB 3 one is the whole point of some of them.
 """
 
+import re
 import zipfile
 from pathlib import Path
 
 GUTENBERG_DIR = Path(__file__).parent / "fixtures" / "books"
+
+# One `dc:title`, with whatever attributes it carries, in both the paired and the
+# self-closing form a package document may write it in.
+_TITLE = re.compile(r"(<dc:title\b[^>]*>)(.*?)(</dc:title>)", re.DOTALL)
 
 PACKAGE = """<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf"
@@ -212,6 +217,35 @@ def add_isbn(path, isbn):
             written.compress_type = entry.compress_type
             book.writestr(written, body)
     return path
+
+
+def set_title(path, title):
+    """Give a real book a title of Colophon's choosing.
+
+    A Gutenberg EPUB names its own book, and a source asked about that title
+    answers no such book - so a test that wants the ISBN path to reach a record
+    writes the title the record carries. It edits the package document by hand,
+    like `add_isbn`, so the fixture is not set up by the thing being tested.
+    """
+    path = Path(path)
+    with zipfile.ZipFile(path) as book:
+        entries = [(entry, book.read(entry.filename)) for entry in book.infolist()]
+
+    with zipfile.ZipFile(path, "w") as book:
+        for entry, body in entries:
+            if entry.filename.endswith(".opf"):
+                body = _with_title(body, title)
+            written = zipfile.ZipInfo(entry.filename, entry.date_time)
+            written.compress_type = entry.compress_type
+            book.writestr(written, body)
+    return path
+
+
+def _with_title(opf, title):
+    text = opf.decode("utf-8")
+    return _TITLE.sub(
+        lambda match: f"{match.group(1)}{title}{match.group(3)}", text, count=1
+    ).encode("utf-8")
 
 
 def _with_isbn(opf, isbn):

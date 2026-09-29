@@ -449,7 +449,7 @@ class CorrectingBooksOnTheWayThroughTests(RelayTestCase):
         """
         write_epub(
             self.ingest / "Cragside.epub",
-            f"""    <dc:title>Something Else Entirely</dc:title>
+            f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:creator>Nobody</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:language>en</dc:language>
