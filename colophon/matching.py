@@ -410,10 +410,13 @@ def title_agrees(file_title, record_title):
     article is dropped by `comparison_text` on both sides, so a file that lost
     its article still contains the record.
 
-    or the calibrated title similarity - the file's head and the record's, one
-    form per side, exactly as the scorer compares them - reaches `TITLE_AGREES`.
-    That covers the misspelling containment cannot: `Cragsde` does not contain
-    `cragside`, and scores 0.8533.
+    or the calibrated title similarity - the file's head against the record's,
+    one form per side, exactly as the scorer compares them - reaches
+    `TITLE_AGREES`. That covers the misspelling containment cannot: `Cragsde`
+    does not contain `cragside`, and scores 0.8533. The heads and not the full
+    titles, because a series puts one subtitle on every record of it: `The
+    Shrine: A DCI Ryan Mystery` and `The Infirmary: A DCI Ryan Mystery` are one
+    word apart on the full titles and 0.1417 on the heads.
 
     A file with no title never contradicts: it has nothing to disagree with, and
     on that path the ISBN is the only identity it has.
@@ -422,15 +425,15 @@ def title_agrees(file_title, record_title):
     first word(s) of the file's is still written - `Dune Messiah` carrying
     Dune's ISBN. Never worse than before this rule, which wrote every case.
     """
-    file_head, file_subtitle, _ = _parts_of(file_title)
-    record_head, record_subtitle, _ = _parts_of(record_title)
+    file_head, _, _ = _parts_of(file_title)
+    record_head, _, _ = _parts_of(record_title)
     file_text = comparison_text(file_head)
     record_text = comparison_text(record_head)
     if not file_text:
         return True
     if record_text and f" {record_text} " in f" {file_text} ":
         return True
-    penalty, _ = _title_penalty(file_head, file_subtitle, record_head, record_subtitle)
+    penalty, _ = _title_penalty(file_head, None, record_head, None)
     return 1.0 - penalty >= TITLE_AGREES
 
 

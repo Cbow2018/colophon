@@ -3000,6 +3000,27 @@ class TheSourcePriorityListTests(CorrectionTestCase):
 
                 self.assertFalse(outcome.matched, outcome.fragment())
 
+    def test_a_subtitle_sibling_that_shares_the_file_s_title_is_not_written_from(self):
+        """The sibling shape the CBO-60 review found written, and refused now.
+
+        A series keeps one subtitle on every record of it - `A DCI Ryan Mystery`
+        is on all twenty - so two different books of the series have titles one
+        word apart. The record's whole title is not contained in the file's, and
+        the heads score 0.1417 where the full titles score 0.5364, so reading the
+        full titles writes *The Infirmary* over a *Shrine* file. The heads decide.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        source = FakeSource(found=self.a_sibling("The Infirmary: A DCI Ryan Mystery"))
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched, outcome.fragment())
+        self.assertNotEqual(
+            read(path).title,
+            "The Infirmary: A DCI Ryan Mystery",
+            "the sibling's title is not written",
+        )
+
     def test_a_contradicted_isbn_keeps_the_isbn_the_file_came_with(self):
         """The fallback's own promise, on the path that now reaches it.
 

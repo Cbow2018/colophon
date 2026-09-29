@@ -331,6 +331,28 @@ class TitleAgreesTests(unittest.TestCase):
         self.assertFalse(title_agrees("Seahouses", "Cragside"))
         self.assertFalse(title_agrees("Holy Island", "Cragside"))
 
+    def test_siblings_sharing_a_series_subtitle_are_refused(self):
+        """Two books of one series, and the series subtitle both of them carry.
+
+        `A DCI Ryan Mystery` is on every record of the series, so the full titles
+        of two of them are one word apart while the books are not alike at all:
+        `The Shrine: A DCI Ryan Mystery` against `The Infirmary: A DCI Ryan
+        Mystery` is 0.5364 on the full titles and 0.1417 on the heads, and the
+        allowance at 0.5 reads the first as agreement. The clause that decides is
+        the heads, which is also the form the scorer compares and the form the
+        Session 1b decision measured the allowance on.
+        """
+        self.assertFalse(
+            title_agrees(
+                "The Shrine: A DCI Ryan Mystery", "The Infirmary: A DCI Ryan Mystery"
+            )
+        )
+        self.assertFalse(
+            title_agrees(
+                "Seahouses: A DCI Ryan Mystery", "Cragside: A DCI Ryan Mystery"
+            )
+        )
+
     def test_a_file_with_no_title_never_contradicts(self):
         """Nothing to disagree with, and the ISBN is the only identity there is."""
         self.assertTrue(title_agrees(None, "Cragside"))

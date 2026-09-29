@@ -16,21 +16,25 @@ hit is a **stale ISBN** and the book takes the fallback that a file whose ISBN
 no source has already takes - the title path on the file's own title, with the
 file's own ISBN kept. The author is not read on this path at all.
 
-**A title agrees** when either of two things holds. The record's whole title,
-through `comparison_text`, is contained in the file's through `comparison_text`
-as whole words - `f" {record} " in f" {file} "`, which admits every messy title
-measured (`Cragside - L J Ross`, `Cragside.epub`, `L. J. Ross - Cragside (DCI
-Ryan 6)`) and refuses every sibling (`Seahouses`, `Angel`, `Holy Island`). Or
-the calibrated title similarity - the file's head against the record's, one form
-per side, exactly as the scorer compares them - reaches `TITLE_AGREES = 0.5`,
-which is what catches a misspelling, because `Cragsde` does not contain
-`cragside` and scores 0.8533. `TITLE_AGREES` is deliberately its own constant
-rather than a reuse of `AUTHOR_AGREES`: the two happen to share a value today,
-and tuning the author gate must not move what an ISBN path writes. A file with
-no searchable title never contradicts - it has nothing to disagree with, and on
-that path the ISBN is the only identity it has. A contradicted record is not
-discarded: it joins the pool the LLM Chooser is offered, because a file whose
-title is the wrong half (`Untitled`, `Microsoft Word - doc1`) can only be
+**A title agrees** when either of two things holds. The record's title head,
+through `comparison_text`, is contained in the file's as whole words -
+`f" {record} " in f" {file} "`, which admits every messy title measured
+(`Cragside - L J Ross`, `Cragside.epub`, `L. J. Ross - Cragside (DCI Ryan 6)`)
+and refuses every sibling (`Seahouses`, `Angel`, `Holy Island`). Or the
+calibrated title similarity - the file's head against the record's, one form per
+side, exactly as the scorer compares them - reaches `TITLE_AGREES = 0.5`, which
+is what catches a misspelling, because `Cragsde` does not contain `cragside` and
+scores 0.8533. The heads and not the full titles, on both legs: a series puts one
+subtitle on every record of it, so `The Shrine: A DCI Ryan Mystery` and `The
+Infirmary: A DCI Ryan Mystery` are one word apart on the full titles and 0.1417
+apart on the heads - reading the full titles admits a sibling of the series the
+rule exists to refuse. `TITLE_AGREES` is deliberately its own constant rather
+than a reuse of `AUTHOR_AGREES`: the two happen to share a value today, and
+tuning the author gate must not move what an ISBN path writes. A file with no
+searchable title never contradicts - it has nothing to disagree with, and on that
+path the ISBN is the only identity it has. A contradicted record is not
+discarded: it joins the candidates the LLM Chooser is offered, because a file
+whose title is the wrong half (`Untitled`, `Microsoft Word - doc1`) can only be
 matched to the book its ISBN names by a reader of both.
 
 When the model picks that contradicted record, **the write is a title match, not
