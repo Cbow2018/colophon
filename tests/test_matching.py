@@ -27,6 +27,7 @@ from colophon.matching import (
     score_candidate,
     search_title,
     standard_editions,
+    title_agrees,
     top_candidates,
 )
 
@@ -285,6 +286,55 @@ class TitleComparisonTests(unittest.TestCase):
 
         self.assertLess(match.score, 0.89, "§4.1's multi-candidate strong bar")
         self.assertTrue(match.author_agrees)
+
+
+class TitleAgreesTests(unittest.TestCase):
+    """CBO-60: the trial an ISBN hit is put to, and what each clause catches."""
+
+    def test_a_record_whose_title_is_the_files_is_contained(self):
+        self.assertTrue(title_agrees(MESSY, "Cragside"))
+
+    def test_containment_is_whole_words(self):
+        """`Angel` is in `Evangeline` as characters and not as a word.
+
+        Character containment is the alternative CBO-60 measured and rejected:
+        it writes `Angel` over `Evangeline`, `Us` over `Tempus Fugit` and `Emma`
+        over `Gemma and the Lighthouse`, and no threshold tune separates those
+        from the real messy titles it is meant to admit.
+        """
+        self.assertFalse(title_agrees("Evangeline", "Angel"))
+        self.assertFalse(title_agrees("Tempus Fugit", "Us"))
+        self.assertFalse(title_agrees("Gemma and the Lighthouse", "Emma"))
+
+    def test_the_article_the_record_lost_still_agrees(self):
+        """`The Infirmary` is `infirmary` through `comparison_text`, twice.
+
+        The file drops the article the record keeps, or the other way round, and
+        the two still read as one title - which is what containment does here
+        and the raw ratio does not.
+        """
+        self.assertTrue(title_agrees("Infirmary", "The Infirmary"))
+
+    def test_a_misspelling_is_caught_by_the_allowance_and_not_by_containment(
+        self,
+    ):
+        """`Cragsde` does not contain `cragside`; it scores 0.8533.
+
+        This is the whole reason `TITLE_AGREES` exists as well as containment: a
+        one-edit typo of a short title is a real file, and it is neither a
+        different book nor a title that contains the record's.
+        """
+        self.assertNotIn("cragside", "cragsde")
+        self.assertTrue(title_agrees("Cragsde", "Cragside"))
+
+    def test_a_different_book_is_refused(self):
+        self.assertFalse(title_agrees("Seahouses", "Cragside"))
+        self.assertFalse(title_agrees("Holy Island", "Cragside"))
+
+    def test_a_file_with_no_title_never_contradicts(self):
+        """Nothing to disagree with, and the ISBN is the only identity there is."""
+        self.assertTrue(title_agrees(None, "Cragside"))
+        self.assertTrue(title_agrees("", "Cragside"))
 
 
 class AuthorComparisonTests(unittest.TestCase):
