@@ -44,6 +44,7 @@ from colophon.matching import (
     rank,
     search_titles,
     standard_editions,
+    title_agrees,
     top_candidates,
 )
 from colophon.record import AUTHOR, SERIES, Match, book_key
@@ -539,12 +540,21 @@ class Corrector:
         return self._by_title(path, book)
 
     def _by_isbn(self, path, book):
-        """The ISBN path, which falls back to the title when the ISBN finds nothing.
+        """The ISBN path, which falls back to the title.
 
         The walk stops at the first source that has the edition. An ISBN
         identifies one, so the first source to know it is as good as any other,
         and the ISBN itself is only ever written by its own rule - usually
         nothing, since the file already carries it.
+
+        The hit is read before it is written. An ebook ISBN is often stale,
+        absent or the print edition's, so the record the identifier reaches can
+        belong to another book entirely - and writing from it would put that
+        book's title, series, publisher and date into this file without a word
+        of the contradiction being noticed. So the title decides: when the
+        record's title agrees with the file's, the hit is written as it always
+        was, and the author is not read at all on this path. When it does not
+        agree, the ISBN is stale and the book takes the fallback below.
 
         No source having the ISBN is not the end of the road. The ISBN a file
         carries can be one no source has - a self-published book, an edition
@@ -553,17 +563,23 @@ class Corrector:
         path is for. So the fallback is a title search over the same list, and its
         answer is the answer: a match corrects the book, and nothing at or above
         the threshold leaves it marked unverified like any other book no source
-        can vouch for.
+        can vouch for. A stale ISBN - a hit whose record contradicts the file's own
+        title, which is what a reused or stale ISBN looks like - takes that same
+        fallback. The contradicted record is not thrown away with it: it is
+        offered to the LLM Chooser rather than graded, because a file whose title
+        is the wrong half can only be matched to it by a reader of both.
 
         The match the fallback finds keeps the ISBN the file came with: the record
         that recognised the book is a different edition, and writing its ISBN over
         the file's would be claiming an edition this book has not been shown to be.
 
-        A file with no title has nothing to fall back to. The sources were asked
-        about it - by its ISBN, which is the one thing the file did say - and none
-        of them had it, so the book is marked like any other nobody could vouch
-        for. Returning the title path's "no title, so no source was asked" would
-        be a plain falsehood on this path: they were asked.
+        A file with no title has nothing to fall back to and nothing to
+        contradict it. A hit on one is written, because the ISBN is the only
+        identity the file has; a file whose ISBN *no* source has is marked like
+        any other nobody could vouch for, the sources having been asked by the
+        one thing the file did say. Returning the title path's "no title, so no
+        source was asked" would be a plain falsehood on this path: they were
+        asked.
         """
         tried = []
         for source in self.sources:
@@ -575,7 +591,13 @@ class Corrector:
                     path, [(source.name, str(error))], f"ISBN {book.isbn}"
                 )
             if found is not None:
-                return self._write(path, found, CONFIDENCE, isbn=book.isbn, book=book)
+                if title_agrees(book.title, found.title):
+                    return self._write(
+                        path, found, CONFIDENCE, isbn=book.isbn, book=book
+                    )
+                return replace(
+                    self._by_title(path, book, extra=found), carried_isbn=book.isbn
+                )
 
         if not search_titles(book.title):
             return self._unverified(path, book, None, tried)
@@ -586,7 +608,7 @@ class Corrector:
         # what recognised the book.
         return replace(self._by_title(path, book), carried_isbn=book.isbn)
 
-    def _by_title(self, path, book):
+    def _by_title(self, path, book, extra=None):
         """The title path, for a file that carries no ISBN.
 
         The title is cleaned first, because the file's title has the subtitle
@@ -613,6 +635,16 @@ class Corrector:
         for tomorrow rather than written or marked (§4.2). A walk that *exited*
         early is not half-asked whatever a source below it might have done - the
         source was never going to be asked.
+
+        `extra` is a record the walk would not otherwise have found and that the
+        model should still see. It is passed by the ISBN path when the title
+        contradicts the ISBN the file carries (CBO-60): the identifier reached a
+        book whose title disagrees with the file's, so the title is what the walk
+        searches by - but the record the identifier reached is the one thing the
+        file's ISBN points at, and a file titled `Untitled` can only be matched
+        to it by a reader of both. It is appended to what the model is offered and
+        is never graded: the pool, the band, the walk's Early Exit and every write
+        the rules make are the ones the sources' own replies built.
         """
         titles = search_titles(book.title)
         if not titles:
@@ -631,7 +663,8 @@ class Corrector:
         walk = self._gather(file_book, titles, language, author)
         # The band is not a property of the pool: the thresholds are the user's,
         # so it is asked of them rather than read off the `Ranked`.
-        band = band_of(walk.ranked, self.bands)
+        ranked = walk.ranked
+        band = band_of(ranked, self.bands)
 
         if walk.errored and not walk.exited:
             return self._failed(path, walk.errored, title)
@@ -641,19 +674,28 @@ class Corrector:
             # leader the author gate rejected at every threshold, so a candidate
             # that is not an explanation of this book is never written from on
             # the rules' say-so.
-            match = walk.ranked.leader
+            match = ranked.leader
             return self._write(path, match.candidate, match.score, book=book)
 
         # The best candidate that does agree on both halves, which is what a
         # book no source could match still names: a reply that agrees on neither
         # is not an explanation of this book and is not named as one, though it
         # is still offered to the model.
-        nearest = next((match for match in walk.ranked.matches if match.agrees), None)
+        nearest = next((match for match in ranked.matches if match.agrees), None)
         # What the model may be shown. `medium` is the band that was always
         # meant to ask; `llm_full_scan` widens that to low and none, which are
         # the books every source was asked about and nothing usable came back
         # for (§4.3). A strong pool never reaches here.
-        offered = top_candidates(walk.ranked)
+        offered = top_candidates(ranked)
+        if extra is not None and extra not in offered:
+            # The record the file's ISBN reached, when its title contradicted the
+            # file's (CBO-60). It is offered and never graded: it is what the
+            # file's own identifier points at, and a file whose title is the
+            # wrong half - `Untitled` - can only be matched to it by a reader of
+            # both. So it does not join the pool, which is what keeps it out of
+            # the band, out of the walk's Early Exit and out of the rules' write
+            # - `top_candidates` is where the sources' own replies stop.
+            offered.append(extra)
         if offered and (band == "medium" or self.llm_full_scan):
             chosen, answered = self._ask_llm(path, book, offered)
             if chosen is not None:
@@ -728,12 +770,14 @@ class Corrector:
     def _ask_llm(self, path, book, candidates):
         """Put the candidates to the LLM, and say what it answered.
 
-        Returns `(outcome, choice)`, and the three answers are three of those:
-        a pick that clears the threshold is `(the book written, choice)`; a pick
-        that is not sure enough, a null pick, or a reply that is not the contract
-        at all is `(None, choice)` - the model answered, so there is nothing to
-        wait for, and the caller ends it in the unverified path; and not being
-        able to ask at all is `(the book left waiting, None)`.
+        Returns `(outcome, choice)`, and the answers are these: a pick that clears
+        the threshold is `(the book written, choice)`; a pick that is not sure
+        enough or a null pick is `(None, choice)` - the model answered, so there
+        is nothing to wait for, and the caller ends it in the unverified path
+        with the pick and the number it gave; a reply that is not the contract at
+        all is `(None, None)`, because the model answered nothing usable and
+        there is no pick to record (CBO-98); and not being able to ask at all is
+        `(the book left waiting, None)`.
 
         "Not being able to ask" is not only an outage: the day's call limit is
         spent, and a 4xx that is not a 401 is a configuration mistake that
@@ -751,6 +795,13 @@ class Corrector:
         except (LlmError, LlmLimited) as error:
             return self._wait(path, error), None
 
+        if choice is None:
+            # CBO-98: a reply that is not the contract is `None`, not a `Choice`,
+            # and it means the model answered nothing usable rather than that it
+            # could not be asked - so the book ends at `_unverified` like any
+            # other the rules could not match. Reading `.candidate` off it threw
+            # the whole scan away for one unreadable reply.
+            return None, None
         if choice.candidate is not None and choice.confidence >= self.strong_score:
             return self._write(
                 path, choice.candidate, choice.confidence, book=book, llm=choice
@@ -1189,7 +1240,10 @@ class Corrector:
         the same edition, so its ISBN says nothing about this file and is not
         written into it: a book with no ISBN keeps none, and a book whose own
         ISBN no source has keeps that one under `overwrite` too (CBO-90, CBO-92).
-        `isbn_identifies` is true only when an ISBN is what recognised the book.
+        `isbn_identifies` is true only when an ISBN is what recognised the book -
+        and since CBO-60 that means an ISBN whose record's title agreed with the
+        file's, because a contradicted hit is demoted to the title path before
+        any field rule is reached.
 
         A field the source said nothing about is written by no rule at all: `fill`
         on a field a source is silent about is not a blank, and a source with no

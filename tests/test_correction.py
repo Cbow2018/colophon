@@ -62,8 +62,13 @@ from tests.samplebooks import (
     WITHOUT_AUTHOR,
     WITHOUT_AUTHOR_OR_LANGUAGE,
     add_isbn,
+    set_title,
     write_epub,
 )
+
+# The record's own title, which CBO-60 requires a file's title to agree with
+# before an ISBN hit is written from.
+CRAGSIDE_TITLE = "Cragside - L J Ross"
 from tests.sources import (
     ANOTHER_INFIRMARY,
     BELSAY_CANDIDATE,
@@ -422,14 +427,13 @@ class FieldRuleTests(CorrectionTestCase):
 
     def test_the_default_rules_are_the_ones_the_ticket_names(self):
         """A bare book, so every field is one the rules have something to say about."""
-        path = write_epub(
-            self.folder / "Bare.epub",
-            f"""    <dc:title>Something Else Entirely</dc:title>
+        path = self.book(
+            name="Bare.epub",
+            metadata=f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:creator>Nobody</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:description>The file's own blurb, which fill must leave alone.</dc:description>
 """,
-            version="2.0",
         )
 
         outcome = self.corrector(found=MATCH).correct(path)
@@ -492,7 +496,7 @@ class FieldRuleTests(CorrectionTestCase):
             )
         )
         path = self.book(
-            metadata=f"""    <dc:title>Something Else</dc:title>
+            metadata=f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
 """
         )
@@ -518,7 +522,7 @@ class FieldRuleTests(CorrectionTestCase):
         here rather than only in a case nothing reaches.
         """
         path = self.book(
-            metadata=f"""    <dc:title>Something Else Entirely</dc:title>
+            metadata=f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:creator>L.J. Ross</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:language>en</dc:language>
@@ -1138,7 +1142,7 @@ class FieldRuleTests(CorrectionTestCase):
 
         path = write_epub(
             self.folder / "Cragside.epub",
-            f"""    <dc:title>Something Else Entirely</dc:title>
+            f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:creator>Nobody</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:language>en</dc:language>
@@ -1158,7 +1162,7 @@ class FieldRuleTests(CorrectionTestCase):
     def test_a_dry_run_changes_nothing_and_still_says_what_it_would_do(self):
         path = write_epub(
             self.folder / "Cragside.epub",
-            f"""    <dc:title>Something Else Entirely</dc:title>
+            f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:creator>Nobody</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:language>en</dc:language>
@@ -1455,7 +1459,7 @@ class FromConfigTests(unittest.TestCase):
         config = load_config(env={"COLOPHON_CONFIG": str(path)})
         book = write_epub(
             self.folder / "Cragside.epub",
-            f"""    <dc:title>Something Else Entirely</dc:title>
+            f"""    <dc:title>Cragside - L J Ross</dc:title>
     <dc:creator>L.J. Ross</dc:creator>
     <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
     <dc:description>The file's own blurb.</dc:description>
@@ -1469,7 +1473,9 @@ class FromConfigTests(unittest.TestCase):
 
         written = {change.field for change in outcome.changed}
         self.assertIn("description", written, "the source's blurb replaced the file's")
-        self.assertEqual(read(book).title, "Something Else Entirely")
+        self.assertEqual(
+            read(book).title, "Cragside - L J Ross", "the title was skipped"
+        )
         self.assertEqual(read(book).description, CRAGSIDE_BLURB)
         self.assertNotIn("cover", written, "the config turned covers off, too")
 
@@ -1570,12 +1576,15 @@ class AGutenbergBookTests(CorrectionTestCase):
 
     Gutenberg's books carry no ISBN, so one is put in first, by hand: the point
     is to run a real EPUB 2 and a real EPUB 3 package document all the way
-    through, licence and all.
+    through, licence and all. The title goes on by hand too, for CBO-60's
+    reason: an ISBN hit is written only when the record's title agrees with the
+    file's, and these tests are about a real package document surviving a write.
     """
 
     def a_real_book(self, name="the-masque-of-the-red-death-epub3.epub"):
         path = self.folder / name
         shutil.copy(GUTENBERG_DIR / name, path)
+        set_title(path, CRAGSIDE_TITLE)
         return add_isbn(path, ISBN)
 
     def test_a_real_epub_3_is_corrected_and_its_original_is_kept(self):
@@ -2781,7 +2790,521 @@ class TheSourcePriorityListTests(CorrectionTestCase):
         settings.update(kwargs)
         return Corrector(sources=list(sources), fetch=self.offline_cover, **settings)
 
+    def a_sibling(self, title):
+        """A Hardcover record for another book of the series, on the file's ISBN.
+
+        The shape a stale ISBN really reaches: same author, same series, a
+        different book of it. The ISBN is the file's own, because carrying the
+        file's ISBN is what made this the record the ISBN path found.
+        """
+        return Candidate(
+            source="hardcover",
+            title=title,
+            authors=("L.J. Ross",),
+            series="DCI Ryan Mysteries",
+            series_number="3",
+            language="en",
+            isbn=ISBN,
+        )
+
+    def an_llm_picking(self, pick, confidence=1.0):
+        """A real `Llm` whose recorded reply picks the numbered candidate.
+
+        Replayed rather than stubbed, so what the test drives is the shipped
+        client reading a reply of the shape the API really sends. `pick` is the
+        number the prompt lists the candidate at, which is the pool's own order.
+        """
+        reply = json.dumps(
+            {
+                "object": "chat.completion",
+                "model": "deepseek-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps(
+                                {
+                                    "pick": pick,
+                                    "confidence": confidence,
+                                    "reason": "the file's ISBN is on this record",
+                                }
+                            ),
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        ).encode("utf-8")
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key="llm-secret-key-4242",
+            counter=self.folder / "llm.json",
+            transport=LlmReplay(body=reply),
+        )
+
     # --- the ISBN path -----------------------------------------------------
+
+    def an_isbn_book(self, name, title, creator="L. J. Ross"):
+        """A file carrying the sample ISBN, with the title and author given.
+
+        One parameter is left out rather than blank when the test wants it
+        absent, because an empty `dc:creator` is not the same file as one with
+        no `dc:creator` at all.
+        """
+        metadata = ""
+        if title is not None:
+            metadata += f"    <dc:title>{title}</dc:title>\n"
+        if creator is not None:
+            metadata += f"    <dc:creator>{creator}</dc:creator>\n"
+        metadata += f"""    <dc:identifier opf:scheme="ISBN">{ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+"""
+        return write_epub(self.folder / name, metadata, version="2.0")
+
+    def test_a_clean_title_is_written_under_its_isbn(self):
+        """The hit stands when the title agrees, which is what most books do.
+
+        CBO-60: the ISBN hit is no longer taken on trust, so the title has to be
+        read before it is written. A record whose title is the file's own says
+        nothing against the ISBN, so the write is the one it always was.
+        """
+        outcome = self.corrector().correct(self.book())
+
+        self.assertTrue(outcome.matched)
+
+    def test_a_file_that_names_no_author_is_written_under_its_isbn(self):
+        """The reason the title decides and the scorer does not.
+
+        A file with no `dc:creator` can never agree on an author, so
+        `score_candidate` caps it at `NO_AGREEMENT_CEILING` and every threshold
+        calls it low. Grading the ISBN hit that way would mark Unverified every
+        ISBN-bearing file whose author is missing - where today it is written.
+        The identifier is what the file did say, so it is read, and the title
+        answers the only question left.
+        """
+        path = self.an_isbn_book("Cragside.epub", "Cragside", creator=None)
+
+        outcome = self.corrector().correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.source, "hardcover")
+
+    def test_the_author_is_not_read_when_the_title_agrees(self):
+        """Nothing on the ISBN path compares authors, so neither of these stops it.
+
+        A file naming `Unknown` and one naming someone else both fail the
+        author gate, and both are written today for the reason the gate is not
+        asked: the ISBN is what identified the book, and the title is the only
+        field left with anything to say about which book the record is.
+        """
+        for creator in ("Unknown", "Someone Else"):
+            with self.subTest(creator=creator):
+                path = self.an_isbn_book("Cragside.epub", "Cragside", creator=creator)
+
+                outcome = self.corrector().correct(path)
+
+                self.assertTrue(outcome.matched, outcome.fragment())
+
+    def test_a_title_with_the_series_and_the_number_is_written_under_its_isbn(self):
+        """The record's title is contained in the file's, which is the whole test.
+
+        The file carries what the source keeps elsewhere - the subtitle and the
+        series placement - and the record carries the head alone. Containment is
+        what reads those as one title rather than as two.
+        """
+        path = self.an_isbn_book(
+            "Cragside.epub",
+            "Cragside: A DCI Ryan Mystery (The DCI Ryan Mysteries Book 6)",
+        )
+
+        outcome = self.corrector().correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+
+    def test_the_messy_titles_a_file_arrives_with_are_all_written(self):
+        """Every shape the CBO-60 decision measured, under its own ISBN.
+
+        Each is a real way a file states a title it downloaded under, and each
+        contains the record's own title as whole words. A file titled
+        `Cragside.epub` is the one that carries the extension through, and a
+        title typo is the case the allowance rather than containment catches.
+        """
+        for title in (
+            "Cragside - L J Ross",
+            "Cragside.epub",
+            "L. J. Ross - Cragside (DCI Ryan 6)",
+            "Cragsde",
+        ):
+            with self.subTest(title=title):
+                path = self.an_isbn_book("Cragside.epub", title)
+
+                outcome = self.corrector().correct(path)
+
+                self.assertTrue(outcome.matched, outcome.fragment())
+
+    def test_a_file_with_no_title_is_written_under_its_isbn(self):
+        """A file that names no title has nothing that can contradict the ISBN.
+
+        The ISBN is then the only identity the file has, and the record reached
+        by it is written as it always was - title, series and the rest filled in
+        from the source. This is not the same case as a file whose title no
+        source knows, which is the fallback below.
+        """
+        path = self.an_isbn_book("Untitled.epub", None)
+
+        outcome = self.corrector().correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(read(path).title, "Cragside")
+
+    def test_a_contradicted_title_is_not_written_from_the_isbn_record(self):
+        """CBO-60's case: the record the ISBN reaches is a different book.
+
+        An ebook ISBN is often stale or reused, and Hardcover answers with
+        whatever record carries it - here another book in the same series, by
+        the same author, whose title is nothing like the file's. Before this,
+        that record's title, series, publisher and date were written into the
+        file and the book was silently replaced by its sibling. Now the title
+        contradicts the ISBN, so the record is not written from at all.
+        """
+        for sibling in ("Seahouses", "Angel", "Holy Island"):
+            with self.subTest(record=sibling):
+                source = FakeSource(found=self.a_sibling(sibling))
+                path = self.book()
+
+                outcome = self.corrector(source=source).correct(path)
+
+                self.assertFalse(outcome.matched, outcome.fragment())
+                self.assertNotEqual(read(path).title, sibling)
+
+    def test_every_shape_of_a_title_that_contradicts_the_isbn(self):
+        """The titles that carry no agreement at all with the record's.
+
+        `Untitled` is what a file says when its own metadata says nothing, and
+        `Evangeline` and `Tempus Fugit` are the whole-word traps: `Angel` and
+        `Us` are in both of them as characters and in neither as words.
+        """
+        for title, record in (
+            ("Untitled", "Cragside"),
+            ("Evangeline", "Angel"),
+            ("Tempus Fugit", "Us"),
+        ):
+            with self.subTest(title=title, record=record):
+                source = FakeSource(found=self.a_sibling(record))
+                path = self.an_isbn_book("Cragside.epub", title)
+
+                outcome = self.corrector(source=source).correct(path)
+
+                self.assertFalse(outcome.matched, outcome.fragment())
+
+    def test_a_subtitle_sibling_that_shares_the_file_s_title_is_not_written_from(self):
+        """The sibling shape the CBO-60 review found written, and refused now.
+
+        A series keeps one subtitle on every record of it - `A DCI Ryan Mystery`
+        is on all twenty - so two different books of the series have titles one
+        word apart. The record's whole title is not contained in the file's, and
+        the heads score 0.1417 where the full titles score 0.5364, so reading the
+        full titles writes *The Infirmary* over a *Shrine* file. The heads decide.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        source = FakeSource(found=self.a_sibling("The Infirmary: A DCI Ryan Mystery"))
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched, outcome.fragment())
+        self.assertNotEqual(
+            read(path).title,
+            "The Infirmary: A DCI Ryan Mystery",
+            "the sibling's title is not written",
+        )
+
+    def test_a_contradicted_isbn_keeps_the_isbn_the_file_came_with(self):
+        """The fallback's own promise, on the path that now reaches it.
+
+        The title walk searches by the file's title and writes no ISBN at all,
+        so the record it lands on - a different Edition from the one the ISBN
+        named, which is what put the book here - cannot write its ISBN over the
+        file's, under `overwrite` either (CBO-90, CBO-92).
+        """
+        source = FakeSource(
+            found=self.a_sibling("Seahouses"), candidates=[CRAGSIDE_CANDIDATE]
+        )
+        path = self.book()
+
+        outcome = self.corrector(
+            source=source, fields=self.all_fields("overwrite")
+        ).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(
+            read(path).isbn,
+            ISBN,
+            "the file keeps the ISBN it came with, contradicted or not",
+        )
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "isbn"],
+            [],
+            "no ISBN is written, so none is reported as written",
+        )
+
+    def test_the_fallback_corrects_the_sibling_the_file_really_is(self):
+        """A `Seahouses` file on Cragside's ISBN is corrected as Seahouses.
+
+        The stale ISBN points at Cragside and the file says it is Seahouses, so
+        the title is the half to believe. The title walk is what answers, and
+        what it writes is the Seahouses record - the file is corrected to the
+        book it is, not to the book its identifier claimed.
+        """
+        source = FakeSource(
+            found=self.a_sibling("Cragside"), candidates=[self.a_sibling("Seahouses")]
+        )
+        path = self.an_isbn_book("Seahouses.epub", "Seahouses")
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(read(path).title, "Seahouses")
+        self.assertEqual(read(path).isbn, ISBN, "and its own ISBN is left alone")
+
+    def test_a_contradicted_isbn_record_is_offered_to_the_model(self):
+        """The file's ISBN points somewhere, so the model is shown where.
+
+        A file titled `Untitled` says nothing a title search can use, and its
+        ISBN reaches a record whose title contradicts nothing - there is no
+        title to contradict. The rules cannot decide it, which is what the
+        Chooser is for, and the record the identifier reached is the one
+        candidate the file's own evidence points at. It is offered, the model
+        picks it, and the pick is written.
+        """
+        path = self.an_isbn_book("Untitled.epub", "Untitled")
+        source = FakeSource(found=self.a_sibling("Cragside"))
+        llm = self.an_llm_picking(1)
+
+        outcome = self.corrector(source=source, llm=llm).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.chosen_by, "llm")
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(
+            outcome.isbn,
+            None,
+            "the model picked it by title, not by ISBN: no ISBN is claimed to "
+            "have identified the book, so the ISBN field keeps its own rule",
+        )
+        self.assertEqual(
+            [change.value for change in outcome.changed if change.field == "isbn"],
+            [],
+            "and no ISBN is written, which is the same fact from the file's side",
+        )
+        self.assertEqual(
+            len(llm._transport.sent), 1, "the model was asked once, for this book"
+        )
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn("title=Cragside author=L.J. Ross", prompt)
+
+    def test_the_contradicted_record_is_never_written_from_by_the_rules(self):
+        """What the model is offered is not a candidate, whatever it scores.
+
+        The contradicted record carries the same series subtitle as the file and
+        scores 0.809 against it - a medium band on its own, and high enough to be
+        the leader of this walk's pool. In the pool it is graded with the rest and
+        the rules write the leader; offered to the model and nothing else, the
+        rules write what they always would have.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        source = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            candidates=[BERWICK_CANDIDATE],
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(
+            outcome.matched,
+            "Berwick agrees on neither half of this book, so nothing is written",
+        )
+        self.assertEqual(
+            read(path).title,
+            "The Shrine: A DCI Ryan Mystery",
+            "and the record the ISBN reached is not written over it",
+        )
+        self.assertTrue(outcome.unverified, outcome.fragment())
+
+    def test_the_contradicted_record_cannot_close_the_walk_early(self):
+        """A strong source below it is still asked, and still writes.
+
+        The record would be the leader of this pool if it were graded with it -
+        it scores 0.809 where both sources' records score 0.4458 and 0.4444 - and
+        the pool would then be medium with a gap of 0.36, so the walk would exit
+        at the first source and ``Belsay`` would never be offered. The record is
+        not a candidate, so the walk does not stop.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        first = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            candidates=[BERWICK_CANDIDATE],
+        )
+        second = FakeSource(candidates=[BELSAY_CANDIDATE], name="google_books")
+        corrector = self.corrector_over(first, second)
+
+        outcome = corrector.correct(path)
+
+        self.assertEqual(
+            [len(first.asked_titles), len(second.asked_titles)],
+            [1, 1],
+            "both sources were asked by title, so the record did not end the walk",
+        )
+        self.assertFalse(outcome.waiting, "and nothing was held for the record")
+
+    def test_the_contradicted_record_is_offered_even_when_it_is_not_the_best(self):
+        """The offer does not depend on the pool's order, so the model sees it.
+
+        The pool's own leader is a record that agrees on neither half of this
+        book, and the record the ISBN reached is ranked below it - the prompt's
+        per-source cap and the pool's order are about what the sources offered.
+        The record is what the file's own identifier points at, so it is offered
+        whatever the pool makes of it, and the model can pick it.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        source = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            candidates=[BERWICK_CANDIDATE],
+        )
+        llm = self.an_llm_picking(2)
+
+        outcome = self.corrector(source=source, llm=llm).correct(path)
+
+        self.assertEqual(
+            len(llm._transport.sent), 1, "the model was asked once, for this book"
+        )
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn(
+            "title=Cragside: A DCI Ryan Mystery author=L.J. Ross",
+            prompt,
+            "the record the ISBN reached is offered as a candidate of its own",
+        )
+        self.assertIn(
+            "1. title=Berwick",
+            prompt,
+            "and the pool's own order is what numbers the rest, not the record",
+        )
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(
+            outcome.chosen_by, "llm", "the model is what matched this book"
+        )
+        self.assertEqual(read(path).title, "Cragside: A DCI Ryan Mystery")
+
+    def test_the_contradicted_record_does_not_excuse_a_half_asked_walk(self):
+        """A source that could not answer still holds the book.
+
+        The contradicted record is the reason the book is on the fallback at
+        all, and it is not a source that answered: with a source erroring the
+        walk is half-asked, the book waits, and nothing is written - the record
+        changes neither the hold nor a byte of the file.
+        """
+        path = self.an_isbn_book("The Shrine.epub", "The Shrine: A DCI Ryan Mystery")
+        before = path.read_bytes()
+        source = FakeSource(
+            found=self.a_sibling("Cragside: A DCI Ryan Mystery"),
+            title_error=SourceError("Hardcover answered HTTP 503"),
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.waiting, outcome.fragment())
+        self.assertIn("Hardcover answered HTTP 503", outcome.fragment())
+        self.assertEqual(path.read_bytes(), before, "the file was not touched")
+        self.assertEqual(self.kept(), [], "and nothing was backed up")
+
+    def test_the_contradicted_record_is_offered_when_no_source_answers(self):
+        """Scenario (c): every source silent, and the record is still shown.
+
+        The walk's own sources have nothing at all, so the pool is empty - and
+        the record the file's ISBN reached is the only thing either half of the
+        file said. It has to reach the model from there, or a file with a stale
+        ISBN and a wrong title has no route to its own book.
+        """
+        path = self.an_isbn_book("Untitled.epub", "Untitled")
+        source = FakeSource(found=self.a_sibling("Cragside"), candidates=[])
+        llm = self.an_llm_picking(1)
+
+        outcome = self.corrector(source=source, llm=llm).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(outcome.chosen_by, "llm")
+        self.assertEqual(read(path).title, "Cragside")
+        self.assertEqual(
+            len(llm._transport.sent), 1, "the model was asked once, for this book"
+        )
+        prompt = llm._transport.sent[0]["body"]["messages"][1]["content"]
+        self.assertIn(
+            "title=Cragside author=L.J. Ross",
+            prompt,
+            "the record the ISBN reached is in the list, though no source offered it",
+        )
+
+    def test_a_record_titled_dune_is_written_over_a_dune_messiah_file_known_limit(
+        self,
+    ):
+        """The known limit of containment, pinned so it cannot move silently.
+
+        Containment is one-directional: a record whose title is the first
+        word(s) of the file's is still contained by it, so `Dune Messiah`
+        carrying Dune's ISBN is written as Dune. This is CBO-60's accepted
+        ceiling and it is not a regression - the rule it replaces wrote every
+        case, this one included - but it is a wrong answer, so it is asserted
+        rather than left to be discovered.
+        """
+        source = FakeSource(
+            found=Candidate(
+                source="hardcover",
+                title="Dune",
+                authors=("Frank Herbert",),
+                language="en",
+                isbn=ISBN,
+            )
+        )
+        path = self.an_isbn_book(
+            "Dune Messiah.epub", "Dune Messiah", creator="Frank Herbert"
+        )
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertTrue(outcome.matched, outcome.fragment())
+        self.assertEqual(read(path).title, "Dune", "the limit, as it stands today")
+
+    def test_a_hand_made_sibling_on_the_isbn_is_not_written_from(self):
+        """CBO-60's case end to end: the real client, the real reply, no write.
+
+        `hand-made/sibling-on-the-isbn.json` is Hardcover answering Cragside's
+        ISBN with a record titled *Seahouses* - a sibling of the same series and
+        author, which is what a stale ISBN reaches and what no live recording
+        carries. The whole shipped path runs here: the client reads the reply,
+        the corrector compares the record's title with the file's, and the
+        contradiction stops the record being written.
+        """
+        path = self.book()
+        source = Hardcover(
+            "a-token",
+            transport=Replay("sibling-on-the-isbn.json", folder=HARDCOVER_HAND_MADE),
+        )
+        before = path.read_bytes()
+
+        outcome = self.corrector(source=source).correct(path)
+
+        self.assertFalse(outcome.matched, outcome.fragment())
+        self.assertNotEqual(
+            read(path).title, "Seahouses", "the sibling's title is not written"
+        )
+        self.assertNotEqual(
+            path.read_bytes(),
+            before,
+            "the book is still marked, which is the fallback's own answer",
+        )
 
     def test_the_first_source_that_has_the_isbn_is_the_one_used(self):
         first, second = FakeSource(), self.a_second_source()
@@ -4354,6 +4877,64 @@ class ARealSourceThroughTheCorrectorTests(CorrectionTestCase):
         self.assertEqual(outcome.source, "hardcover")
 
 
+class AnUnreadableLlmReplyTests(CorrectionTestCase):
+    """CBO-98: a reply that is not the contract is an answer, not a crash.
+
+    `Llm.choose` documents `None` for every reply that is not the contract -
+    prose instead of JSON, a truncated body, a `null` - and `map_genre` handles
+    it. The chooser's caller did not, so `choice.candidate` raised
+    `AttributeError` and the relay lost the whole scan, not just the book.
+    """
+
+    def a_source_that_needs_the_chooser(self):
+        """A pool that grades medium, so the model is the only thing left to ask.
+
+        Cragside's title and author agree and its series position does not, which
+        §2.1 row 4 scores below every strong bar, and the file carries no ISBN so
+        the title path is the one that runs.
+        """
+        return FakeSource(
+            found=None,
+            candidates=[
+                Candidate(
+                    source="hardcover",
+                    title="Cragside: A DCI Ryan Mystery",
+                    authors=("L.J. Ross",),
+                    series_number="11",
+                    language="en",
+                )
+            ],
+        )
+
+    def an_llm_with_no_choice(self):
+        """A real `Llm` whose recorded reply cannot be read as a choice."""
+        return Llm(
+            provider="deepseek",
+            model="deepseek-flash",
+            base_url="https://api.deepseek.com",
+            key="llm-secret-key-4242",
+            counter=self.folder / "llm.json",
+            transport=LlmReplay(body=b"{}"),
+        )
+
+    def test_a_reply_that_is_not_a_choice_marks_the_book_rather_than_raising(self):
+        path = write_epub(self.folder / "Cragside.epub", CRAGSIDE, version="2.0")
+        llm = self.an_llm_with_no_choice()
+
+        outcome = self.corrector(
+            source=self.a_source_that_needs_the_chooser(), llm=llm
+        ).correct(path)
+
+        self.assertFalse(outcome.matched)
+        self.assertTrue(outcome.unverified, outcome.fragment())
+        self.assertIn(UNVERIFIED_TAG, subjects(path))
+        self.assertFalse(
+            outcome.waiting,
+            "the model answered, unreadably - that is not something to wait for",
+        )
+        self.assertEqual(len(llm._transport.sent), 1, "it was asked once")
+
+
 class WhenTheSourceFailsTests(CorrectionTestCase):
     def test_a_source_that_cannot_answer_leaves_the_book_alone(self):
         source = FakeSource(
@@ -4698,6 +5279,25 @@ class GenreMappingTests(CorrectionTestCase):
 
     CRAGSIDE_GENRES = "by-isbn-9781521748831-genres.json"
     PYRAMIDS = "by-isbn-9780575064843-packed-genres.json"
+    PYRAMIDS_ISBN = "9780575064843"
+
+    def a_pyramids_book(self):
+        """The file the Pyramids ISBN reply is about.
+
+        Its title has to be the record's, because CBO-60 writes an ISBN hit only
+        when the file's title agrees with the record's - and this test is about
+        the genres the record carries, which are only reached when it is written
+        from.
+        """
+        return write_epub(
+            self.folder / "Pyramids.epub",
+            f"""    <dc:title>Pyramids</dc:title>
+    <dc:creator>Terry Pratchett</dc:creator>
+    <dc:identifier opf:scheme="ISBN">{self.PYRAMIDS_ISBN}</dc:identifier>
+    <dc:language>en</dc:language>
+""",
+            version="2.0",
+        )
 
     def record(self):
         folder = TemporaryDirectory()
@@ -5033,7 +5633,7 @@ class GenreMappingTests(CorrectionTestCase):
             llm=self.llm("genre-mapping-packed.json", "genre-mapping-fiction.json"),
         )
 
-        self.deliver(self.book(), corrector)
+        self.deliver(self.a_pyramids_book(), corrector)
 
         asked = self.asked(corrector)
         self.assertIn("Fantasy", asked)
@@ -5052,7 +5652,7 @@ class GenreMappingTests(CorrectionTestCase):
             record=record,
         )
 
-        self.deliver(self.book(), corrector, record=record)
+        self.deliver(self.a_pyramids_book(), corrector, record=record)
 
         rows = {(row[0], row[1]): row for row in record.genres()}
         self.assertEqual(

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "editions": [
+      {
+        "isbn_13": "9781521748831",
+        "isbn_10": "1521748837",
+        "reading_format_id": 1,
+        "title": "Seahouses",
+        "publisher": {
+          "name": "Independently Published"
+        },
+        "release_date": "2016-01-01",
+        "language": {
+          "language": "English",
+          "code2": "en",
+          "code3": "eng"
+        },
+        "book": {
+          "title": "Seahouses",
+          "description": "A body on the beach at Seahouses, and DCI Ryan is handed a case that reaches back into his own past.",
+          "release_date": "2016-01-01",
+          "contributions": [
+            {
+              "contribution": "Author",
+              "author": {
+                "id": 318638,
+                "name": "L.J. Ross"
+              }
+            }
+          ],
+          "book_series": [
+            {
+              "featured": true,
+              "position": 3,
+              "series": {
+                "id": 23832,
+                "name": "DCI Ryan Mysteries"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

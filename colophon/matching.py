@@ -49,6 +49,11 @@ NO_AGREEMENT_CEILING = 0.7
 # shares initials and a surname rather than refusing a real variant.
 AUTHOR_AGREES = 0.5
 
+# The smallest title similarity that counts as agreement when an ISBN hit is
+# being questioned. Its own constant rather than a reuse of `AUTHOR_AGREES`, so
+# tuning the author gate never moves what an ISBN path writes.
+TITLE_AGREES = 0.5
+
 # The calibrated similarity: `1 - penalty`. Above the dead band two strings are
 # close enough that nothing meaningful separates them, so the penalty is a
 # clean zero and a perfect match is exactly 1.0 rather than 0.997. Below the
@@ -389,6 +394,47 @@ def comparison_text(text):
     )
     squeezed = re.sub(r"\s+", " ", spaced).strip()[:MAX_TITLE_CHARS].strip()
     return _drop_article(squeezed)
+
+
+def title_agrees(file_title, record_title):
+    """Whether a record's title says nothing against the file's, and so agrees.
+
+    This is the trial an ISBN hit is put to (CBO-60). An ISBN is the noisiest
+    field a source keeps - a stale one is common, and the record it reaches can
+    belong to another book in the series - so a hit is written on the title's
+    agreement rather than on the identifier alone. Two ways to agree:
+
+    the record's title head, as `comparison_text` reads it, is contained in the
+    file's head as whole words. Whole words and not characters, so `Angel` is not
+    found in `Evangeline` and `Us` is not found in `Tempus Fugit`; the leading
+    article is dropped by `comparison_text` on both sides, so a file that lost
+    its article still contains the record.
+
+    or the calibrated title similarity - the file's head against the record's,
+    one form per side, exactly as the scorer compares them - reaches
+    `TITLE_AGREES`. That covers the misspelling containment cannot: `Cragsde`
+    does not contain `cragside`, and scores 0.8533. The heads and not the full
+    titles, because a series puts one subtitle on every record of it: `The
+    Shrine: A DCI Ryan Mystery` and `The Infirmary: A DCI Ryan Mystery` are one
+    word apart on the full titles and 0.1417 on the heads.
+
+    A file with no title never contradicts: it has nothing to disagree with, and
+    on that path the ISBN is the only identity it has.
+
+    ponytail: containment is one-directional, so a record whose title is the
+    first word(s) of the file's is still written - `Dune Messiah` carrying
+    Dune's ISBN. Never worse than before this rule, which wrote every case.
+    """
+    file_head, _, _ = _parts_of(file_title)
+    record_head, _, _ = _parts_of(record_title)
+    file_text = comparison_text(file_head)
+    record_text = comparison_text(record_head)
+    if not file_text:
+        return True
+    if record_text and f" {record_text} " in f" {file_text} ":
+        return True
+    penalty, _ = _title_penalty(file_head, None, record_head, None)
+    return 1.0 - penalty >= TITLE_AGREES
 
 
 def normalise(text):

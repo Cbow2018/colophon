@@ -400,6 +400,11 @@ SKIPPED = {
         "as both an ISBN reply and a title reply, since the two shipped queries "
         "select the same Edition fields; no live reply labels anything Audio"
     ),
+    "hardcover/hand-made/sibling-on-the-isbn.json": (
+        "hand-made: the CBO-60 case, a reply for the file's ISBN whose record is "
+        "another book of the series; Hardcover lists no Edition of that book on "
+        "that ISBN, so no re-record can produce it"
+    ),
 }
 
 # Where a fixture of each source lives, under `tests/fixtures/`.

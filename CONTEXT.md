@@ -123,8 +123,12 @@ A Walk stopping before every Source was asked, because the Pool already grades s
 _Avoid_: short-circuit, first match wins
 
 **Half-asked**:
-A Walk that ran to the end with a configured Source erroring. Its Pool is missing a Source the user asked for, so a weak grade cannot be trusted as a refusal: the book waits instead of being marked Unverified.
+A Walk that ran to the end with a configured Source erroring. Its Pool is missing a Source the user asked for, so a weak grade cannot be trusted as a refusal: the book waits instead of being marked Unverified. The book is held even when the Pool grades strong at the last Source.
 _Avoid_: partial walk, degraded
+
+**Stale ISBN**:
+An ISBN whose record contradicts the file's own title. The record is not written from: the book takes a title search as its fallback, and the file keeps the ISBN it came with, because the record the ISBN reached is not the book the file says it is. The contradicted record is still offered to the LLM Chooser. With no LLM Chooser configured that usually leaves the book Unverified.
+_Avoid_: wrong ISBN, bad ISBN, conflicting ISBN
 
 **LLM Chooser**:
 The model Colophon asks to pick one Candidate from a numbered list, or none. It judges; it never supplies a value.
